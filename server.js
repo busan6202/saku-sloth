@@ -12,11 +12,12 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("Berhasil terhubung ke MongoDB Atlas! 🌱"))
     .catch((err) => console.error("Koneksi database gagal:", err));
 
-// Skema & Model Transaksi Keuangan
+// Skema & Model Transaksi Keuangan dengan Kategori
 const transactionSchema = new mongoose.Schema({
     desc: { type: String, required: true },
     amount: { type: Number, required: true },
     type: { type: String, enum: ['income', 'expense'], required: true },
+    category: { type: String, default: 'Umum' },
     date: { type: Date, default: Date.now }
 });
 
@@ -32,11 +33,11 @@ app.get('/api/transactions', async (req, res) => {
     }
 });
 
-// API: Tambah Transaksi Baru
+// API: Tambah Transaksi Baru (Mendukung Kategori)
 app.post('/api/transactions', async (req, res) => {
     try {
-        const { desc, amount, type } = req.body;
-        const newTransaction = new Transaction({ desc, amount, type });
+        const { desc, amount, type, category } = req.body;
+        const newTransaction = new Transaction({ desc, amount, type, category });
         await newTransaction.save();
         res.status(201).json(newTransaction);
     } catch (err) {

@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SakuSloth - Pencatatan Keuangan Harian</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Google Font: Plus Jakarta Sans untuk kesan modern & bersih -->
+    <!-- Google Font: Plus Jakarta Sans -->
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js untuk Grafik Tren 2026 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="container">
@@ -20,18 +22,44 @@
             </div>
         </header>
 
-        <!-- Form Input Cepat (< 5 Detik) -->
+        <!-- Grafik Visualisasi (Pie Chart Tren 2026) -->
+        <section class="card chart-card">
+            <h3>Analisis Pengeluaran</h3>
+            <div class="chart-container">
+                <canvas id="expenseChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Form Input Cepat -->
         <section class="card form-card">
             <h3>Catat Transaksi</h3>
             <form id="transaction-form">
                 <div class="input-group">
-                    <input type="text" id="desc" placeholder="Keterangan (cth: Kopi & Roti)" required>
+                    <input type="text" id="desc" placeholder="Keterangan (cth: Langganan AI / Kopi)" required>
                 </div>
                 <div class="input-row">
                     <input type="number" id="amount" placeholder="Nominal (Rp)" required>
                     <select id="type">
                         <option value="expense">Pengeluaran</option>
                         <option value="income">Pemasukan</option>
+                    </select>
+                </div>
+                <!-- Pilihan Kategori Diperbarui Sesuai Tren 2026 -->
+                <div class="input-group">
+                    <select id="category">
+                        <optgroup label="Pengeluaran">
+                            <option value="Makan & Minum">🍜 Makan & Minum</option>
+                            <option value="Transportasi">🚗 Transportasi</option>
+                            <option value="Langganan Digital">💻 Langganan Digital & AI</option>
+                            <option value="Kesehatan & Self-Care">🧘 Kesehatan & Self-Care</option>
+                            <option value="Belanja & Lifestyle">🛍️️ Belanja & Lifestyle</option>
+                            <option value="Tagihan & Utilitas">⚡ Tagihan & Utilitas</option>
+                        </optgroup>
+                        <optgroup label="Pemasukan">
+                            <option value="Gaji Utama">💼 Gaji Utama</option>
+                            <option value="Side Hustle / Freelance">🚀 Side Hustle / Freelance</option>
+                            <option value="Investasi & Dividen">📈 Investasi & Dividen</option>
+                        </optgroup>
                     </select>
                 </div>
                 <button type="submit" class="btn-primary">Simpan Catatan</button>
@@ -42,7 +70,6 @@
         <section class="card history-card">
             <h3>Riwayat Terbaru</h3>
             <ul id="transaction-list">
-                <!-- Data akan dimasukkan otomatis lewat JavaScript -->
                 <li class="empty-state">Belum ada catatan hari ini. Santai dulu! 🦥</li>
             </ul>
         </section>
