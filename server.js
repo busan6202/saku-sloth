@@ -7,11 +7,12 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Koneksi ke Neon PostgreSQL (Dioptimalkan dengan SSL untuk Vercel Serverless)
+// Koneksi ke Neon PostgreSQL (Dengan konfigurasi SSL & verify-full agar bersih dari warning)
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || process.env.MONGO_URI,
     ssl: {
-        rejectUnauthorized: false
+        rejectUnauthorized: false,
+        sslmode: 'verify-full'
     },
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000
