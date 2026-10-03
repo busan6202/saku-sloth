@@ -350,7 +350,8 @@
             </div>
         </div>
 
-        <a href="/api/export-excel" class="btn-excel-card">
+        <!-- Ganti URL Vercel di bawah ini sesuai URL deployment Vercel Anda -->
+        <a href="https://saku-sloth.vercel.app/api/export-excel" class="btn-excel-card">
             <div class="excel-icon">📊</div>
             <div class="excel-label">Download Laporan Excel</div>
             <div class="excel-desc">Ekspor data finansial (.CSV)</div>
@@ -358,12 +359,15 @@
     </div>
 
     <script>
+        // Ganti URL di bawah ini dengan URL Vercel Anda yang aktif
+        const API_BASE_URL = 'https://saku-sloth.vercel.app';
+
         let barChartInstance = null;
         let pieChartInstance = null;
 
         async function loadDashboard() {
             try {
-                const res = await fetch('/api/transactions');
+                const res = await fetch(`${API_BASE_URL}/api/transactions`);
                 if (!res.ok) throw new Error("Gagal mengambil data dari server");
                 const data = await res.json();
 
@@ -407,7 +411,6 @@
                 document.getElementById('sumExpense').innerText = `Rp ${totalExpense.toLocaleString('id-ID')}`;
                 document.getElementById('sumBalance').innerText = `Rp ${balance.toLocaleString('id-ID')}`;
 
-                // Hancurkan chart lama jika ada agar tidak glitch saat di-refresh
                 if (barChartInstance) barChartInstance.destroy();
                 if (pieChartInstance) pieChartInstance.destroy();
 
@@ -438,7 +441,7 @@
 
             } catch (err) {
                 console.error("Gagal memuat data dashboard:", err);
-                document.getElementById('transactionTableBody').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#dc3545;">Gagal memuat data dari server. Periksa konsol browser.</td></tr>';
+                document.getElementById('transactionTableBody').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#dc3545;">Gagal memuat data dari server. Pastikan URL API Vercel sudah benar.</td></tr>';
             }
         }
 
