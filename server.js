@@ -7,14 +7,15 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Koneksi ke Neon PostgreSQL
+// Koneksi ke Neon PostgreSQL (Dioptimalkan agar tidak timeout)
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || process.env.MONGO_URI,
     ssl: {
         rejectUnauthorized: false
     },
-    connectionTimeoutMillis: 10000,
-    idleTimeoutMillis: 30000
+    connectionTimeoutMillis: 20000,
+    idleTimeoutMillis: 30000,
+    max: 5
 });
 
 // Buat tabel transaksi otomatis jika belum ada
@@ -85,11 +86,10 @@ async function callGeminiAPI(prompt, base64Image = null, retries = 3, delay = 20
                 return data.candidates[0].content.parts[0].text;
             }
 
-            // Jika error 503 (High Demand) dan masih ada jatah retry, tunggu lalu coba lagi
             if (response.status === 503 && i < retries - 1) {
                 console.warn(`Gemini sibuk (503), mencoba ulang dalam ${delay / 1000} detik... (Percobaan ke-${i + 1})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
-                delay *= 2; // Waktu tunggu bertambah secara eksponensial
+                delay *= 2;
                 continue;
             }
 
@@ -185,7 +185,6 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
     const text = update.message.text;
     const photo = update.message.photo;
 
-    // Pengaman Whitelist: Hanya merespon ADMIN_TELEGRAM_ID Anda
     if (ADMIN_TELEGRAM_ID && chatId !== String(ADMIN_TELEGRAM_ID)) {
         await sendTelegramMessage(chatId, "⚠️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
         return res.sendStatus(200);
