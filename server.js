@@ -51,8 +51,8 @@ async function sendTelegramMessage(chatId, text) {
     }
 }
 
-// Fungsi Panggil Gemini via REST API Fetch Murni
-async function callGeminiAPI(prompt, base64Image = null) {
+// Fungsi Panggil Gemini dengan Auto-Retry untuk mengatasi error 503 (High Demand)
+async function callGeminiAPI(prompt, base64Image = null, retries = 3, delay = 2000) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
     
     let parts = [{ text: prompt }];
@@ -65,26 +65,41 @@ async function callGeminiAPI(prompt, base64Image = null) {
         });
     }
 
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Connection': 'close'
-        },
-        body: JSON.stringify({
-            contents: [{ parts: parts }]
-        })
-    });
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Connection': 'close'
+                },
+                body: JSON.stringify({
+                    contents: [{ parts: parts }]
+                })
+            });
 
-    const responseText = await response.text();
-    
-    if (!response.ok) {
-        console.error("Gemini API Error Detail:", responseText);
-        throw new Error(`Gemini API Error: ${responseText}`);
+            const responseText = await response.text();
+            
+            if (response.ok) {
+                const data = JSON.parse(responseText);
+                return data.candidates[0].content.parts[0].text;
+            }
+
+            // Jika error 503 (High Demand) dan masih ada jatah retry, tunggu lalu coba lagi
+            if (response.status === 503 && i < retries - 1) {
+                console.warn(`Gemini sibuk (503), mencoba ulang dalam ${delay / 1000} detik... (Percobaan ke-${i + 1})`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2; // Waktu tunggu bertambah secara eksponensial
+                continue;
+            }
+
+            console.error("Gemini API Error Detail:", responseText);
+            throw new Error(`Gemini API Error: ${responseText}`);
+        } catch (err) {
+            if (i === retries - 1) throw err;
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
     }
-
-    const data = JSON.parse(responseText);
-    return data.candidates[0].content.parts[0].text;
 }
 
 // Fungsi Simpan & Notifikasi
@@ -170,6 +185,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
     const text = update.message.text;
     const photo = update.message.photo;
 
+    // Pengaman Whitelist: Hanya merespon ADMIN_TELEGRAM_ID Anda
     if (ADMIN_TELEGRAM_ID && chatId !== String(ADMIN_TELEGRAM_ID)) {
         await sendTelegramMessage(chatId, "⚠️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
         return res.sendStatus(200);
@@ -296,7 +312,7 @@ Kirim foto nota atau ketik catatan transaksi Anda secara natural.
         }
     } catch (err) {
         console.error("Gagal memproses AI:", err.message || err);
-        await sendTelegramMessage(chatId, "⚠️️ Maaf, Gemini gagal membaca input Anda. Pastikan format teks atau foto jelas.");
+        await sendTelegramMessage(chatId, "⚠️ Maaf, Gemini sedang mengalami lonjakan trafik (503). Silakan coba kirim ulang pesan Anda dalam beberapa saat.");
     }
 
     res.sendStatus(200);
