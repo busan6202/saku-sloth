@@ -1,4 +1,3 @@
-// Arahkan langsung ke URL backend Vercel Anda
 const API_URL = 'https://saku-sloth.vercel.app/api/transactions';
 
 const transactionForm = document.getElementById('transaction-form');

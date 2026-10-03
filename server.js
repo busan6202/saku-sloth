@@ -8,12 +8,10 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Koneksi ke MongoDB Atlas
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("Berhasil terhubung ke MongoDB Atlas! 🌱"))
     .catch((err) => console.error("Koneksi database gagal:", err));
 
-// Skema & Model Transaksi Keuangan
 const transactionSchema = new mongoose.Schema({
     desc: { type: String, required: true },
     amount: { type: Number, required: true },
@@ -24,11 +22,10 @@ const transactionSchema = new mongoose.Schema({
 
 const Transaction = mongoose.model('Transaction', transactionSchema);
 
-// Konfigurasi Telegram & Gemini AI
-const TELEGRAM_BOT_TOKEN = '8584715332:AAEF5F54-ipvf8vQGH-Eh7bqrYZYCIuLHjQ';
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8584715332:AAEF5F54-ipvf8vQGH-Eh7bqrYZYCIuLHjQ';
+const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID;
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Fungsi Kirim Pesan ke Telegram
 async function sendTelegramMessage(chatId, text) {
     try {
         await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -41,7 +38,6 @@ async function sendTelegramMessage(chatId, text) {
     }
 }
 
-// Fungsi Simpan & Notifikasi
 async function saveAndNotify(trxData, chatId) {
     const newTransaction = new Transaction(trxData);
     await newTransaction.save();
@@ -62,7 +58,6 @@ ${symbol}
     await sendTelegramMessage(chatId, message);
 }
 
-// API: Ambil Semua Transaksi
 app.get('/api/transactions', async (req, res) => {
     try {
         const transactions = await Transaction.find().sort({ date: -1 });
@@ -72,7 +67,6 @@ app.get('/api/transactions', async (req, res) => {
     }
 });
 
-// API: Tambah Transaksi via Web
 app.post('/api/transactions', async (req, res) => {
     try {
         const { desc, amount, type, category } = req.body;
@@ -84,16 +78,20 @@ app.post('/api/transactions', async (req, res) => {
     }
 });
 
-// ================= WEBHOOK TELEGRAM BOT =================
 app.post(`/api/telegram-webhook`, async (req, res) => {
     res.sendStatus(200);
 
     const update = req.body;
     if (!update.message) return;
 
-    const chatId = update.message.chat.id;
+    const chatId = String(update.message.chat.id);
     const text = update.message.text;
     const photo = update.message.photo;
+
+    if (ADMIN_TELEGRAM_ID && chatId !== String(ADMIN_TELEGRAM_ID)) {
+        await sendTelegramMessage(chatId, "⚠️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
+        return;
+    }
 
     try {
         if (photo && photo.length > 0) {
@@ -131,7 +129,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
         } 
         else if (text) {
             if (text.startsWith('/start')) {
-                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif. Kirim foto nota atau ketik catatan transaksi Anda!");
+                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif dan aman. Kirim foto nota atau ketik catatan transaksi Anda!");
                 return;
             }
 
