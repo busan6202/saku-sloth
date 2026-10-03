@@ -29,10 +29,10 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8584715332:AAEF5F5
 const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID;
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Fungsi Kirim Pesan ke Telegram dengan Connection: close (Mengatasi Socket Error Vercel)
+// Fungsi Kirim Pesan ke Telegram
 async function sendTelegramMessage(chatId, text) {
     try {
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
@@ -40,6 +40,10 @@ async function sendTelegramMessage(chatId, text) {
             },
             body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' })
         });
+        if (!response.ok) {
+            const errText = await response.text();
+            console.error("Telegram API Error:", errText);
+        }
     } catch (err) {
         console.error("Gagal kirim pesan Telegram:", err.message);
     }
@@ -90,7 +94,7 @@ app.post('/api/transactions', async (req, res) => {
 
 // ================= WEBHOOK TELEGRAM BOT =================
 app.post(`/api/telegram-webhook`, async (req, res) => {
-    res.sendStatus(200);
+    res.sendStatus(200); // Segera beri respon 200 ke Telegram agar tidak timeout di sisi mereka
 
     const update = req.body;
     if (!update.message) return;
@@ -122,6 +126,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             const prompt = `Analisis nota/struk belanja ini. Ekstrak data ke format JSON murni TANPA markdown:
             {"desc": "Nama tempat/toko atau ringkasan", "amount": angka saja, "type": "expense", "category": pilih dari ["Makan & Minum", "Transportasi", "Langganan Digital", "Kesehatan & Self-Care", "Belanja & Lifestyle", "Tagihan & Utilitas"]}`;
 
+            // Panggilan AI dengan pembungkus aman
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: [
@@ -158,7 +163,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             await saveAndNotify(parsedData, chatId);
         }
     } catch (err) {
-        console.error("Gagal memproses AI:", err);
+        console.error("Gagal memproses AI:", err.message || err);
         await sendTelegramMessage(chatId, "⚠️ Maaf, Gemini gagal membaca input Anda. Pastikan format teks atau foto jelas.");
     }
 });
