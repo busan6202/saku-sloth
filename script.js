@@ -1,6 +1,10 @@
+<<<<<<< HEAD:script.js
 // Menggunakan jalur relatif agar otomatis mengikuti domain Vercel yang aktif
 // Ganti dengan URL Vercel backend Anda yang sebenarnya
 const API_URL = 'https://saku-sloth.vercel.app/api/transactions';
+=======
+const API_URL = '/api/transactions';
+>>>>>>> 0b8d29d42041cffa071a70e6c845141f4ae736be:public/script.js
 
 const transactionForm = document.getElementById('transaction-form');
 const transactionList = document.getElementById('transaction-list');
@@ -12,7 +16,6 @@ const warningText = document.getElementById('warning-text');
 
 let expenseChartInstance = null;
 
-// Fungsi Pemetaan Ikon Menarik Berdasarkan Kategori
 function getCategoryIcon(category) {
     const icons = {
         'Makan & Minum': '🍜',
@@ -58,7 +61,6 @@ function renderDashboard(transactions) {
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
-
     const categoryTotals = {};
 
     transactions.forEach(trx => {
@@ -71,7 +73,6 @@ function renderDashboard(transactions) {
             balance += amountNum;
         } else {
             balance -= amountNum;
-            
             if (trxMonth === currentMonth && trxYear === currentYear) {
                 currentMonthExpense += amountNum;
                 const cat = trx.category || 'Lainnya';
@@ -85,10 +86,7 @@ function renderDashboard(transactions) {
             lastMonthExpense += amountNum;
         }
 
-        // Ambil Ikon Dinamis
         const iconSymbol = getCategoryIcon(trx.category);
-
-        // Render Item Riwayat Berjalan dengan Ikon
         const li = document.createElement('li');
         li.className = trx.type;
         li.innerHTML = `
@@ -135,57 +133,36 @@ function updateChart(transactions) {
 
     const labels = Object.keys(categoryTotals);
     const data = Object.values(categoryTotals);
-
     const ctx = document.getElementById('expenseChart').getContext('2d');
 
-    if (expenseChartInstance) {
-        expenseChartInstance.destroy();
-    }
+    if (expenseChartInstance) expenseChartInstance.destroy();
 
     if (labels.length === 0) {
         expenseChartInstance = new Chart(ctx, {
             type: 'pie',
-            data: {
-                labels: ['Belum ada pengeluaran'],
-                datasets: [{ data: [1], backgroundColor: ['#e0e0e0'] }]
-            },
+            data: { labels: ['Belum ada pengeluaran'], datasets: [{ data: [1], backgroundColor: ['#e0e0e0'] }] },
             options: { responsive: true, maintainAspectRatio: false }
         });
         return;
     }
 
     const earthToneColors = ['#52796f', '#354f52', '#84a98c', '#cad2c5', '#bc4749', '#dda15e', '#606c38'];
-
     expenseChartInstance = new Chart(ctx, {
         type: 'pie',
         data: {
             labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: earthToneColors.slice(0, labels.length),
-                borderWidth: 2,
-                borderColor: '#ffffff'
-            }]
+            datasets: [{ data: data, backgroundColor: earthToneColors.slice(0, labels.length), borderWidth: 2, borderColor: '#ffffff' }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        boxWidth: 12,
-                        font: { size: 11, family: 'Plus Jakarta Sans' }
-                    }
-                }
-            }
+            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11, family: 'Plus Jakarta Sans' } } } }
         }
     });
 }
 
 transactionForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-
     const desc = document.getElementById('desc').value;
     const amount = document.getElementById('amount').value;
     const type = document.getElementById('type').value;

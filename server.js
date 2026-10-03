@@ -26,11 +26,9 @@ const Transaction = mongoose.model('Transaction', transactionSchema);
 
 // Konfigurasi Telegram & Gemini AI
 const TELEGRAM_BOT_TOKEN = '8909744436:AAHE6zdwMLlRpVo85IjJrxouA3IA9mW2YzU';
-
-// Inisialisasi Google GenAI
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Fungsi Kirim Pesan Balasan ke Telegram
+// Fungsi Kirim Pesan ke Telegram
 async function sendTelegramMessage(chatId, text) {
     try {
         await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -43,7 +41,7 @@ async function sendTelegramMessage(chatId, text) {
     }
 }
 
-// Fungsi Simpan Transaksi & Notifikasi
+// Fungsi Simpan & Notifikasi
 async function saveAndNotify(trxData, chatId) {
     const newTransaction = new Transaction(trxData);
     await newTransaction.save();
@@ -64,7 +62,7 @@ ${symbol}
     await sendTelegramMessage(chatId, message);
 }
 
-// API: Ambil Semua Transaksi untuk Web
+// API: Ambil Semua Transaksi
 app.get('/api/transactions', async (req, res) => {
     try {
         const transactions = await Transaction.find().sort({ date: -1 });
@@ -88,7 +86,7 @@ app.post('/api/transactions', async (req, res) => {
 
 // ================= WEBHOOK TELEGRAM BOT =================
 app.post(`/api/telegram-webhook`, async (req, res) => {
-    res.sendStatus(200); // Respon cepat ke Telegram
+    res.sendStatus(200);
 
     const update = req.body;
     if (!update.message) return;
@@ -98,10 +96,8 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
     const photo = update.message.photo;
 
     try {
-        // 1. Jika pengguna mengirim FOTO (Nota / Struk Belanja)
         if (photo && photo.length > 0) {
             const fileId = photo[photo.length - 1].file_id;
-            
             const fileRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`);
             const fileData = await fileRes.json();
             const filePath = fileData.result.file_path;
@@ -109,18 +105,12 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 
             const imageRes = await fetch(downloadUrl);
             const arrayBuffer = await imageRes.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            const base64Image = buffer.toString('base64');
+            const base64Image = Buffer.from(arrayBuffer).toString('base64');
 
-            await sendTelegramMessage(chatId, "🔍 *Gemini sedang membaca nota Anda...* Mohon tunggu sebentar.");
+            await sendTelegramMessage(chatId, "🔍 *Gemini sedang membaca nota Anda...*");
 
-            const prompt = `Analisis nota/struk belanja ini. Ekstrak data berikut ke dalam format JSON murni TANPA markdown block (tanpa backtick json):
-            {
-              "desc": "Nama tempat/toko atau ringkasan barang utama",
-              "amount": total nominal angka saja (tanpa titik/koma/Rp),
-              "type": "expense",
-              "category": pilih salah satu dari: ["Makan & Minum", "Transportasi", "Langganan Digital", "Kesehatan & Self-Care", "Belanja & Lifestyle", "Tagihan & Utilitas"]
-            }`;
+            const prompt = `Analisis nota/struk belanja ini. Ekstrak data ke format JSON murni TANPA markdown:
+            {"desc": "Nama tempat/toko atau ringkasan", "amount": angka saja, "type": "expense", "category": pilih dari ["Makan & Minum", "Transportasi", "Langganan Digital", "Kesehatan & Self-Care", "Belanja & Lifestyle", "Tagihan & Utilitas"]}`;
 
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
@@ -129,71 +119,43 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
                         role: 'user',
                         parts: [
                             { text: prompt },
-                            {
-                                inlineData: {
-                                    mimeType: 'image/jpeg',
-                                    data: base64Image
-                                }
-                            }
+                            { inlineData: { mimeType: 'image/jpeg', data: base64Image } }
                         ]
                     }
                 ]
             });
 
-            let jsonText = response.text.trim();
-            jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const firstBrace = jsonText.indexOf('{');
-            const lastBrace = jsonText.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace !== -1) {
-                jsonText = jsonText.substring(firstBrace, lastBrace + 1);
-            }
-
-            const parsedData = JSON.parse(jsonText);
+            let jsonText = response.text.trim().replace(/```json/g, '').replace(/```/g, '');
+            const parsedData = JSON.parse(jsonText.substring(jsonText.indexOf('{'), jsonText.lastIndexOf('}') + 1));
             await saveAndNotify(parsedData, chatId);
         } 
-        // 2. Jika pengguna mengirim TEKS
         else if (text) {
             if (text.startsWith('/start')) {
-                await sendTelegramMessage(chatId, "Halo! 🌱 Selamat datang di Saku-Sloth Bot. Kirim foto nota belanja atau ketik catatan keuangan Anda (contoh: *Beli makan siang 35ribu*), dan Gemini akan mencatatnya otomatis!");
+                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif. Kirim foto nota atau ketik catatan transaksi Anda!");
                 return;
             }
 
-            const prompt = `Analisis kalimat transaksi keuangan berikut: "${text}". Ekstrak ke format JSON murni TANPA markdown block (tanpa backtick json):
-            {
-              "desc": "Keterangan singkat transaksi",
-              "amount": total nominal berupa angka saja (contoh: 20000),
-              "type": "expense" atau "income",
-              "category": pilih salah satu dari: ["Makan & Minum", "Transportasi", "Langganan Digital", "Kesehatan & Self-Care", "Belanja & Lifestyle", "Tagihan & Utilitas", "Gaji Utama", "Side Hustle / Freelance", "Investasi & Dividen"]
-            }`;
+            const prompt = `Analisis transaksi: "${text}". Ekstrak ke format JSON murni TANPA markdown:
+            {"desc": "Keterangan singkat", "amount": angka saja, "type": "expense" atau "income", "category": pilih dari ["Makan & Minum", "Transportasi", "Langganan Digital", "Kesehatan & Self-Care", "Belanja & Lifestyle", "Tagihan & Utilitas", "Gaji Utama", "Side Hustle / Freelance", "Investasi & Dividen"]}`;
 
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: prompt
             });
 
-            let jsonText = response.text.trim();
-            jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const firstBrace = jsonText.indexOf('{');
-            const lastBrace = jsonText.lastIndexOf('}');
-            if (firstBrace !== -1 && lastBrace !== -1) {
-                jsonText = jsonText.substring(firstBrace, lastBrace + 1);
-            }
-
-            const parsedData = JSON.parse(jsonText);
+            let jsonText = response.text.trim().replace(/```json/g, '').replace(/```/g, '');
+            const parsedData = JSON.parse(jsonText.substring(jsonText.indexOf('{'), jsonText.lastIndexOf('}') + 1));
             await saveAndNotify(parsedData, chatId);
         }
     } catch (err) {
-        console.error("Gagal memproses AI Telegram:", err);
-        await sendTelegramMessage(chatId, "⚠️ Maaf, Gemini gagal membaca atau memahami input Anda. Pastikan format teks jelas atau foto nota terlihat terang.");
+        console.error("Gagal memproses AI:", err);
+        await sendTelegramMessage(chatId, "⚠️ Maaf, Gemini gagal membaca input Anda. Pastikan format teks atau foto jelas.");
     }
 });
 
-// Jalankan Server untuk Lokal & Vercel Export
 const PORT = process.env.PORT || 5000;
 if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => {
-        console.log(`Server lokal berjalan di port ${PORT}`);
-    });
+    app.listen(PORT, () => console.log(`Server lokal di port ${PORT}`));
 }
 
 module.exports = app;
