@@ -7,9 +7,9 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Koneksi ke Neon (PostgreSQL)
+// Koneksi ke Neon PostgreSQL
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || process.env.MONGO_URI, // Bisa pakai env lama atau baru
+    connectionString: process.env.DATABASE_URL || process.env.MONGO_URI,
     ssl: { rejectUnauthorized: false }
 });
 
@@ -165,8 +165,17 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 
             const rawTextResponse = await callGeminiAPI(prompt, base64Image);
 
-            let jsonText = rawTextResponse.trim().replace(/```json/g, '').replace(/```/g, '');
-            const parsedData = JSON.parse(jsonText.substring(jsonText.indexOf('{'), jsonText.lastIndexOf('}') + 1));
+            let jsonText = rawTextResponse.trim();
+            if (jsonText.includes("```")) {
+                jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+            }
+            const firstOpen = jsonText.indexOf('{');
+            const lastClose = jsonText.lastIndexOf('}');
+            if (firstOpen !== -1 && lastClose !== -1) {
+                jsonText = jsonText.substring(firstOpen, lastClose + 1);
+            }
+
+            const parsedData = JSON.parse(jsonText);
             await saveAndNotify(parsedData, chatId);
         } 
         else if (text) {
@@ -180,8 +189,17 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 
             const rawTextResponse = await callGeminiAPI(prompt);
 
-            let jsonText = rawTextResponse.trim().replace(/```json/g, '').replace(/```/g, '');
-            const parsedData = JSON.parse(jsonText.substring(jsonText.indexOf('{'), jsonText.lastIndexOf('}') + 1));
+            let jsonText = rawTextResponse.trim();
+            if (jsonText.includes("```")) {
+                jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+            }
+            const firstOpen = jsonText.indexOf('{');
+            const lastClose = jsonText.lastIndexOf('}');
+            if (firstOpen !== -1 && lastClose !== -1) {
+                jsonText = jsonText.substring(firstOpen, lastClose + 1);
+            }
+
+            const parsedData = JSON.parse(jsonText);
             await saveAndNotify(parsedData, chatId);
         }
     } catch (err) {
