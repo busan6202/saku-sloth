@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Koneksi ke Neon PostgreSQL (Bersih dari warning SSL)
+// Koneksi ke Neon PostgreSQL
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || process.env.MONGO_URI,
     ssl: {
@@ -51,7 +51,7 @@ async function sendTelegramMessage(chatId, text) {
     }
 }
 
-// Fungsi Panggil Gemini via REST API Fetch Murni (Menggunakan model gemini-3.8-flash sesuai instruksi Google)
+// Fungsi Panggil Gemini via REST API Fetch Murni
 async function callGeminiAPI(prompt, base64Image = null) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
     
@@ -189,11 +189,71 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             await saveAndNotify(parsedData, chatId);
         } 
         else if (text) {
+            // 1. PERINTAH /start
             if (text.startsWith('/start')) {
-                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif (Neon DB) & Gemini 3.8 Flash stabil. Kirim foto nota atau ketik catatan transaksi Anda!");
+                const welcomeMsg = `
+🌱 *Halo! Selamat datang di Saku-Sloth Bot.*
+Kirim foto nota atau ketik catatan transaksi Anda secara natural.
+
+📋 *Daftar Perintah yang Tersedia:*
+• /saldo atau /rekap — Cek total rekap dan saldo berjalan
+• /history atau /riwayat — Lihat 5 catatan transaksi terakhir
+• /reset — Menghapus seluruh data transaksi
+                `.trim();
+                await sendTelegramMessage(chatId, welcomeMsg);
                 return res.sendStatus(200);
             }
 
+            // 2. PERINTAH /saldo atau /rekap
+            if (text.startsWith('/saldo') || text.startsWith('/rekap')) {
+                const resIncome = await pool.query("SELECT SUM(amount) as total FROM transactions WHERE type = 'income'");
+                const resExpense = await pool.query("SELECT SUM(amount) as total FROM transactions WHERE type = 'expense'");
+                
+                const totalIncome = Number(resIncome.rows[0].total || 0);
+                const totalExpense = Number(resExpense.rows[0].total || 0);
+                const balance = totalIncome - totalExpense;
+
+                const summaryMessage = `
+📊 *REKAP KEUANGAN SAKU-SLOTH*
+-----------------------------------
+🟢 Total Pemasukan: Rp ${totalIncome.toLocaleString('id-ID')}
+🔴 Total Pengeluaran: Rp ${totalExpense.toLocaleString('id-ID')}
+-----------------------------------
+💰 *Saldo Berjalan: Rp ${balance.toLocaleString('id-ID')}*
+                `.trim();
+
+                await sendTelegramMessage(chatId, summaryMessage);
+                return res.sendStatus(200);
+            }
+
+            // 3. PERINTAH /history atau /riwayat
+            if (text.startsWith('/history') || text.startsWith('/riwayat')) {
+                const result = await pool.query("SELECT * FROM transactions ORDER BY date DESC LIMIT 5");
+                
+                if (result.rows.length === 0) {
+                    await sendTelegramMessage(chatId, "📂 Belum ada catatan transaksi yang tersimpan.");
+                    return res.sendStatus(200);
+                }
+
+                let historyText = "📜 *5 TRANSAKSI TERAKHIR*\n-----------------------------------\n";
+                result.rows.forEach((trx, index) => {
+                    const sign = trx.type === 'income' ? '+' : '-';
+                    const formattedAmt = Number(trx.amount).toLocaleString('id-ID');
+                    historyText += `${index + 1}. *${trx.desc}* (${trx.category})\n   ${sign} Rp ${formattedAmt}\n\n`;
+                });
+
+                await sendTelegramMessage(chatId, historyText.trim());
+                return res.sendStatus(200);
+            }
+
+            // 4. PERINTAH /reset (Hapus semua data)
+            if (text.startsWith('/reset')) {
+                await pool.query("DELETE FROM transactions");
+                await sendTelegramMessage(chatId, "🗑️ *Berhasil mereset!* Seluruh riwayat transaksi telah dihapus.");
+                return res.sendStatus(200);
+            }
+
+            // Proses Transaksi Teks via Gemini AI
             const prompt = `Analisis transaksi: "${text}". Ekstrak ke format JSON murni TANPA markdown:
             {"desc": "Keterangan singkat", "amount": angka saja, "type": "expense" atau "income", "category": pilih dari ["Makan & Minum", "Transportasi", "Langganan Digital", "Kesehatan & Self-Care", "Belanja & Lifestyle", "Tagihan & Utilitas", "Gaji Utama", "Side Hustle / Freelance", "Investasi & Dividen"]}`;
 
