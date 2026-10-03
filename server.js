@@ -7,13 +7,17 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Koneksi ke Neon PostgreSQL
+// Koneksi ke Neon PostgreSQL (Dioptimalkan dengan SSL untuk Vercel Serverless)
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || process.env.MONGO_URI,
-    ssl: { rejectUnauthorized: false }
+    ssl: {
+        rejectUnauthorized: false
+    },
+    connectionTimeoutMillis: 10000,
+    idleTimeoutMillis: 30000
 });
 
-// Buat tabel transaksi otomatis (menggunakan "desc" dengan petik dua agar tidak syntax error)
+// Buat tabel transaksi otomatis jika belum ada
 pool.query(`
     CREATE TABLE IF NOT EXISTS transactions (
         id SERIAL PRIMARY KEY,
@@ -47,9 +51,9 @@ async function sendTelegramMessage(chatId, text) {
     }
 }
 
-// Fungsi Panggil Gemini via REST API Fetch Murni (Menggunakan model terbaru gemini-3.8-flash)
+// Fungsi Panggil Gemini via REST API Fetch Murni (Menggunakan gemini-1.5-flash)
 async function callGeminiAPI(prompt, base64Image = null) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     
     let parts = [{ text: prompt }];
     if (base64Image) {
@@ -72,12 +76,14 @@ async function callGeminiAPI(prompt, base64Image = null) {
         })
     });
 
+    const responseText = await response.text();
+    
     if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Gemini API Error: ${errorText}`);
+        console.error("Gemini API Error Detail:", responseText);
+        throw new Error(`Gemini API Error: ${responseText}`);
     }
 
-    const data = await response.json();
+    const data = JSON.parse(responseText);
     return data.candidates[0].content.parts[0].text;
 }
 
@@ -142,7 +148,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 
     // Pengaman Whitelist: Hanya merespon ADMIN_TELEGRAM_ID Anda
     if (ADMIN_TELEGRAM_ID && chatId !== String(ADMIN_TELEGRAM_ID)) {
-        await sendTelegramMessage(chatId, "⚠️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
+        await sendTelegramMessage(chatId, "⚠️️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
         return res.sendStatus(200);
     }
 
@@ -184,7 +190,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
         } 
         else if (text) {
             if (text.startsWith('/start')) {
-                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif (Neon DB) & Gemini terbaru. Kirim foto nota atau ketik catatan transaksi Anda!");
+                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif (Neon DB) & stabil. Kirim foto nota atau ketik catatan transaksi Anda!");
                 return res.sendStatus(200);
             }
 
