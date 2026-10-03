@@ -7,12 +7,11 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Koneksi ke Neon PostgreSQL
+// Koneksi ke Neon PostgreSQL (Bersih dari warning SSL)
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || process.env.MONGO_URI,
     ssl: {
-        rejectUnauthorized: false,
-        sslmode: 'verify-full'
+        rejectUnauthorized: false
     },
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000
@@ -52,9 +51,9 @@ async function sendTelegramMessage(chatId, text) {
     }
 }
 
-// Fungsi Panggil Gemini via REST API Fetch Murni (Menggunakan gemini-2.0-flash)
+// Fungsi Panggil Gemini via REST API Fetch Murni (Menggunakan model gemini-3.8-flash sesuai instruksi Google)
 async function callGeminiAPI(prompt, base64Image = null) {
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
     
     let parts = [{ text: prompt }];
     if (base64Image) {
@@ -191,7 +190,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
         } 
         else if (text) {
             if (text.startsWith('/start')) {
-                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif (Neon DB) & stabil. Kirim foto nota atau ketik catatan transaksi Anda!");
+                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif (Neon DB) & Gemini 3.8 Flash stabil. Kirim foto nota atau ketik catatan transaksi Anda!");
                 return res.sendStatus(200);
             }
 
