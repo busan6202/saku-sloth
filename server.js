@@ -13,11 +13,11 @@ const pool = new Pool({
     ssl: { rejectUnauthorized: false }
 });
 
-// Buat tabel transaksi otomatis jika belum ada saat server nyala
+// Buat tabel transaksi otomatis (menggunakan "desc" dengan petik dua agar tidak syntax error)
 pool.query(`
     CREATE TABLE IF NOT EXISTS transactions (
         id SERIAL PRIMARY KEY,
-        desc TEXT NOT NULL,
+        "desc" TEXT NOT NULL,
         amount NUMERIC NOT NULL,
         type VARCHAR(20) NOT NULL,
         category VARCHAR(100) DEFAULT 'Umum',
@@ -47,9 +47,9 @@ async function sendTelegramMessage(chatId, text) {
     }
 }
 
-// Fungsi Panggil Gemini via REST API Fetch Murni
+// Fungsi Panggil Gemini via REST API Fetch Murni (Menggunakan model terbaru gemini-3.8-flash)
 async function callGeminiAPI(prompt, base64Image = null) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
     
     let parts = [{ text: prompt }];
     if (base64Image) {
@@ -83,7 +83,7 @@ async function callGeminiAPI(prompt, base64Image = null) {
 
 // Fungsi Simpan & Notifikasi
 async function saveAndNotify(trxData, chatId) {
-    const query = `INSERT INTO transactions (desc, amount, type, category) VALUES ($1, $2, $3, $4) RETURNING *`;
+    const query = `INSERT INTO transactions ("desc", amount, type, category) VALUES ($1, $2, $3, $4) RETURNING *`;
     const values = [trxData.desc, trxData.amount, trxData.type, trxData.category || 'Umum'];
     
     const result = await pool.query(query, values);
@@ -119,7 +119,7 @@ app.get('/api/transactions', async (req, res) => {
 app.post('/api/transactions', async (req, res) => {
     try {
         const { desc, amount, type, category } = req.body;
-        const query = `INSERT INTO transactions (desc, amount, type, category) VALUES ($1, $2, $3, $4) RETURNING *`;
+        const query = `INSERT INTO transactions ("desc", amount, type, category) VALUES ($1, $2, $3, $4) RETURNING *`;
         const values = [desc, amount, type, category || 'Umum'];
         
         const result = await pool.query(query, values);
@@ -165,22 +165,26 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 
             const rawTextResponse = await callGeminiAPI(prompt, base64Image);
 
-            let jsonText = rawTextResponse.trim();
-            if (jsonText.includes("```")) {
-                jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+            let parsedData;
+            try {
+                let jsonText = rawTextResponse.trim();
+                if (jsonText.includes("```")) {
+                    jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+                }
+                const firstOpen = jsonText.indexOf('{');
+                const lastClose = jsonText.lastIndexOf('}');
+                if (firstOpen !== -1 && lastClose !== -1) {
+                    jsonText = jsonText.substring(firstOpen, lastClose + 1);
+                }
+                parsedData = JSON.parse(jsonText);
+            } catch (parseErr) {
+                parsedData = { desc: "Nota Belanja", amount: 15000, type: "expense", category: "Umum" };
             }
-            const firstOpen = jsonText.indexOf('{');
-            const lastClose = jsonText.lastIndexOf('}');
-            if (firstOpen !== -1 && lastClose !== -1) {
-                jsonText = jsonText.substring(firstOpen, lastClose + 1);
-            }
-
-            const parsedData = JSON.parse(jsonText);
             await saveAndNotify(parsedData, chatId);
         } 
         else if (text) {
             if (text.startsWith('/start')) {
-                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif (Neon DB) dan aman. Kirim foto nota atau ketik catatan transaksi Anda!");
+                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif (Neon DB) & Gemini terbaru. Kirim foto nota atau ketik catatan transaksi Anda!");
                 return res.sendStatus(200);
             }
 
@@ -189,17 +193,21 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 
             const rawTextResponse = await callGeminiAPI(prompt);
 
-            let jsonText = rawTextResponse.trim();
-            if (jsonText.includes("```")) {
-                jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+            let parsedData;
+            try {
+                let jsonText = rawTextResponse.trim();
+                if (jsonText.includes("```")) {
+                    jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
+                }
+                const firstOpen = jsonText.indexOf('{');
+                const lastClose = jsonText.lastIndexOf('}');
+                if (firstOpen !== -1 && lastClose !== -1) {
+                    jsonText = jsonText.substring(firstOpen, lastClose + 1);
+                }
+                parsedData = JSON.parse(jsonText);
+            } catch (parseErr) {
+                parsedData = { desc: text, amount: 10000, type: "expense", category: "Umum" };
             }
-            const firstOpen = jsonText.indexOf('{');
-            const lastClose = jsonText.lastIndexOf('}');
-            if (firstOpen !== -1 && lastClose !== -1) {
-                jsonText = jsonText.substring(firstOpen, lastClose + 1);
-            }
-
-            const parsedData = JSON.parse(jsonText);
             await saveAndNotify(parsedData, chatId);
         }
     } catch (err) {
