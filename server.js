@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Koneksi ke Neon PostgreSQL (Dengan konfigurasi SSL & verify-full agar bersih dari warning)
+// Koneksi ke Neon PostgreSQL
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || process.env.MONGO_URI,
     ssl: {
@@ -52,9 +52,9 @@ async function sendTelegramMessage(chatId, text) {
     }
 }
 
-// Fungsi Panggil Gemini via REST API Fetch Murni (Menggunakan gemini-1.5-flash)
+// Fungsi Panggil Gemini via REST API Fetch Murni (Menggunakan gemini-2.0-flash)
 async function callGeminiAPI(prompt, base64Image = null) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
     
     let parts = [{ text: prompt }];
     if (base64Image) {
@@ -149,7 +149,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 
     // Pengaman Whitelist: Hanya merespon ADMIN_TELEGRAM_ID Anda
     if (ADMIN_TELEGRAM_ID && chatId !== String(ADMIN_TELEGRAM_ID)) {
-        await sendTelegramMessage(chatId, "⚠️️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
+        await sendTelegramMessage(chatId, "⚠️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
         return res.sendStatus(200);
     }
 
