@@ -135,6 +135,30 @@ app.post('/api/transactions', async (req, res) => {
     }
 });
 
+// API: Export Data ke CSV/Excel format Analis
+app.get('/api/export-excel', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT id, "desc", amount, type, category, date FROM transactions ORDER BY date DESC');
+        
+        let csvContent = "ID,Keterangan,Nominal,Tipe,Kategori,Tanggal\n";
+        result.rows.forEach(row => {
+            const desc = `"${row.desc.replace(/"/g, '""')}"`;
+            const amount = row.amount;
+            const type = row.type === 'income' ? 'Pemasukan' : 'Pengeluaran';
+            const category = `"${row.category}"`;
+            const date = new Date(row.date).toISOString().replace('T', ' ').substring(0, 19);
+            
+            csvContent += `${row.id},${desc},${amount},${type},${category},${date}\n`;
+        });
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="laporan-keuangan-saku-sloth.csv"');
+        res.status(200).send(csvContent);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ================= WEBHOOK TELEGRAM BOT =================
 app.post(`/api/telegram-webhook`, async (req, res) => {
     const update = req.body;
@@ -146,7 +170,6 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
     const text = update.message.text;
     const photo = update.message.photo;
 
-    // Pengaman Whitelist: Hanya merespon ADMIN_TELEGRAM_ID Anda
     if (ADMIN_TELEGRAM_ID && chatId !== String(ADMIN_TELEGRAM_ID)) {
         await sendTelegramMessage(chatId, "⚠️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
         return res.sendStatus(200);
@@ -189,22 +212,20 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             await saveAndNotify(parsedData, chatId);
         } 
         else if (text) {
-            // 1. PERINTAH /start
             if (text.startsWith('/start')) {
                 const welcomeMsg = `
 🌱 *Halo! Selamat datang di Saku-Sloth Bot.*
 Kirim foto nota atau ketik catatan transaksi Anda secara natural.
 
-📋 *Daftar Perintah yang Tersedia:*
-• /saldo atau /rekap — Cek total rekap dan saldo berjalan
-• /history atau /riwayat — Lihat 5 catatan transaksi terakhir
+📋 *Daftar Perintah:*
+• /saldo atau /rekap — Cek rekap & saldo berjalan
+• /history atau /riwayat — Lihat 5 transaksi terakhir
 • /reset — Menghapus seluruh data transaksi
                 `.trim();
                 await sendTelegramMessage(chatId, welcomeMsg);
                 return res.sendStatus(200);
             }
 
-            // 2. PERINTAH /saldo atau /rekap
             if (text.startsWith('/saldo') || text.startsWith('/rekap')) {
                 const resIncome = await pool.query("SELECT SUM(amount) as total FROM transactions WHERE type = 'income'");
                 const resExpense = await pool.query("SELECT SUM(amount) as total FROM transactions WHERE type = 'expense'");
@@ -226,7 +247,6 @@ Kirim foto nota atau ketik catatan transaksi Anda secara natural.
                 return res.sendStatus(200);
             }
 
-            // 3. PERINTAH /history atau /riwayat
             if (text.startsWith('/history') || text.startsWith('/riwayat')) {
                 const result = await pool.query("SELECT * FROM transactions ORDER BY date DESC LIMIT 5");
                 
@@ -246,14 +266,12 @@ Kirim foto nota atau ketik catatan transaksi Anda secara natural.
                 return res.sendStatus(200);
             }
 
-            // 4. PERINTAH /reset (Hapus semua data)
             if (text.startsWith('/reset')) {
                 await pool.query("DELETE FROM transactions");
                 await sendTelegramMessage(chatId, "🗑️ *Berhasil mereset!* Seluruh riwayat transaksi telah dihapus.");
                 return res.sendStatus(200);
             }
 
-            // Proses Transaksi Teks via Gemini AI
             const prompt = `Analisis transaksi: "${text}". Ekstrak ke format JSON murni TANPA markdown:
             {"desc": "Keterangan singkat", "amount": angka saja, "type": "expense" atau "income", "category": pilih dari ["Makan & Minum", "Transportasi", "Langganan Digital", "Kesehatan & Self-Care", "Belanja & Lifestyle", "Tagihan & Utilitas", "Gaji Utama", "Side Hustle / Freelance", "Investasi & Dividen"]}`;
 
@@ -278,7 +296,7 @@ Kirim foto nota atau ketik catatan transaksi Anda secara natural.
         }
     } catch (err) {
         console.error("Gagal memproses AI:", err.message || err);
-        await sendTelegramMessage(chatId, "⚠️ Maaf, Gemini gagal membaca input Anda. Pastikan format teks atau foto jelas.");
+        await sendTelegramMessage(chatId, "⚠️️ Maaf, Gemini gagal membaca input Anda. Pastikan format teks atau foto jelas.");
     }
 
     res.sendStatus(200);

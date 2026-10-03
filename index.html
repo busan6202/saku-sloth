@@ -2,99 +2,90 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SakuSloth - Dashboard Keuangan 2026</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title>Saku-Sloth Analytics Dashboard</title>
+    <!-- Chart.js untuk Grafik Bar & Pie -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 15px; }
+        .btn-export { background: #28a745; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; text-decoration: none; }
+        .btn-export:hover { background: #218838; }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px; }
+        .chart-card { background: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #ddd; }
+    </style>
 </head>
 <body>
-    <div class="main-wrapper">
-        <header class="header-card">
-            <h2>Dompet Santai 🌱</h2>
-            <p class="subtitle">Dashboard Keuangan Pintar 2026</p>
-            <div class="dashboard-grid">
-                <div class="balance-box">
-                    <span>Saldo Berjalan</span>
-                    <h1 id="total-balance">Rp 0</h1>
-                </div>
-                <div class="summary-mini">
-                    <div>
-                        <small>Pengeluaran Bulan Ini</small>
-                        <h4 id="current-month-expense">Rp 0</h4>
-                    </div>
-                    <div>
-                        <small>Bulan Sebelumnya</small>
-                        <h4 id="last-month-expense">Rp 0</h4>
-                    </div>
-                </div>
+    <div class="container">
+        <div class="header">
+            <h2>🦥 Saku-Sloth Financial Analytics</h2>
+            <!-- Tombol untuk Export ke Excel / CSV -->
+            <a href="/api/export-excel" class="btn-export">📥 Export ke Excel (CSV)</a>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h3>📊 Perbandingan Pemasukan vs Pengeluaran (Bar)</h3>
+                <canvas id="barChart"></canvas>
             </div>
-        </header>
-
-        <section id="warning-alert-section" class="card warning-card hidden">
-            <div class="warning-content">
-                <span class="blink-icon">⚠️</span>
-                <div>
-                    <strong>Perhatian Pengeluaran!</strong>
-                    <p id="warning-text">Kategori mendominasi pengeluaran Anda.</p>
-                </div>
-            </div>
-        </section>
-
-        <div class="dashboard-columns">
-            <div class="col-left">
-                <section class="card form-card">
-                    <h3>Catat Transaksi</h3>
-                    <form id="transaction-form">
-                        <div class="input-group">
-                            <input type="text" id="desc" placeholder="Keterangan (cth: Kopi)" required>
-                        </div>
-                        <div class="input-row">
-                            <input type="number" id="amount" placeholder="Nominal (Rp)" required>
-                            <select id="type">
-                                <option value="expense">Pengeluaran</option>
-                                <option value="income">Pemasukan</option>
-                            </select>
-                        </div>
-                        <div class="input-group">
-                            <select id="category">
-                                <optgroup label="Pengeluaran">
-                                    <option value="Makan & Minum">🍜 Makan & Minum</option>
-                                    <option value="Transportasi">🚗 Transportasi</option>
-                                    <option value="Langganan Digital">💻 Langganan Digital & AI</option>
-                                    <option value="Kesehatan & Self-Care">🧘 Kesehatan & Self-Care</option>
-                                    <option value="Belanja & Lifestyle">🛍 Belanja & Lifestyle</option>
-                                    <option value="Tagihan & Utilitas">⚡ Tagihan & Utilitas</option>
-                                </optgroup>
-                                <optgroup label="Pemasukan">
-                                    <option value="Gaji Utama">💼 Gaji Utama</option>
-                                    <option value="Side Hustle / Freelance">🚀 Side Hustle / Freelance</option>
-                                    <option value="Investasi & Dividen">📈 Investasi & Dividen</option>
-                                </optgroup>
-                            </select>
-                        </div>
-                        <button type="submit" class="btn-primary">Simpan Catatan</button>
-                    </form>
-                </section>
-
-                <section class="card chart-card">
-                    <h3>Analisis Kategori</h3>
-                    <div class="chart-container">
-                        <canvas id="expenseChart"></canvas>
-                    </div>
-                </section>
-            </div>
-
-            <div class="col-right">
-                <section class="card history-card">
-                    <h3>Riwayat Berjalan</h3>
-                    <ul id="transaction-list">
-                        <li class="empty-state">Belum ada catatan berjalan. Santai dulu! 🦥</li>
-                    </ul>
-                </section>
+            <div class="chart-card">
+                <h3>🥧 Distribusi Kategori Pengeluaran (Pie)</h3>
+                <canvas id="pieChart"></canvas>
             </div>
         </div>
     </div>
-    <script src="script.js"></script>
+
+    <script>
+        async function loadAnalytics() {
+            try {
+                const res = await fetch('/api/transactions');
+                const data = await res.json();
+
+                let totalIncome = 0;
+                let totalExpense = 0;
+                let categoryMap = {};
+
+                data.forEach(trx => {
+                    const amt = Number(trx.amount);
+                    if (trx.type === 'income') {
+                        totalIncome += amt;
+                    } else {
+                        totalExpense += amt;
+                        categoryMap[trx.category] = (categoryMap[trx.category] || 0) + amt;
+                    }
+                });
+
+                // Render Bar Chart (Pemasukan vs Pengeluaran)
+                new Chart(document.getElementById('barChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['Pemasukan', 'Pengeluaran'],
+                        datasets: [{
+                            label: 'Jumlah (Rp)',
+                            data: [totalIncome, totalExpense],
+                            backgroundColor: ['#28a745', '#dc3545']
+                        }]
+                    }
+                });
+
+                // Render Pie Chart (Kategori Pengeluaran)
+                new Chart(document.getElementById('pieChart'), {
+                    type: 'pie',
+                    data: {
+                        labels: Object.keys(categoryMap),
+                        datasets: [{
+                            data: Object.values(categoryMap),
+                            backgroundColor: ['#007bff', '#ffc107', '#17a2b8', '#6c757d', '#e83e8c', '#fd7e14']
+                        }]
+                    }
+                });
+
+            } catch (err) {
+                console.error("Gagal memuat analitik:", err);
+            }
+        }
+
+        loadAnalytics();
+    </script>
 </body>
 </html>
