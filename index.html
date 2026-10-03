@@ -3,76 +3,107 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SakuSloth - Pencatatan Keuangan Harian</title>
+    <title>SakuSloth - Dashboard Keuangan 2026</title>
     <link rel="stylesheet" href="style.css">
     <!-- Google Font: Plus Jakarta Sans -->
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Chart.js untuk Grafik Tren 2026 -->
+    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-    <div class="container">
-        <!-- Header / Ringkasan Saldo -->
+    <div class="main-wrapper">
+        <!-- Header / Ringkasan Dashboard Utama -->
         <header class="header-card">
             <h2>Dompet Santai 🌱</h2>
-            <p class="subtitle">Kelola keuangan harian tanpa pusing</p>
-            <div class="balance-box">
-                <span>Total Saldo</span>
-                <h1 id="total-balance">Rp 0</h1>
+            <p class="subtitle">Dashboard Keuangan Pintar 2026</p>
+            
+            <div class="dashboard-grid">
+                <div class="balance-box">
+                    <span>Saldo Berjalan</span>
+                    <h1 id="total-balance">Rp 0</h1>
+                </div>
+                <div class="summary-mini">
+                    <div>
+                        <small>Pengeluaran Bulan Ini</small>
+                        <h4 id="current-month-expense">Rp 0</h4>
+                    </div>
+                    <div>
+                        <small>Bulan Sebelumnya</small>
+                        <h4 id="last-month-expense">Rp 0</h4>
+                    </div>
+                </div>
             </div>
         </header>
 
-        <!-- Grafik Visualisasi (Pie Chart Tren 2026) -->
-        <section class="card chart-card">
-            <h3>Analisis Pengeluaran</h3>
-            <div class="chart-container">
-                <canvas id="expenseChart"></canvas>
+        <!-- Peringatan Kategori Terboros (Warning Berkedip) -->
+        <section id="warning-alert-section" class="card warning-card hidden">
+            <div class="warning-content">
+                <span class="blink-icon">⚠️</span>
+                <div>
+                    <strong>Perhatian Pengeluaran!</strong>
+                    <p id="warning-text">Kategori [X] memakan porsi terbesar pengeluaran Anda.</p>
+                </div>
             </div>
         </section>
 
-        <!-- Form Input Cepat -->
-        <section class="card form-card">
-            <h3>Catat Transaksi</h3>
-            <form id="transaction-form">
-                <div class="input-group">
-                    <input type="text" id="desc" placeholder="Keterangan (cth: Langganan AI / Kopi)" required>
-                </div>
-                <div class="input-row">
-                    <input type="number" id="amount" placeholder="Nominal (Rp)" required>
-                    <select id="type">
-                        <option value="expense">Pengeluaran</option>
-                        <option value="income">Pemasukan</option>
-                    </select>
-                </div>
-                <!-- Pilihan Kategori Diperbarui Sesuai Tren 2026 -->
-                <div class="input-group">
-                    <select id="category">
-                        <optgroup label="Pengeluaran">
-                            <option value="Makan & Minum">🍜 Makan & Minum</option>
-                            <option value="Transportasi">🚗 Transportasi</option>
-                            <option value="Langganan Digital">💻 Langganan Digital & AI</option>
-                            <option value="Kesehatan & Self-Care">🧘 Kesehatan & Self-Care</option>
-                            <option value="Belanja & Lifestyle">🛍️️ Belanja & Lifestyle</option>
-                            <option value="Tagihan & Utilitas">⚡ Tagihan & Utilitas</option>
-                        </optgroup>
-                        <optgroup label="Pemasukan">
-                            <option value="Gaji Utama">💼 Gaji Utama</option>
-                            <option value="Side Hustle / Freelance">🚀 Side Hustle / Freelance</option>
-                            <option value="Investasi & Dividen">📈 Investasi & Dividen</option>
-                        </optgroup>
-                    </select>
-                </div>
-                <button type="submit" class="btn-primary">Simpan Catatan</button>
-            </form>
-        </section>
+        <!-- Layout Grid Utama (Kiri: Form & Chart, Kanan: History Berjalan) -->
+        <div class="dashboard-columns">
+            <!-- Kolom Kiri: Input & Chart -->
+            <div class="col-left">
+                <!-- Form Input Cepat -->
+                <section class="card form-card">
+                    <h3>Catat Transaksi</h3>
+                    <form id="transaction-form">
+                        <div class="input-group">
+                            <input type="text" id="desc" placeholder="Keterangan (cth: Langganan AI / Kopi)" required>
+                        </div>
+                        <div class="input-row">
+                            <input type="number" id="amount" placeholder="Nominal (Rp)" required>
+                            <select id="type">
+                                <option value="expense">Pengeluaran</option>
+                                <option value="income">Pemasukan</option>
+                            </select>
+                        </div>
+                        <div class="input-group">
+                            <select id="category">
+                                <optgroup label="Pengeluaran">
+                                    <option value="Makan & Minum">🍜 Makan & Minum</option>
+                                    <option value="Transportasi">🚗 Transportasi</option>
+                                    <option value="Langganan Digital">💻 Langganan Digital & AI</option>
+                                    <option value="Kesehatan & Self-Care">🧘 Kesehatan & Self-Care</option>
+                                    <option value="Belanja & Lifestyle">🛍 Belanja & Lifestyle</option>
+                                    <option value="Tagihan & Utilitas">⚡ Tagihan & Utilitas</option>
+                                </optgroup>
+                                <optgroup label="Pemasukan">
+                                    <option value="Gaji Utama">💼 Gaji Utama</option>
+                                    <option value="Side Hustle / Freelance">🚀 Side Hustle / Freelance</option>
+                                    <option value="Investasi & Dividen">📈 Investasi & Dividen</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn-primary">Simpan Catatan</button>
+                    </form>
+                </section>
 
-        <!-- Riwayat Transaksi -->
-        <section class="card history-card">
-            <h3>Riwayat Terbaru</h3>
-            <ul id="transaction-list">
-                <li class="empty-state">Belum ada catatan hari ini. Santai dulu! 🦥</li>
-            </ul>
-        </section>
+                <!-- Grafik Visualisasi (Pie Chart) -->
+                <section class="card chart-card">
+                    <h3>Analisis Kategori</h3>
+                    <div class="chart-container">
+                        <canvas id="expenseChart"></canvas>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Kolom Kanan: Riwayat Transaksi Berjalan -->
+            <div class="col-right">
+                <section class="card history-card">
+                    <h3>Riwayat Berjalan</h3>
+                    <ul id="transaction-list">
+                        <li class="empty-state">Belum ada catatan hari ini. Santai dulu! 🦥</li>
+                    </ul>
+                </section>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
