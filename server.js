@@ -1,5 +1,5 @@
 const express = require('express');
-const mongoose = require('mongoose');
+const { Pool } = require('pg');
 const cors = require('cors');
 require('dotenv').config();
 
@@ -7,21 +7,24 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Koneksi ke MongoDB Atlas
-mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("Berhasil terhubung ke MongoDB Atlas! 🌱"))
-    .catch((err) => console.error("Koneksi database gagal:", err));
-
-// Skema & Model Transaksi Keuangan
-const transactionSchema = new mongoose.Schema({
-    desc: { type: String, required: true },
-    amount: { type: Number, required: true },
-    type: { type: String, enum: ['income', 'expense'], required: true },
-    category: { type: String, default: 'Umum' },
-    date: { type: Date, default: Date.now }
+// Koneksi ke Neon (PostgreSQL)
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL || process.env.MONGO_URI, // Bisa pakai env lama atau baru
+    ssl: { rejectUnauthorized: false }
 });
 
-const Transaction = mongoose.model('Transaction', transactionSchema);
+// Buat tabel transaksi otomatis jika belum ada saat server nyala
+pool.query(`
+    CREATE TABLE IF NOT EXISTS transactions (
+        id SERIAL PRIMARY KEY,
+        desc TEXT NOT NULL,
+        amount NUMERIC NOT NULL,
+        type VARCHAR(20) NOT NULL,
+        category VARCHAR(100) DEFAULT 'Umum',
+        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+`).then(() => console.log("Berhasil terhubung ke Neon PostgreSQL! 🐘"))
+  .catch(err => console.error("Gagal inisialisasi database Neon:", err));
 
 // Konfigurasi Token
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8584715332:AAEF5F54-ipvf8vQGH-Eh7bqrYZYCIuLHjQ';
@@ -80,19 +83,22 @@ async function callGeminiAPI(prompt, base64Image = null) {
 
 // Fungsi Simpan & Notifikasi
 async function saveAndNotify(trxData, chatId) {
-    const newTransaction = new Transaction(trxData);
-    await newTransaction.save();
+    const query = `INSERT INTO transactions (desc, amount, type, category) VALUES ($1, $2, $3, $4) RETURNING *`;
+    const values = [trxData.desc, trxData.amount, trxData.type, trxData.category || 'Umum'];
+    
+    const result = await pool.query(query, values);
+    const savedTrx = result.rows[0];
 
-    const symbol = newTransaction.type === 'income' ? '🟢 PEMASUKAN' : '🔴 PENGELUARAN';
-    const sign = newTransaction.type === 'income' ? '+' : '-';
-    const formattedAmount = Number(newTransaction.amount).toLocaleString('id-ID');
+    const symbol = savedTrx.type === 'income' ? '🟢 PEMASUKAN' : '🔴 PENGELUARAN';
+    const sign = savedTrx.type === 'income' ? '+' : '-';
+    const formattedAmount = Number(savedTrx.amount).toLocaleString('id-ID');
     
     const message = `
 ✅ *BERHASIL DICATAT OLEH GEMINI*
 -----------------------------------
 ${symbol}
-📝 *Keterangan:* ${newTransaction.desc}
-📁 *Kategori:* ${newTransaction.category}
+📝 *Keterangan:* ${savedTrx.desc}
+📁 *Kategori:* ${savedTrx.category}
 💰 *Nominal:* ${sign} Rp ${formattedAmount}
     `.trim();
 
@@ -102,8 +108,8 @@ ${symbol}
 // API: Ambil Semua Transaksi (Untuk Web)
 app.get('/api/transactions', async (req, res) => {
     try {
-        const transactions = await Transaction.find().sort({ date: -1 });
-        res.json(transactions);
+        const result = await pool.query('SELECT * FROM transactions ORDER BY date DESC');
+        res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -113,9 +119,11 @@ app.get('/api/transactions', async (req, res) => {
 app.post('/api/transactions', async (req, res) => {
     try {
         const { desc, amount, type, category } = req.body;
-        const newTransaction = new Transaction({ desc, amount, type, category });
-        await newTransaction.save();
-        res.status(201).json(newTransaction);
+        const query = `INSERT INTO transactions (desc, amount, type, category) VALUES ($1, $2, $3, $4) RETURNING *`;
+        const values = [desc, amount, type, category || 'Umum'];
+        
+        const result = await pool.query(query, values);
+        res.status(201).json(result.rows[0]);
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
@@ -134,7 +142,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 
     // Pengaman Whitelist: Hanya merespon ADMIN_TELEGRAM_ID Anda
     if (ADMIN_TELEGRAM_ID && chatId !== String(ADMIN_TELEGRAM_ID)) {
-        await sendTelegramMessage(chatId, "⚠️️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
+        await sendTelegramMessage(chatId, "⚠️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
         return res.sendStatus(200);
     }
 
@@ -163,7 +171,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
         } 
         else if (text) {
             if (text.startsWith('/start')) {
-                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif dan aman. Kirim foto nota atau ketik catatan transaksi Anda!");
+                await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif (Neon DB) dan aman. Kirim foto nota atau ketik catatan transaksi Anda!");
                 return res.sendStatus(200);
             }
 
