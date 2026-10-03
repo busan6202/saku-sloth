@@ -29,27 +29,19 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8584715332:AAEF5F5
 const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID;
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Fungsi Kirim Pesan ke Telegram dengan AbortController (Mencegah ETIMEDOUT)
+// Fungsi Kirim Pesan ke Telegram dengan Connection: close (Mengatasi Socket Error Vercel)
 async function sendTelegramMessage(chatId, text) {
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // Batas waktu 10 detik
-
-        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
-            signal: controller.signal
+            headers: { 
+                'Content-Type': 'application/json',
+                'Connection': 'close' 
+            },
+            body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' })
         });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            const errBody = await response.text();
-            console.error("Gagal dari Telegram API:", errBody);
-        }
     } catch (err) {
-        console.error("Gagal kirim pesan Telegram (ETIMEDOUT/Network):", err.message);
+        console.error("Gagal kirim pesan Telegram:", err.message);
     }
 }
 
