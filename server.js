@@ -25,7 +25,7 @@ const transactionSchema = new mongoose.Schema({
 const Transaction = mongoose.model('Transaction', transactionSchema);
 
 // Konfigurasi Telegram & Gemini AI
-const TELEGRAM_BOT_TOKEN = '8909744436:AAHE6zdwMLlRpVo85IjJrxouA3IA9mW2YzU';
+const TELEGRAM_BOT_TOKEN = '8584715332:AAEF5F54-ipvf8vQGH-Eh7bqrYZYCIuLHjQ';
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Fungsi Kirim Pesan ke Telegram
