@@ -44,7 +44,7 @@ async function sendTelegramMessage(chatId, text) {
     }
 }
 
-// Fungsi Panggil Gemini via REST API Fetch Murni (Menghindari ECONNRESET SDK)
+// Fungsi Panggil Gemini via REST API Fetch Murni
 async function callGeminiAPI(prompt, base64Image = null) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     
@@ -123,10 +123,10 @@ app.post('/api/transactions', async (req, res) => {
 
 // ================= WEBHOOK TELEGRAM BOT =================
 app.post(`/api/telegram-webhook`, async (req, res) => {
-    res.sendStatus(200); // Segera beri respon 200 ke Telegram
-
     const update = req.body;
-    if (!update.message) return;
+    if (!update.message) {
+        return res.sendStatus(200);
+    }
 
     const chatId = String(update.message.chat.id);
     const text = update.message.text;
@@ -134,8 +134,8 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 
     // Pengaman Whitelist: Hanya merespon ADMIN_TELEGRAM_ID Anda
     if (ADMIN_TELEGRAM_ID && chatId !== String(ADMIN_TELEGRAM_ID)) {
-        await sendTelegramMessage(chatId, "⚠️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
-        return;
+        await sendTelegramMessage(chatId, "⚠️️ Maaf, bot pencatat keuangan pribadi ini terkunci.");
+        return res.sendStatus(200);
     }
 
     try {
@@ -164,7 +164,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
         else if (text) {
             if (text.startsWith('/start')) {
                 await sendTelegramMessage(chatId, "Halo! 🌱 Saku-Sloth Bot aktif dan aman. Kirim foto nota atau ketik catatan transaksi Anda!");
-                return;
+                return res.sendStatus(200);
             }
 
             const prompt = `Analisis transaksi: "${text}". Ekstrak ke format JSON murni TANPA markdown:
@@ -180,6 +180,8 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
         console.error("Gagal memproses AI:", err.message || err);
         await sendTelegramMessage(chatId, "⚠️ Maaf, Gemini gagal membaca input Anda. Pastikan format teks atau foto jelas.");
     }
+
+    res.sendStatus(200);
 });
 
 const PORT = process.env.PORT || 5000;
