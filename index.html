@@ -35,7 +35,6 @@
             transition: background 0.3s, color 0.3s;
         }
 
-        /* Wadah Utama di sebelah kiri dengan ruang kosong di kanan untuk sidebar */
         .container { 
             max-width: 850px; 
             margin: auto; 
@@ -61,22 +60,27 @@
             font-size: 1.4rem;
         }
 
-        .btn-theme {
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-theme, .btn-refresh {
             background: transparent;
             border: 2px solid var(--text-color);
             color: var(--text-color);
-            padding: 6px 14px;
+            padding: 6px 12px;
             border-radius: 20px;
             cursor: pointer;
             font-weight: bold;
             transition: all 0.2s;
         }
-        .btn-theme:hover {
+        .btn-theme:hover, .btn-refresh:hover {
             background: var(--text-color);
             color: var(--card-bg);
         }
 
-        /* --- KARTU RINGKASAN SALDO BERJALAN --- */
         .summary-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -108,7 +112,6 @@
         .text-expense { color: #dc3545; }
         .text-balance { color: #007bff; }
 
-        /* --- GRAFIK ANALITIK --- */
         .charts-grid { 
             display: grid; 
             grid-template-columns: 1fr 1fr; 
@@ -130,7 +133,6 @@
             text-align: center;
         }
 
-        /* --- TABEL RIWAYAT TRANSAKSI --- */
         .history-section h3 {
             margin-bottom: 10px;
             font-size: 1.1rem;
@@ -162,7 +164,7 @@
             background: var(--table-hover);
         }
 
-        /* --- PANEL MELAYANG DI SEBELAH KANAN --- */
+        /* PANEL MELAYANG DI SEBELAH KANAN */
         .right-sidebar {
             position: fixed;
             right: 25px;
@@ -191,7 +193,6 @@
             color: #888;
         }
 
-        /* Jam Flip Digital Klasik */
         .flip-clock-container {
             display: flex;
             justify-content: center;
@@ -234,7 +235,6 @@
             50% { opacity: 0.3; }
         }
 
-        /* Tombol Download Excel Memanjang ke Bawah */
         .btn-excel-card {
             display: flex;
             flex-direction: column;
@@ -281,16 +281,15 @@
 </head>
 <body>
 
-    <!-- KONTEN UTAMA DASHBOARD -->
     <div class="container">
         <div class="header">
             <h2>🦥 Saku-Sloth Financial Analytics</h2>
             <div class="header-controls">
+                <button class="btn-refresh" onclick="loadDashboard()" title="Muat Ulang Data">🔄 Refresh</button>
                 <button class="btn-theme" id="themeToggleBtn" onclick="toggleTheme()">🌙 Gelap</button>
             </div>
         </div>
 
-        <!-- Kartu Ringkasan Saldo Berjalan -->
         <div class="summary-grid">
             <div class="summary-card">
                 <h4>Total Pemasukan</h4>
@@ -306,7 +305,6 @@
             </div>
         </div>
 
-        <!-- Grafik Analitik -->
         <div class="charts-grid">
             <div class="chart-card">
                 <h3>📊 Pemasukan vs Pengeluaran</h3>
@@ -318,7 +316,6 @@
             </div>
         </div>
 
-        <!-- Tabel Riwayat Transaksi Keuangan -->
         <div class="history-section">
             <h3>📜 Riwayat Transaksi Keuangan</h3>
             <div class="table-responsive">
@@ -333,7 +330,7 @@
                         </tr>
                     </thead>
                     <tbody id="transactionTableBody">
-                        <tr><td colspan="5" style="text-align:center;">Memuat data transaksi...</td></tr>
+                        <tr><td colspan="5" style="text-align:center;">Memuat data transaksi dari server...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -342,7 +339,6 @@
 
     <!-- PANEL MELAYANG DI SEBELAH KANAN -->
     <div class="right-sidebar">
-        <!-- Jam Flip Digital Klasik -->
         <div class="sidebar-card">
             <div class="sidebar-title">Waktu Server</div>
             <div class="flip-clock-container">
@@ -354,7 +350,6 @@
             </div>
         </div>
 
-        <!-- Tombol Download Excel Memanjang ke Bawah -->
         <a href="/api/export-excel" class="btn-excel-card">
             <div class="excel-icon">📊</div>
             <div class="excel-label">Download Laporan Excel</div>
@@ -363,9 +358,13 @@
     </div>
 
     <script>
+        let barChartInstance = null;
+        let pieChartInstance = null;
+
         async function loadDashboard() {
             try {
                 const res = await fetch('/api/transactions');
+                if (!res.ok) throw new Error("Gagal mengambil data dari server");
                 const data = await res.json();
 
                 let totalIncome = 0;
@@ -375,7 +374,7 @@
                 tableBody.innerHTML = '';
 
                 if (data.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">Belum ada catatan transaksi.</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">Belum ada catatan transaksi. Silakan catat via Telegram!</td></tr>';
                 }
 
                 data.forEach(trx => {
@@ -387,7 +386,6 @@
                         categoryMap[trx.category] = (categoryMap[trx.category] || 0) + amt;
                     }
 
-                    // Render Baris Tabel Riwayat
                     const row = document.createElement('tr');
                     const formattedDate = new Date(trx.date).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
                     const sign = trx.type === 'income' ? '+' : '-';
@@ -404,14 +402,16 @@
                     tableBody.appendChild(row);
                 });
 
-                // Update Kartu Saldo Berjalan
                 const balance = totalIncome - totalExpense;
                 document.getElementById('sumIncome').innerText = `Rp ${totalIncome.toLocaleString('id-ID')}`;
                 document.getElementById('sumExpense').innerText = `Rp ${totalExpense.toLocaleString('id-ID')}`;
                 document.getElementById('sumBalance').innerText = `Rp ${balance.toLocaleString('id-ID')}`;
 
-                // Render Bar Chart
-                new Chart(document.getElementById('barChart'), {
+                // Hancurkan chart lama jika ada agar tidak glitch saat di-refresh
+                if (barChartInstance) barChartInstance.destroy();
+                if (pieChartInstance) pieChartInstance.destroy();
+
+                barChartInstance = new Chart(document.getElementById('barChart'), {
                     type: 'bar',
                     data: {
                         labels: ['Pemasukan', 'Pengeluaran'],
@@ -424,8 +424,7 @@
                     options: { responsive: true, maintainAspectRatio: true }
                 });
 
-                // Render Pie Chart
-                new Chart(document.getElementById('pieChart'), {
+                pieChartInstance = new Chart(document.getElementById('pieChart'), {
                     type: 'pie',
                     data: {
                         labels: Object.keys(categoryMap),
@@ -439,10 +438,10 @@
 
             } catch (err) {
                 console.error("Gagal memuat data dashboard:", err);
+                document.getElementById('transactionTableBody').innerHTML = '<tr><td colspan="5" style="text-align:center; color:#dc3545;">Gagal memuat data dari server. Periksa konsol browser.</td></tr>';
             }
         }
 
-        // Jam Flip Digital
         function updateFlipClock() {
             const now = new Date();
             document.getElementById('flipHours').innerText = String(now.getHours()).padStart(2, '0');
@@ -452,7 +451,6 @@
         setInterval(updateFlipClock, 1000);
         updateFlipClock();
 
-        // Opsi Tema Terang / Gelap
         function toggleTheme() {
             const html = document.documentElement;
             const btn = document.getElementById('themeToggleBtn');
