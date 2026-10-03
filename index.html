@@ -33,10 +33,11 @@
             transition: background 0.3s, color 0.3s;
         }
 
+        /* Container utama diberi jarak kanan untuk sidebar vertikal */
         .container { 
-            max-width: 860px; 
+            max-width: 900px; 
             margin: auto; 
-            margin-right: 310px; 
+            margin-right: 110px; 
             background: var(--card-bg); 
             padding: 30px; 
             border-radius: 20px; 
@@ -85,7 +86,7 @@
             transform: translateY(-1px);
         }
 
-        /* --- KARTU RINGKASAN BERGRADASI & BERCAHAYA --- */
+        /* --- KARTU RINGKASAN BERGRADASI --- */
         .summary-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -98,8 +99,6 @@
             border-radius: 16px;
             color: white;
             box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-            position: relative;
-            overflow: hidden;
         }
 
         .card-income { background: linear-gradient(135deg, #10b981, #059669); }
@@ -143,7 +142,7 @@
             opacity: 0.8;
         }
 
-        /* --- TABEL RIWAYAT TRANSAKSI DENGAN PILL BADGES --- */
+        /* --- TABEL RIWAYAT TRANSAKSI --- */
         .history-section h3 {
             margin-bottom: 15px;
             font-size: 1.1rem;
@@ -178,7 +177,6 @@
             background: var(--table-hover);
         }
 
-        /* Badge Kategori Berwarna Warni (Pill Style) */
         .category-badge {
             display: inline-block;
             padding: 4px 10px;
@@ -193,109 +191,101 @@
         .cat-belanja { background: rgba(236, 72, 153, 0.15); color: #ec4899; }
         .cat-umum { background: rgba(100, 116, 139, 0.15); color: #64748b; }
 
-        /* --- WIDGET SISI KANAN (JAM FLIP & EXCEL MINIMALIS) --- */
-        .right-sidebar {
+        /* --- SIDEBAR VERTIKAL KANAN (ALA PROYEK ANDA) --- */
+        .vertical-sidebar {
             position: fixed;
-            right: 25px;
-            top: 30px;
-            width: 270px;
+            right: 20px;
+            top: 25px;
+            width: 75px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            align-items: center;
+            padding: 15px 10px;
+            gap: 16px;
             z-index: 9999;
         }
 
-        .widget-box {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            padding: 20px;
-            border-radius: 16px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+        /* Status Online */
+        .status-box {
             display: flex;
             flex-direction: column;
             align-items: center;
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: #10b981;
+            gap: 3px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+            width: 100%;
         }
 
-        .widget-title {
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: #94a3b8;
-            margin-bottom: 15px;
-        }
-
-        /* Jam Flip Digital Mewah */
-        .flip-clock {
+        /* Blok Jam Vertikal (Jam, Menit, Detik) */
+        .time-block {
             display: flex;
-            gap: 8px;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 8px 4px;
+            width: 100%;
         }
 
-        .flip-card {
-            background: #111827;
-            color: #38bdf8;
+        .time-val {
+            font-size: 1.1rem;
+            font-weight: 700;
             font-family: monospace;
-            font-size: 1.4rem;
-            font-weight: bold;
-            padding: 10px 12px;
-            border-radius: 8px;
-            box-shadow: inset 0 2px 4px rgba(255,255,255,0.1), 0 4px 10px rgba(0,0,0,0.3);
-            border-bottom: 3px solid #000;
-            position: relative;
+            color: var(--text-color);
         }
 
-        .flip-card::before {
-            content: '';
-            position: absolute;
-            left: 0;
-            top: 50%;
-            width: 100%;
-            height: 1px;
-            background: rgba(255,255,255,0.08);
+        .time-label {
+            font-size: 0.55rem;
+            text-transform: uppercase;
+            color: #94a3b8;
+            margin-top: 2px;
+            letter-spacing: 0.5px;
         }
 
-        .flip-colon {
-            color: #38bdf8;
-            font-weight: bold;
-            font-size: 1.3rem;
-            animation: pulse 1s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-        }
-
-        /* Tombol Excel Minimalis Stylish */
-        .btn-excel-minimal {
+        /* Tombol Aksi di Sidebar (Download Excel & Tema) */
+        .sidebar-btn {
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
-            width: 100%;
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
-            text-decoration: none;
-            padding: 12px 16px;
+            width: 42px;
+            height: 42px;
             border-radius: 12px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            box-sizing: border-box;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.25);
-            transition: transform 0.1s, box-shadow 0.2s;
-            margin-top: 5px;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            font-size: 1.1rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
         }
 
-        .btn-excel-minimal:hover {
+        .sidebar-btn:hover {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
             transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(16, 185, 129, 0.4);
         }
 
-        @media(max-width: 1150px) {
+        .sidebar-btn.excel-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+        }
+        .sidebar-btn.excel-btn:hover {
+            background: #059669;
+        }
+
+        @media(max-width: 1100px) {
             .container { margin-right: auto; }
-            .right-sidebar { position: relative; right: auto; top: auto; width: 100%; margin-top: 25px; }
+            .vertical-sidebar { display: none; } /* Sembunyikan di layar HP kecil */
             .charts-grid { grid-template-columns: 1fr; }
             .summary-grid { grid-template-columns: 1fr; }
         }
@@ -309,11 +299,10 @@
             <h2>🦥 Saku-Sloth Analytics</h2>
             <div class="header-controls">
                 <button class="btn-action" onclick="loadDashboard()">🔄 Refresh</button>
-                <button class="btn-action" id="themeToggleBtn" onclick="toggleTheme()">🌙 Gelap</button>
+                <button class="btn-action" id="themeToggleBtn" onclick="toggleTheme()">🌙 Tema</button>
             </div>
         </div>
 
-        <!-- Kartu Ringkasan Bergradasi Stylish -->
         <div class="summary-grid">
             <div class="summary-card card-income">
                 <h4>Total Pemasukan</h4>
@@ -329,7 +318,6 @@
             </div>
         </div>
 
-        <!-- Grafik -->
         <div class="charts-grid">
             <div class="chart-card">
                 <h3>Pemasukan vs Pengeluaran</h3>
@@ -341,7 +329,6 @@
             </div>
         </div>
 
-        <!-- Tabel Riwayat -->
         <div class="history-section">
             <h3>Riwayat Transaksi Keuangan</h3>
             <div class="table-responsive">
@@ -363,23 +350,35 @@
         </div>
     </div>
 
-    <!-- WIDGET SISI KANAN -->
-    <div class="right-sidebar">
-        <!-- Kotak Jam Flip -->
-        <div class="widget-box">
-            <div class="widget-title">Waktu Server</div>
-            <div class="flip-clock">
-                <div class="flip-card" id="hours">00</div>
-                <div class="flip-colon">:</div>
-                <div class="flip-card" id="minutes">00</div>
-                <div class="flip-colon">:</div>
-                <div class="flip-card" id="seconds">00</div>
-            </div>
+    <!-- SIDEBAR VERTIKAL KANAN (ALA PROYEK ANDA) -->
+    <div class="vertical-sidebar">
+        <!-- Status Online -->
+        <div class="status-box">
+            <span>🟢</span>
+            <span>ONLINE</span>
         </div>
 
-        <!-- Tombol Download Excel -->
-        <a href="https://saku-sloth.vercel.app/api/export-excel" class="btn-excel-minimal">
-            <span>📥</span> Export Laporan Excel
+        <!-- Waktu Vertikal: Jam -->
+        <div class="time-block">
+            <span class="time-val" id="vHours">00</span>
+            <span class="time-label">JAM</span>
+        </div>
+
+        <!-- Waktu Vertikal: Menit -->
+        <div class="time-block">
+            <span class="time-val" id="vMinutes">00</span>
+            <span class="time-label">MNT</span>
+        </div>
+
+        <!-- Waktu Vertikal: Detik -->
+        <div class="time-block">
+            <span class="time-val" id="vSeconds">00</span>
+            <span class="time-label">DTK</span>
+        </div>
+
+        <!-- Tombol Download Excel Disatukan -->
+        <a href="https://saku-sloth.vercel.app/api/export-excel" class="sidebar-btn excel-btn" title="Export Laporan Excel (.CSV)">
+            📊
         </a>
     </div>
 
@@ -427,7 +426,6 @@
                     const row = document.createElement('tr');
                     const formattedDate = new Date(trx.date).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
                     const sign = trx.type === 'income' ? '+' : '-';
-                    const colorClass = trx.type === 'income' ? 'text-income' : 'text-expense';
                     const typeLabel = trx.type === 'income' ? 'Pemasukan' : 'Pengeluaran';
                     const badgeClass = getCategoryClass(trx.category);
 
@@ -481,15 +479,15 @@
             }
         }
 
-        // Jam Flip Mekanik Realtime
-        function updateFlipClock() {
+        // Jam Vertikal Realtime
+        function updateVerticalClock() {
             const now = new Date();
-            document.getElementById('hours').innerText = String(now.getHours()).padStart(2, '0');
-            document.getElementById('minutes').innerText = String(now.getMinutes()).padStart(2, '0');
-            document.getElementById('seconds').innerText = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('vHours').innerText = String(now.getHours()).padStart(2, '0');
+            document.getElementById('vMinutes').innerText = String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('vSeconds').innerText = String(now.getSeconds()).padStart(2, '0');
         }
-        setInterval(updateFlipClock, 1000);
-        updateFlipClock();
+        setInterval(updateVerticalClock, 1000);
+        updateVerticalClock();
 
         // Toggle Tema Terang/Gelap
         function toggleTheme() {
@@ -497,18 +495,18 @@
             const btn = document.getElementById('themeToggleBtn');
             if (html.getAttribute('data-theme') === 'dark') {
                 html.removeAttribute('data-theme');
-                btn.innerText = '🌙 Gelap';
+                btn.innerText = '🌙 Tema';
                 localStorage.setItem('theme', 'light');
             } else {
                 html.setAttribute('data-theme', 'dark');
-                btn.innerText = '☀️ Terang';
+                btn.innerText = '☀️ Tema';
                 localStorage.setItem('theme', 'dark');
             }
         }
 
         if (localStorage.getItem('theme') === 'dark') {
             document.documentElement.setAttribute('data-theme', 'dark');
-            document.getElementById('themeToggleBtn').innerText = '☀️ Terang';
+            document.getElementById('themeToggleBtn').innerText = '☀️ Tema';
         }
 
         loadDashboard();
