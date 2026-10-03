@@ -5,18 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SakuSloth - Dashboard Keuangan 2026</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Google Font: Plus Jakarta Sans -->
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="main-wrapper">
-        <!-- Header / Ringkasan Dashboard Utama -->
         <header class="header-card">
             <h2>Dompet Santai 🌱</h2>
             <p class="subtitle">Dashboard Keuangan Pintar 2026</p>
-            
             <div class="dashboard-grid">
                 <div class="balance-box">
                     <span>Saldo Berjalan</span>
@@ -35,27 +31,23 @@
             </div>
         </header>
 
-        <!-- Peringatan Kategori Terboros (Warning Berkedip) -->
         <section id="warning-alert-section" class="card warning-card hidden">
             <div class="warning-content">
                 <span class="blink-icon">⚠️</span>
                 <div>
                     <strong>Perhatian Pengeluaran!</strong>
-                    <p id="warning-text">Kategori [X] memakan porsi terbesar pengeluaran Anda.</p>
+                    <p id="warning-text">Kategori mendominasi pengeluaran Anda.</p>
                 </div>
             </div>
         </section>
 
-        <!-- Layout Grid Utama (Kiri: Form & Chart, Kanan: History Berjalan) -->
         <div class="dashboard-columns">
-            <!-- Kolom Kiri: Input & Chart -->
             <div class="col-left">
-                <!-- Form Input Cepat -->
                 <section class="card form-card">
                     <h3>Catat Transaksi</h3>
                     <form id="transaction-form">
                         <div class="input-group">
-                            <input type="text" id="desc" placeholder="Keterangan (cth: Langganan AI / Kopi)" required>
+                            <input type="text" id="desc" placeholder="Keterangan (cth: Kopi)" required>
                         </div>
                         <div class="input-row">
                             <input type="number" id="amount" placeholder="Nominal (Rp)" required>
@@ -85,7 +77,6 @@
                     </form>
                 </section>
 
-                <!-- Grafik Visualisasi (Pie Chart) -->
                 <section class="card chart-card">
                     <h3>Analisis Kategori</h3>
                     <div class="chart-container">
@@ -94,18 +85,16 @@
                 </section>
             </div>
 
-            <!-- Kolom Kanan: Riwayat Transaksi Berjalan -->
             <div class="col-right">
                 <section class="card history-card">
                     <h3>Riwayat Berjalan</h3>
                     <ul id="transaction-list">
-                        <li class="empty-state">Belum ada catatan hari ini. Santai dulu! 🦥</li>
+                        <li class="empty-state">Belum ada catatan berjalan. Santai dulu! 🦥</li>
                     </ul>
                 </section>
             </div>
         </div>
     </div>
-
     <script src="script.js"></script>
 </body>
 </html>
