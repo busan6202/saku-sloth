@@ -2,26 +2,26 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Saku-Sloth Financial Analytics Dashboard</title>
+    <title>Saku-Sloth Meow Money Manager</title>
     <!-- Chart.js untuk Grafik -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --bg-color: #f1f5f9;
+            --bg-color: #fcf9f2; /* Warna latar krem hangat ala Meow */
             --card-bg: #ffffff;
-            --text-color: #1e293b;
-            --border-color: #e2e8f0;
-            --header-border: #f1f5f9;
-            --table-hover: #f8fafc;
+            --text-color: #4a403b;
+            --border-color: #f0e6d8;
+            --accent-orange: #f97316;
+            --accent-yellow: #fbbf24;
+            --table-hover: #fdfaf6;
         }
 
         [data-theme="dark"] {
-            --bg-color: #0b0f19;
-            --card-bg: #111827;
-            --text-color: #f3f4f6;
-            --border-color: #1f2937;
-            --header-border: #1f2937;
-            --table-hover: #1f2937;
+            --bg-color: #1a1614;
+            --card-bg: #26211e;
+            --text-color: #f3efe6;
+            --border-color: #3d3430;
+            --table-hover: #2f2925;
         }
 
         body { 
@@ -33,35 +33,48 @@
             transition: background 0.3s, color 0.3s;
         }
 
-        /* Container utama diberi jarak kanan untuk sidebar vertikal */
+        /* Container utama dengan gaya card rounded ala aplikasi mobile */
         .container { 
             max-width: 900px; 
             margin: auto; 
             margin-right: 110px; 
             background: var(--card-bg); 
             padding: 30px; 
-            border-radius: 20px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.06); 
-            transition: background 0.3s, box-shadow 0.3s;
-            border: 1px solid var(--border-color);
+            border-radius: 24px; 
+            box-shadow: 0 10px 30px rgba(249, 115, 22, 0.08); 
+            border: 2px solid var(--border-color);
+            transition: background 0.3s, border 0.3s;
         }
 
         .header { 
             display: flex; 
             justify-content: space-between; 
             align-items: center; 
-            border-bottom: 1px solid var(--header-border); 
+            border-bottom: 2px dashed var(--border-color); 
             padding-bottom: 20px; 
             margin-bottom: 25px;
+        }
+
+        .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .cat-logo {
+            font-size: 2rem;
+            background: #fef3c7;
+            padding: 8px 12px;
+            border-radius: 16px;
+            box-shadow: 0 4px 10px rgba(251, 191, 36, 0.2);
         }
 
         .header h2 {
             margin: 0;
             font-size: 1.5rem;
-            font-weight: 700;
-            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            color: var(--accent-orange);
+            letter-spacing: 0.5px;
         }
 
         .header-controls {
@@ -71,22 +84,22 @@
         }
 
         .btn-action {
-            background: transparent;
-            border: 1px solid var(--border-color);
-            color: var(--text-color);
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            color: #c2410c;
             padding: 8px 16px;
-            border-radius: 10px;
+            border-radius: 12px;
             cursor: pointer;
             font-size: 0.85rem;
-            font-weight: 600;
+            font-weight: 700;
             transition: all 0.2s;
         }
         .btn-action:hover {
-            background: var(--border-color);
+            background: #ffedd5;
             transform: translateY(-1px);
         }
 
-        /* --- KARTU RINGKASAN BERGRADASI --- */
+        /* --- KARTU RINGKASAN PASTEL MEOW --- */
         .summary-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -96,14 +109,15 @@
 
         .summary-card {
             padding: 20px;
-            border-radius: 16px;
-            color: white;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+            border-radius: 18px;
+            color: #fff;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.06);
+            position: relative;
         }
 
-        .card-income { background: linear-gradient(135deg, #10b981, #059669); }
-        .card-expense { background: linear-gradient(135deg, #ef4444, #dc2626); }
-        .card-balance { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+        .card-income { background: linear-gradient(135deg, #34d399, #059669); }
+        .card-expense { background: linear-gradient(135deg, #fb7185, #e11d48); }
+        .card-balance { background: linear-gradient(135deg, #60a5fa, #2563eb); }
 
         .summary-card h4 {
             margin: 0 0 8px 0;
@@ -115,7 +129,7 @@
 
         .summary-card .amount {
             font-size: 1.35rem;
-            font-weight: 700;
+            font-weight: 800;
         }
 
         /* --- GRAFIK ANALITIK --- */
@@ -129,7 +143,7 @@
         .chart-card { 
             background: var(--bg-color); 
             padding: 20px; 
-            border-radius: 16px; 
+            border-radius: 18px; 
             border: 1px solid var(--border-color); 
         }
 
@@ -138,15 +152,15 @@
             margin-top: 0;
             margin-bottom: 15px;
             text-align: center;
-            font-weight: 600;
-            opacity: 0.8;
+            font-weight: 700;
+            color: var(--accent-orange);
         }
 
         /* --- TABEL RIWAYAT TRANSAKSI --- */
         .history-section h3 {
             margin-bottom: 15px;
             font-size: 1.1rem;
-            font-weight: 600;
+            font-weight: 700;
         }
 
         .table-responsive {
@@ -166,8 +180,8 @@
         }
 
         th {
-            font-weight: 600;
-            color: #94a3b8;
+            font-weight: 700;
+            color: #b45309;
             font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
@@ -179,28 +193,28 @@
 
         .category-badge {
             display: inline-block;
-            padding: 4px 10px;
+            padding: 4px 12px;
             border-radius: 20px;
             font-size: 0.75rem;
-            font-weight: 600;
+            font-weight: 700;
         }
-        .cat-makan { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
-        .cat-transport { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
-        .cat-digital { background: rgba(139, 92, 246, 0.15); color: #8b5cf6; }
-        .cat-kesehatan { background: rgba(16, 185, 129, 0.15); color: #10b981; }
-        .cat-belanja { background: rgba(236, 72, 153, 0.15); color: #ec4899; }
-        .cat-umum { background: rgba(100, 116, 139, 0.15); color: #64748b; }
+        .cat-makan { background: #fef3c7; color: #d97706; }
+        .cat-transport { background: #e0e7ff; color: #4f46e5; }
+        .cat-digital { background: #f3e8ff; color: #7c3aed; }
+        .cat-kesehatan { background: #d1fae5; color: #059669; }
+        .cat-belanja { background: #fce7f3; color: #db2777; }
+        .cat-umum { background: #f1f5f9; color: #64748b; }
 
-        /* --- SIDEBAR VERTIKAL KANAN (ALA PROYEK ANDA) --- */
+        /* --- SIDEBAR VERTIKAL KANAN (PROYEK ANDA) --- */
         .vertical-sidebar {
             position: fixed;
             right: 20px;
             top: 25px;
             width: 75px;
             background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            border: 2px solid var(--border-color);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(249, 115, 22, 0.08);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -209,37 +223,35 @@
             z-index: 9999;
         }
 
-        /* Status Online */
         .status-box {
             display: flex;
             flex-direction: column;
             align-items: center;
             font-size: 0.65rem;
-            font-weight: 700;
+            font-weight: 800;
             color: #10b981;
             gap: 3px;
-            border-bottom: 1px solid var(--border-color);
+            border-bottom: 1px dashed var(--border-color);
             padding-bottom: 12px;
             width: 100%;
         }
 
-        /* Blok Jam Vertikal (Jam, Menit, Detik) */
         .time-block {
             display: flex;
             flex-direction: column;
             align-items: center;
             background: var(--bg-color);
             border: 1px solid var(--border-color);
-            border-radius: 10px;
+            border-radius: 12px;
             padding: 8px 4px;
             width: 100%;
         }
 
         .time-val {
             font-size: 1.1rem;
-            font-weight: 700;
+            font-weight: 800;
             font-family: monospace;
-            color: var(--text-color);
+            color: var(--accent-orange);
         }
 
         .time-label {
@@ -250,7 +262,6 @@
             letter-spacing: 0.5px;
         }
 
-        /* Tombol Aksi di Sidebar (Download Excel & Tema) */
         .sidebar-btn {
             display: flex;
             align-items: center;
@@ -268,9 +279,9 @@
         }
 
         .sidebar-btn:hover {
-            background: #3b82f6;
+            background: var(--accent-orange);
             color: white;
-            border-color: #3b82f6;
+            border-color: var(--accent-orange);
             transform: translateY(-2px);
         }
 
@@ -285,7 +296,7 @@
 
         @media(max-width: 1100px) {
             .container { margin-right: auto; }
-            .vertical-sidebar { display: none; } /* Sembunyikan di layar HP kecil */
+            .vertical-sidebar { display: none; }
             .charts-grid { grid-template-columns: 1fr; }
             .summary-grid { grid-template-columns: 1fr; }
         }
@@ -296,9 +307,12 @@
     <!-- DASHBOARD UTAMA -->
     <div class="container">
         <div class="header">
-            <h2>🦥 Saku-Sloth Analytics</h2>
+            <div class="brand-title">
+                <div class="cat-logo">🐱</div>
+                <h2>Saku-Sloth Meow Manager</h2>
+            </div>
             <div class="header-controls">
-                <button class="btn-action" onclick="loadDashboard()">🔄 Refresh</button>
+                <button class="btn-action" onclick="loadDashboard()">🐾 Refresh</button>
                 <button class="btn-action" id="themeToggleBtn" onclick="toggleTheme()">🌙 Tema</button>
             </div>
         </div>
@@ -320,17 +334,17 @@
 
         <div class="charts-grid">
             <div class="chart-card">
-                <h3>Pemasukan vs Pengeluaran</h3>
+                <h3>🐾 Pemasukan vs Pengeluaran</h3>
                 <canvas id="barChart"></canvas>
             </div>
             <div class="chart-card">
-                <h3>Kategori Pengeluaran</h3>
+                <h3>🐟 Kategori Pengeluaran</h3>
                 <canvas id="pieChart"></canvas>
             </div>
         </div>
 
         <div class="history-section">
-            <h3>Riwayat Transaksi Keuangan</h3>
+            <h3>📜 Riwayat Transaksi Keuangan</h3>
             <div class="table-responsive">
                 <table>
                     <thead>
@@ -350,33 +364,28 @@
         </div>
     </div>
 
-    <!-- SIDEBAR VERTIKAL KANAN (ALA PROYEK ANDA) -->
+    <!-- SIDEBAR VERTIKAL KANAN -->
     <div class="vertical-sidebar">
-        <!-- Status Online -->
         <div class="status-box">
-            <span>🟢</span>
-            <span>ONLINE</span>
+            <span>🐾</span>
+            <span>MEOW</span>
         </div>
 
-        <!-- Waktu Vertikal: Jam -->
         <div class="time-block">
             <span class="time-val" id="vHours">00</span>
             <span class="time-label">JAM</span>
         </div>
 
-        <!-- Waktu Vertikal: Menit -->
         <div class="time-block">
             <span class="time-val" id="vMinutes">00</span>
             <span class="time-label">MNT</span>
         </div>
 
-        <!-- Waktu Vertikal: Detik -->
         <div class="time-block">
             <span class="time-val" id="vSeconds">00</span>
             <span class="time-label">DTK</span>
         </div>
 
-        <!-- Tombol Download Excel Disatukan -->
         <a href="https://saku-sloth.vercel.app/api/export-excel" class="sidebar-btn excel-btn" title="Export Laporan Excel (.CSV)">
             📊
         </a>
@@ -411,7 +420,7 @@
                 tableBody.innerHTML = '';
 
                 if (data.length === 0) {
-                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#94a3b8;">Belum ada catatan transaksi.</td></tr>';
+                    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#94a3b8;">Belum ada catatan transaksi. Catat via Telegram!</td></tr>';
                 }
 
                 data.forEach(trx => {
@@ -433,8 +442,8 @@
                         <td>${formattedDate}</td>
                         <td><strong>${trx.desc}</strong></td>
                         <td><span class="category-badge ${badgeClass}">${trx.category}</span></td>
-                        <td><span style="font-weight:600; color:${trx.type === 'income' ? '#10b981' : '#ef4444'}">${typeLabel}</span></td>
-                        <td style="font-weight:700; color:${trx.type === 'income' ? '#10b981' : '#ef4444'}">${sign} Rp ${amt.toLocaleString('id-ID')}</td>
+                        <td><span style="font-weight:700; color:${trx.type === 'income' ? '#34d399' : '#fb7185'}">${typeLabel}</span></td>
+                        <td style="font-weight:800; color:${trx.type === 'income' ? '#34d399' : '#fb7185'}">${sign} Rp ${amt.toLocaleString('id-ID')}</td>
                     `;
                     tableBody.appendChild(row);
                 });
@@ -453,8 +462,8 @@
                         labels: ['Pemasukan', 'Pengeluaran'],
                         datasets: [{
                             data: [totalIncome, totalExpense],
-                            backgroundColor: ['#10b981', '#ef4444'],
-                            borderRadius: 8
+                            backgroundColor: ['#34d399', '#fb7185'],
+                            borderRadius: 10
                         }]
                     },
                     options: { responsive: true, plugins: { legend: { display: false } } }
@@ -466,7 +475,7 @@
                         labels: Object.keys(categoryMap),
                         datasets: [{
                             data: Object.values(categoryMap),
-                            backgroundColor: ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981', '#ec4899', '#64748b'],
+                            backgroundColor: ['#60a5fa', '#fbbf24', '#a78bfa', '#34d399', '#f472b6', '#94a3b8'],
                             borderWidth: 2
                         }]
                     },

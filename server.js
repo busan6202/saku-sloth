@@ -7,7 +7,7 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
-// Koneksi ke Neon PostgreSQL (Dioptimalkan agar tidak timeout)
+// Koneksi ke Neon PostgreSQL
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL || process.env.MONGO_URI,
     ssl: {
@@ -18,7 +18,7 @@ const pool = new Pool({
     max: 5
 });
 
-// Buat tabel transaksi otomatis jika belum ada
+// Buat tabel transaksi otomatis jika belum ada (Kategori fleksibel bertipe TEXT)
 pool.query(`
     CREATE TABLE IF NOT EXISTS transactions (
         id SERIAL PRIMARY KEY,
@@ -204,8 +204,9 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 
             await sendTelegramMessage(chatId, "🔍 *Gemini sedang membaca nota Anda...*");
 
+            // Gemini otomatis membuat kategori apa saja secara bebas sesuai isi nota
             const prompt = `Analisis nota/struk belanja ini. Ekstrak data ke format JSON murni TANPA markdown:
-            {"desc": "Nama tempat/toko atau ringkasan", "amount": angka saja, "type": "expense", "category": pilih dari ["Makan & Minum", "Transportasi", "Langganan Digital", "Kesehatan & Self-Care", "Belanja & Lifestyle", "Tagihan & Utilitas"]}`;
+            {"desc": "Nama tempat/toko atau ringkasan", "amount": angka saja, "type": "expense", "category": "Tentukan kategori yang paling sesuai secara spesifik dan singkat (misal: Makan, Transport, Hobi, Langganan, Belanja, dll)"}`;
 
             const rawTextResponse = await callGeminiAPI(prompt, base64Image);
 
@@ -230,7 +231,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             if (text.startsWith('/start')) {
                 const welcomeMsg = `
 🌱 *Halo! Selamat datang di Saku-Sloth Bot.*
-Kirim foto nota atau ketik catatan transaksi Anda secara natural.
+Ketik transaksi secara natural beserta kategori bebas yang Anda inginkan (Contoh: *"Beli kopi 25rb kategori Hobi"*).
 
 📋 *Daftar Perintah:*
 • /saldo atau /rekap — Cek rekap & saldo berjalan
@@ -287,8 +288,9 @@ Kirim foto nota atau ketik catatan transaksi Anda secara natural.
                 return res.sendStatus(200);
             }
 
+            // Gemini AI sekarang dibebaskan untuk menerima kategori apa saja dari ketikan pengguna
             const prompt = `Analisis transaksi: "${text}". Ekstrak ke format JSON murni TANPA markdown:
-            {"desc": "Keterangan singkat", "amount": angka saja, "type": "expense" atau "income", "category": pilih dari ["Makan & Minum", "Transportasi", "Langganan Digital", "Kesehatan & Self-Care", "Belanja & Lifestyle", "Tagihan & Utilitas", "Gaji Utama", "Side Hustle / Freelance", "Investasi & Dividen"]}`;
+            {"desc": "Keterangan singkat", "amount": angka saja, "type": "expense" atau "income", "category": "Nama kategori bebas yang disebutkan pengguna atau yang paling sesuai (contoh: Makan, Transportasi, Hobi, Gaji, Investasi, dll)"}`;
 
             const rawTextResponse = await callGeminiAPI(prompt);
 
