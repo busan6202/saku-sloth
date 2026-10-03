@@ -1,10 +1,5 @@
-<<<<<<< HEAD:script.js
-// Menggunakan jalur relatif agar otomatis mengikuti domain Vercel yang aktif
-// Ganti dengan URL Vercel backend Anda yang sebenarnya
+// Arahkan langsung ke URL backend Vercel Anda
 const API_URL = 'https://saku-sloth.vercel.app/api/transactions';
-=======
-const API_URL = '/api/transactions';
->>>>>>> 0b8d29d42041cffa071a70e6c845141f4ae736be:public/script.js
 
 const transactionForm = document.getElementById('transaction-form');
 const transactionList = document.getElementById('transaction-list');
