@@ -10,6 +10,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
     <script src="script.js" defer></script>
 </head>
 <body>
@@ -22,9 +24,9 @@
 
             <div class="sidebar-label">MENU</div>
             <nav class="side-nav">
-                <a class="nav-link is-active" href="#overview" data-nav="overview"><span class="nav-symbol" aria-hidden="true">⌂</span>Ringkasan</a>
-                <a class="nav-link" href="#transactions" data-nav="transactions"><span class="nav-symbol" aria-hidden="true">↕</span>Transaksi</a>
-                <a class="nav-link" href="#insights" data-nav="insights"><span class="nav-symbol" aria-hidden="true">◷</span>Analisis</a>
+                <a class="nav-link is-active" href="#overview" data-nav="overview"><i class="nav-symbol" data-lucide="layout-dashboard" aria-hidden="true"></i>Ringkasan</a>
+                <a class="nav-link" href="#transactions" data-nav="transactions"><i class="nav-symbol" data-lucide="arrow-left-right" aria-hidden="true"></i>Transaksi</a>
+                <a class="nav-link" href="#insights" data-nav="insights"><i class="nav-symbol" data-lucide="chart-pie" aria-hidden="true"></i>Analisis</a>
             </nav>
 
             <div class="sidebar-bottom">
@@ -51,11 +53,11 @@
                         <span class="calendar-icon" aria-hidden="true">▦</span>
                         <input id="monthFilter" type="month" aria-label="Pilih bulan laporan">
                     </label>
-                    <a class="icon-button export-button" href="https://saku-sloth.vercel.app/api/export-excel" aria-label="Unduh laporan CSV" title="Unduh laporan CSV">
-                        <span aria-hidden="true">↓</span><span class="export-label">Unduh CSV</span>
-                    </a>
-                    <button class="icon-button" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data"><span aria-hidden="true">↻</span></button>
-                    <button class="icon-button theme-button" id="themeToggle" type="button" aria-label="Ganti tema" title="Ganti tema"><span aria-hidden="true">◐</span></button>
+                    <button class="icon-button export-button" id="exportXlsx" type="button" aria-label="Unduh laporan Excel XLSX" title="Ekspor semua transaksi ke XLSX">
+                        <i data-lucide="file-spreadsheet" aria-hidden="true"></i><span class="export-label">Ekspor XLSX</span>
+                    </button>
+                    <button class="icon-button" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
+                    <button class="icon-button theme-button" id="themeToggle" type="button" aria-label="Ganti tema" title="Ganti tema"><i data-lucide="moon" aria-hidden="true"></i></button>
                 </div>
             </header>
 
@@ -65,7 +67,7 @@
                     <h1 id="page-title">Uangmu, lebih <span>terarah.</span></h1>
                     <p class="welcome-copy">Satu pandangan untuk keputusan finansial yang lebih tenang.</p>
                 </div>
-                <button class="button button-primary" id="openTransaction" type="button"><span aria-hidden="true">＋</span> Catat transaksi</button>
+                <button class="button button-primary" id="openTransaction" type="button"><i data-lucide="plus" aria-hidden="true"></i> Catat transaksi</button>
             </section>
 
             <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
@@ -148,10 +150,10 @@
     </div>
 
     <nav class="mobile-nav" aria-label="Navigasi bawah">
-        <a href="#overview" class="mobile-nav-link is-active" data-nav="overview"><span aria-hidden="true">⌂</span><span>Ringkasan</span></a>
-        <a href="#transactions" class="mobile-nav-link" data-nav="transactions"><span aria-hidden="true">↕</span><span>Transaksi</span></a>
-        <a href="#insights" class="mobile-nav-link" data-nav="insights"><span aria-hidden="true">◷</span><span>Analisis</span></a>
-        <button class="mobile-add" type="button" data-open-form aria-label="Catat transaksi">＋</button>
+        <a href="#overview" class="mobile-nav-link is-active" data-nav="overview"><i data-lucide="layout-dashboard" aria-hidden="true"></i><span>Ringkasan</span></a>
+        <a href="#transactions" class="mobile-nav-link" data-nav="transactions"><i data-lucide="arrow-left-right" aria-hidden="true"></i><span>Transaksi</span></a>
+        <a href="#insights" class="mobile-nav-link" data-nav="insights"><i data-lucide="chart-pie" aria-hidden="true"></i><span>Analisis</span></a>
+        <button class="mobile-add" type="button" data-open-form aria-label="Catat transaksi"><i data-lucide="plus" aria-hidden="true"></i></button>
     </nav>
 
     <dialog class="transaction-dialog" id="transactionDialog" aria-labelledby="dialogTitle">

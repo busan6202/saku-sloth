@@ -1,6 +1,5 @@
 const API_BASE_URL = 'https://saku-sloth.vercel.app/api';
 const TRANSACTIONS_URL = `${API_BASE_URL}/transactions`;
-const EXPORT_URL = `${API_BASE_URL}/export-excel`;
 const VISIBLE_TRANSACTION_LIMIT = 5;
 const CATEGORY_COLORS = ['#a9df71', '#f0a096', '#91a8d0', '#e6c46b', '#ba9dd4', '#78c9b7', '#e79a5a'];
 
@@ -67,16 +66,18 @@ function formatTransactionDate(value) {
 }
 
 function getCategoryIcon(category, type) {
-    if (type === 'income') return '↙';
+    if (type === 'income') return { name: 'arrow-down-left', tone: 'income' };
 
     const normalized = String(category || '').toLocaleLowerCase('id-ID');
-    if (/makan|minum|kuliner|resto/.test(normalized)) return '◒';
-    if (/transport|bensin|kendaraan|ojek/.test(normalized)) return '↗';
-    if (/belanja|shop|lifestyle/.test(normalized)) return '◇';
-    if (/tagihan|listrik|utilitas/.test(normalized)) return 'ϟ';
-    if (/kesehatan|obat|medis/.test(normalized)) return '✳';
-    if (/gaji|salary|kerja/.test(normalized)) return '▤';
-    return '·';
+    if (/makan|minum|kuliner|resto/.test(normalized)) return { name: 'utensils', tone: 'food' };
+    if (/transport|bensin|kendaraan|ojek/.test(normalized)) return { name: 'car-front', tone: 'transport' };
+    if (/belanja|shop|lifestyle/.test(normalized)) return { name: 'shopping-bag', tone: 'shopping' };
+    if (/tagihan|listrik|utilitas/.test(normalized)) return { name: 'zap', tone: 'bills' };
+    if (/kesehatan|obat|medis/.test(normalized)) return { name: 'heart-pulse', tone: 'health' };
+    if (/gaji|salary|kerja/.test(normalized)) return { name: 'briefcase-business', tone: 'income' };
+    if (/rumah|sewa|hunian/.test(normalized)) return { name: 'house', tone: 'home' };
+    if (/langganan|digital|internet/.test(normalized)) return { name: 'monitor-play', tone: 'digital' };
+    return { name: 'receipt-text', tone: 'other' };
 }
 
 function setNotice(message, kind = 'success') {
@@ -224,9 +225,12 @@ function createTransactionRow(transaction) {
     main.className = 'transaction-main';
 
     const icon = document.createElement('span');
-    icon.className = 'transaction-icon';
+    const iconDetails = getCategoryIcon(transaction.category, transaction.type);
+    icon.className = `transaction-icon icon-${iconDetails.tone}`;
     icon.setAttribute('aria-hidden', 'true');
-    icon.textContent = getCategoryIcon(transaction.category, transaction.type);
+    const iconElement = document.createElement('i');
+    iconElement.dataset.lucide = iconDetails.name;
+    icon.append(iconElement);
 
     const details = document.createElement('div');
     details.style.minWidth = '0';
@@ -258,6 +262,12 @@ function createTransactionRow(transaction) {
     return row;
 }
 
+function renderIcons() {
+    if (window.lucide?.createIcons) {
+        window.lucide.createIcons();
+    }
+}
+
 function renderTransactions() {
     const query = elements.search.value.trim().toLocaleLowerCase('id-ID');
     const monthTransactions = selectedMonthTransactions();
@@ -270,6 +280,7 @@ function renderTransactions() {
         : matchingTransactions.slice(0, VISIBLE_TRANSACTION_LIMIT);
 
     elements.transactionList.replaceChildren(...visibleTransactions.map(createTransactionRow));
+    renderIcons();
     elements.emptyState.hidden = matchingTransactions.length > 0;
     elements.transactionList.hidden = matchingTransactions.length === 0;
     elements.listStatus.textContent = matchingTransactions.length > visibleTransactions.length
@@ -330,6 +341,84 @@ async function loadTransactions() {
         elements.emptyState.querySelector('span:not(.empty-illustration)').textContent = 'Periksa koneksi internetmu lalu coba muat ulang.';
         elements.emptyState.querySelector('[data-open-form]').hidden = true;
         setNotice('Gagal mengambil transaksi dari server. Coba lagi beberapa saat.', 'error');
+    }
+}
+
+async function exportTransactionsToXlsx() {
+    if (!transactions.length) {
+        setNotice('Belum ada transaksi yang bisa diekspor.', 'error');
+        return;
+    }
+
+    if (!window.ExcelJS) {
+        setNotice('Library Excel belum berhasil dimuat. Periksa koneksi lalu muat ulang halaman.', 'error');
+        return;
+    }
+
+    const exportButton = document.getElementById('exportXlsx');
+    exportButton.disabled = true;
+    try {
+        const workbook = new window.ExcelJS.Workbook();
+        workbook.creator = 'Saku Harian';
+        workbook.created = new Date();
+        workbook.subject = 'Laporan transaksi keuangan';
+        workbook.title = 'Laporan Keuangan Saku Harian';
+
+        const worksheet = workbook.addWorksheet('Transaksi', {
+            views: [{ state: 'frozen', ySplit: 1, showGridLines: false }]
+        });
+        worksheet.columns = [
+            { header: 'ID', key: 'id', width: 12 },
+            { header: 'Tanggal', key: 'date', width: 23 },
+            { header: 'Keterangan', key: 'description', width: 36 },
+            { header: 'Kategori', key: 'category', width: 24 },
+            { header: 'Tipe', key: 'type', width: 18 },
+            { header: 'Nominal', key: 'amount', width: 20 }
+        ];
+
+        transactions.forEach((transaction) => {
+            const parsedDate = new Date(transaction.date);
+            const row = worksheet.addRow({
+                id: transaction.id ?? '',
+                date: Number.isNaN(parsedDate.getTime()) ? String(transaction.date || '') : parsedDate,
+                description: String(transaction.desc || ''),
+                category: String(transaction.category || 'Umum'),
+                type: transaction.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
+                amount: Number(transaction.amount) || 0
+            });
+            row.getCell('date').numFmt = 'dd mmm yyyy hh:mm';
+            row.getCell('amount').numFmt = '"Rp" #,##0;[Red]-"Rp" #,##0';
+            row.getCell('amount').alignment = { horizontal: 'right' };
+            row.getCell('id').alignment = { horizontal: 'center' };
+        });
+
+        const header = worksheet.getRow(1);
+        header.height = 25;
+        header.font = { bold: true, color: { argb: 'FF26351F' } };
+        header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB8F36A' } };
+        header.alignment = { vertical: 'middle' };
+        worksheet.autoFilter = { from: 'A1', to: 'F1' };
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const downloadUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        const today = new Date();
+        const fileDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        link.download = `laporan-saku-harian-${fileDate}.xlsx`;
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+        setNotice(`Berhasil menyiapkan ${transactions.length} transaksi dalam file XLSX.`);
+    } catch (error) {
+        console.error('Gagal mengekspor laporan XLSX:', error);
+        setNotice('File XLSX gagal dibuat. Silakan coba lagi.', 'error');
+    } finally {
+        exportButton.disabled = false;
     }
 }
 
@@ -409,7 +498,19 @@ function initializeTheme() {
     const savedTheme = localStorage.getItem('saku-theme');
     if (savedTheme === 'dark') document.documentElement.dataset.theme = 'dark';
 
-    document.getElementById('themeToggle').addEventListener('click', () => {
+    const themeButton = document.getElementById('themeToggle');
+    const updateThemeButton = (isDark) => {
+        const icon = document.createElement('i');
+        icon.dataset.lucide = isDark ? 'sun' : 'moon';
+        icon.setAttribute('aria-hidden', 'true');
+        themeButton.replaceChildren(icon);
+        themeButton.setAttribute('aria-label', isDark ? 'Gunakan tema terang' : 'Gunakan tema gelap');
+        themeButton.title = isDark ? 'Gunakan tema terang' : 'Gunakan tema gelap';
+        renderIcons();
+    };
+    updateThemeButton(savedTheme === 'dark');
+
+    themeButton.addEventListener('click', () => {
         const isDark = document.documentElement.dataset.theme === 'dark';
         if (isDark) {
             delete document.documentElement.dataset.theme;
@@ -418,6 +519,7 @@ function initializeTheme() {
             document.documentElement.dataset.theme = 'dark';
             localStorage.setItem('saku-theme', 'dark');
         }
+        updateThemeButton(!isDark);
     });
 }
 
@@ -455,6 +557,7 @@ document.getElementById('showAllTransactions').addEventListener('click', () => {
 });
 document.getElementById('openTransaction').addEventListener('click', openTransactionDialog);
 document.getElementById('refreshButton').addEventListener('click', loadTransactions);
+document.getElementById('exportXlsx').addEventListener('click', exportTransactionsToXlsx);
 document.querySelectorAll('[data-open-form]').forEach((button) => {
     button.addEventListener('click', openTransactionDialog);
 });
@@ -466,4 +569,5 @@ elements.dialog.addEventListener('click', (event) => {
 elements.form.addEventListener('submit', submitTransaction);
 initializeTheme();
 initializeNavigation();
+renderIcons();
 loadTransactions();
