@@ -1,181 +1,469 @@
-const API_URL = 'https://saku-sloth.vercel.app/api/transactions';
+const API_BASE_URL = 'https://saku-sloth.vercel.app/api';
+const TRANSACTIONS_URL = `${API_BASE_URL}/transactions`;
+const EXPORT_URL = `${API_BASE_URL}/export-excel`;
+const VISIBLE_TRANSACTION_LIMIT = 5;
+const CATEGORY_COLORS = ['#a9df71', '#f0a096', '#91a8d0', '#e6c46b', '#ba9dd4', '#78c9b7', '#e79a5a'];
 
-const transactionForm = document.getElementById('transaction-form');
-const transactionList = document.getElementById('transaction-list');
-const totalBalance = document.getElementById('total-balance');
-const currentMonthExpenseEl = document.getElementById('current-month-expense');
-const lastMonthExpenseEl = document.getElementById('last-month-expense');
-const warningAlertSection = document.getElementById('warning-alert-section');
-const warningText = document.getElementById('warning-text');
+const elements = {
+    balance: document.getElementById('balanceValue'),
+    balanceCaption: document.getElementById('balanceCaption'),
+    income: document.getElementById('incomeValue'),
+    expense: document.getElementById('expenseValue'),
+    incomeCount: document.getElementById('incomeCount'),
+    expenseCount: document.getElementById('expenseCount'),
+    incomeBar: document.getElementById('incomeBar'),
+    expenseBar: document.getElementById('expenseBar'),
+    incomePercent: document.getElementById('incomePercent'),
+    expensePercent: document.getElementById('expensePercent'),
+    flowTotal: document.getElementById('flowTotal'),
+    flowPeriod: document.getElementById('flowPeriod'),
+    healthNote: document.getElementById('healthNote'),
+    categoryDonut: document.getElementById('categoryDonut'),
+    categoryLegend: document.getElementById('categoryLegend'),
+    categoryTotal: document.getElementById('categoryTotal'),
+    transactionList: document.getElementById('transactionList'),
+    emptyState: document.getElementById('emptyState'),
+    listStatus: document.getElementById('listStatus'),
+    monthFilter: document.getElementById('monthFilter'),
+    search: document.getElementById('transactionSearch'),
+    notice: document.getElementById('notice'),
+    dialog: document.getElementById('transactionDialog'),
+    form: document.getElementById('transactionForm'),
+    formError: document.getElementById('formError'),
+    saveButton: document.getElementById('saveTransaction')
+};
 
-let expenseChartInstance = null;
+let transactions = [];
+let showAllTransactions = false;
+let noticeTimeout;
 
-function getCategoryIcon(category) {
-    const icons = {
-        'Makan & Minum': '🍜',
-        'Transportasi': '🚗',
-        'Langganan Digital': '💻',
-        'Kesehatan & Self-Care': '🧘',
-        'Belanja & Lifestyle': '🛍️',
-        'Tagihan & Utilitas': '⚡',
-        'Gaji Utama': '💼',
-        'Side Hustle / Freelance': '🚀',
-        'Investasi & Dividen': '📈'
-    };
-    return icons[category] || '📁';
-}
-
-async function fetchTransactions() {
-    try {
-        const response = await fetch(API_URL);
-        const transactions = await response.json();
-        renderDashboard(transactions);
-        updateChart(transactions);
-    } catch (error) {
-        console.error("Gagal mengambil data:", error);
-    }
-}
-
-function renderDashboard(transactions) {
-    transactionList.innerHTML = '';
-    
-    if (transactions.length === 0) {
-        transactionList.innerHTML = `<li class="empty-state">Belum ada catatan berjalan. Santai dulu! 🦥</li>`;
-        totalBalance.innerText = `Rp 0`;
-        currentMonthExpenseEl.innerText = `Rp 0`;
-        lastMonthExpenseEl.innerText = `Rp 0`;
-        warningAlertSection.classList.add('hidden');
-        return;
-    }
-
-    let balance = 0;
-    let currentMonthExpense = 0;
-    let lastMonthExpense = 0;
-
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    const categoryTotals = {};
-
-    transactions.forEach(trx => {
-        const amountNum = Number(trx.amount);
-        const trxDate = new Date(trx.date);
-        const trxMonth = trxDate.getMonth();
-        const trxYear = trxDate.getFullYear();
-
-        if (trx.type === 'income') {
-            balance += amountNum;
-        } else {
-            balance -= amountNum;
-            if (trxMonth === currentMonth && trxYear === currentYear) {
-                currentMonthExpense += amountNum;
-                const cat = trx.category || 'Lainnya';
-                categoryTotals[cat] = (categoryTotals[cat] || 0) + amountNum;
-            }
-        }
-
-        let prevMonth = currentMonth === 0 ? 11 : currentMonth - 1;
-        let prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-        if (trx.type === 'expense' && trxMonth === prevMonth && trxYear === prevYear) {
-            lastMonthExpense += amountNum;
-        }
-
-        const iconSymbol = getCategoryIcon(trx.category);
-        const li = document.createElement('li');
-        li.className = trx.type;
-        li.innerHTML = `
-            <div class="history-info">
-                <div class="history-icon">${iconSymbol}</div>
-                <div>
-                    <span><strong>${trx.desc}</strong></span>
-                    <br><small style="color: #7f8c8d; font-size: 0.75rem;">${trx.category || 'Umum'} • ${trxDate.toLocaleDateString('id-ID')}</small>
-                </div>
-            </div>
-            <strong>${trx.type === 'income' ? '+' : '-'} Rp ${amountNum.toLocaleString('id-ID')}</strong>
-        `;
-        transactionList.appendChild(li);
-    });
-
-    totalBalance.innerText = `Rp ${balance.toLocaleString('id-ID')}`;
-    currentMonthExpenseEl.innerText = `Rp ${currentMonthExpense.toLocaleString('id-ID')}`;
-    lastMonthExpenseEl.innerText = `Rp ${lastMonthExpense.toLocaleString('id-ID')}`;
-
-    let highestCategory = '';
-    let highestAmount = 0;
-    for (const [cat, amt] of Object.entries(categoryTotals)) {
-        if (amt > highestAmount) {
-            highestAmount = amt;
-            highestCategory = cat;
-        }
-    }
-
-    if (highestAmount > 0 && currentMonthExpense > 0 && (highestAmount / currentMonthExpense) >= 0.4) {
-        warningText.innerText = `Kategori "${highestCategory}" mendominasi pengeluaran bulan ini sebesar Rp ${highestAmount.toLocaleString('id-ID')}!`;
-        warningAlertSection.classList.remove('hidden');
-    } else {
-        warningAlertSection.classList.add('hidden');
-    }
-}
-
-function updateChart(transactions) {
-    const expenses = transactions.filter(trx => trx.type === 'expense');
-    const categoryTotals = {};
-    expenses.forEach(trx => {
-        const cat = trx.category || 'Lainnya';
-        categoryTotals[cat] = (categoryTotals[cat] || 0) + Number(trx.amount);
-    });
-
-    const labels = Object.keys(categoryTotals);
-    const data = Object.values(categoryTotals);
-    const ctx = document.getElementById('expenseChart').getContext('2d');
-
-    if (expenseChartInstance) expenseChartInstance.destroy();
-
-    if (labels.length === 0) {
-        expenseChartInstance = new Chart(ctx, {
-            type: 'pie',
-            data: { labels: ['Belum ada pengeluaran'], datasets: [{ data: [1], backgroundColor: ['#e0e0e0'] }] },
-            options: { responsive: true, maintainAspectRatio: false }
-        });
-        return;
-    }
-
-    const earthToneColors = ['#52796f', '#354f52', '#84a98c', '#cad2c5', '#bc4749', '#dda15e', '#606c38'];
-    expenseChartInstance = new Chart(ctx, {
-        type: 'pie',
-        data: {
-            labels: labels,
-            datasets: [{ data: data, backgroundColor: earthToneColors.slice(0, labels.length), borderWidth: 2, borderColor: '#ffffff' }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11, family: 'Plus Jakarta Sans' } } } }
-        }
-    });
-}
-
-transactionForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const desc = document.getElementById('desc').value;
-    const amount = document.getElementById('amount').value;
-    const type = document.getElementById('type').value;
-    const category = document.getElementById('category').value;
-
-    try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ desc, amount, type, category })
-        });
-
-        if (response.ok) {
-            transactionForm.reset();
-            fetchTransactions();
-        }
-    } catch (error) {
-        console.error("Gagal menyimpan data:", error);
-    }
+const currencyFormatter = new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    maximumFractionDigits: 0
 });
 
-fetchTransactions();
+const dateFormatter = new Intl.DateTimeFormat('id-ID', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+});
+
+function localMonthValue(date = new Date()) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatCurrency(amount) {
+    return currencyFormatter.format(Number.isFinite(amount) ? amount : 0);
+}
+
+function formatTransactionDate(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return 'Tanggal tidak tersedia';
+    return `${dateFormatter.format(date)} · ${new Intl.DateTimeFormat('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit'
+    }).format(date)}`;
+}
+
+function getCategoryIcon(category, type) {
+    if (type === 'income') return '↙';
+
+    const normalized = String(category || '').toLocaleLowerCase('id-ID');
+    if (/makan|minum|kuliner|resto/.test(normalized)) return '◒';
+    if (/transport|bensin|kendaraan|ojek/.test(normalized)) return '↗';
+    if (/belanja|shop|lifestyle/.test(normalized)) return '◇';
+    if (/tagihan|listrik|utilitas/.test(normalized)) return 'ϟ';
+    if (/kesehatan|obat|medis/.test(normalized)) return '✳';
+    if (/gaji|salary|kerja/.test(normalized)) return '▤';
+    return '·';
+}
+
+function setNotice(message, kind = 'success') {
+    window.clearTimeout(noticeTimeout);
+    elements.notice.textContent = message;
+    elements.notice.dataset.kind = kind;
+    elements.notice.hidden = false;
+    noticeTimeout = window.setTimeout(() => {
+        elements.notice.hidden = true;
+    }, 5000);
+}
+
+function selectedMonthTransactions() {
+    const selectedMonth = elements.monthFilter.value;
+    return transactions.filter((transaction) => {
+        const date = new Date(transaction.date);
+        if (Number.isNaN(date.getTime())) return false;
+        return localMonthValue(date) === selectedMonth;
+    });
+}
+
+function updateSummary(monthTransactions) {
+    let income = 0;
+    let expense = 0;
+    let incomeCount = 0;
+    let expenseCount = 0;
+    const categoryTotals = new Map();
+
+    monthTransactions.forEach((transaction) => {
+        const amount = Number(transaction.amount);
+        if (!Number.isFinite(amount)) return;
+
+        if (transaction.type === 'income') {
+            income += amount;
+            incomeCount += 1;
+            return;
+        }
+
+        expense += amount;
+        expenseCount += 1;
+        const category = String(transaction.category || 'Umum').trim() || 'Umum';
+        categoryTotals.set(category, (categoryTotals.get(category) || 0) + amount);
+    });
+
+    const totalFlow = income + expense;
+    const net = income - expense;
+    const incomeShare = totalFlow ? Math.round((income / totalFlow) * 100) : 0;
+    const expenseShare = totalFlow ? 100 - incomeShare : 0;
+
+    elements.balance.textContent = formatCurrency(net);
+    elements.balanceCaption.textContent = net >= 0 ? 'Kondisi bulan ini tetap positif' : 'Pengeluaran lebih tinggi dari pemasukan';
+    elements.income.textContent = formatCurrency(income);
+    elements.expense.textContent = formatCurrency(expense);
+    elements.incomeCount.textContent = `${incomeCount} transaksi`;
+    elements.expenseCount.textContent = `${expenseCount} transaksi`;
+    const flowCaption = document.createElement('span');
+    flowCaption.textContent = 'total pergerakan';
+    elements.flowTotal.replaceChildren(document.createTextNode(formatCurrency(totalFlow)), flowCaption);
+    elements.incomePercent.textContent = `${incomeShare}%`;
+    elements.expensePercent.textContent = `${expenseShare}%`;
+    elements.incomeBar.style.width = `${incomeShare}%`;
+    elements.expenseBar.style.width = `${expenseShare}%`;
+    elements.flowPeriod.textContent = new Intl.DateTimeFormat('id-ID', {
+        month: 'long',
+        year: 'numeric'
+    }).format(new Date(`${elements.monthFilter.value}-01T12:00:00`));
+
+    const healthMessage = totalFlow === 0
+        ? 'Mulai catat transaksi untuk melihat kondisi arus kasmu.'
+        : net < 0
+            ? 'Pengeluaran bulan ini melampaui pemasukan. Cek kembali pos pengeluaranmu.'
+            : expense / (income || 1) >= 0.8
+                ? 'Sebagian besar pemasukan sudah terpakai. Pertimbangkan untuk menahan belanja berikutnya.'
+                : 'Arus kas bulan ini terjaga. Pertahankan kebiasaan baikmu.';
+    elements.healthNote.lastElementChild.textContent = healthMessage;
+
+    renderCategories(categoryTotals, expense);
+}
+
+function renderCategories(categoryTotals, totalExpense) {
+    const categories = [...categoryTotals.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .filter(([, amount]) => amount > 0);
+    elements.categoryTotal.textContent = formatCurrency(totalExpense);
+    elements.categoryLegend.replaceChildren();
+
+    if (!categories.length) {
+        elements.categoryDonut.style.background = 'conic-gradient(var(--line) 0deg 360deg)';
+        const emptyMessage = document.createElement('p');
+        emptyMessage.className = 'empty-copy';
+        emptyMessage.textContent = 'Belum ada pengeluaran di bulan ini.';
+        elements.categoryLegend.append(emptyMessage);
+        return;
+    }
+
+    let accumulated = 0;
+    const segments = categories.map(([, amount], index) => {
+        const start = accumulated;
+        accumulated += (amount / totalExpense) * 100;
+        return `${CATEGORY_COLORS[index % CATEGORY_COLORS.length]} ${start}% ${accumulated}%`;
+    });
+    elements.categoryDonut.style.background = `conic-gradient(${segments.join(', ')})`;
+
+    categories.slice(0, 5).forEach(([category, amount], index) => {
+        const item = document.createElement('div');
+        item.className = 'category-item';
+
+        const swatch = document.createElement('span');
+        swatch.className = 'swatch';
+        swatch.style.backgroundColor = CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+
+        const name = document.createElement('span');
+        name.className = 'category-name';
+        name.textContent = category;
+
+        const value = document.createElement('strong');
+        value.textContent = formatCurrency(amount);
+
+        item.append(swatch, name, value);
+        elements.categoryLegend.append(item);
+    });
+
+    if (categories.length > 5) {
+        const remaining = categories.slice(5).reduce((sum, [, amount]) => sum + amount, 0);
+        const item = document.createElement('div');
+        item.className = 'category-item';
+        const swatch = document.createElement('span');
+        swatch.className = 'swatch';
+        swatch.style.backgroundColor = CATEGORY_COLORS[5];
+        const name = document.createElement('span');
+        name.className = 'category-name';
+        name.textContent = `${categories.length - 5} kategori lain`;
+        const value = document.createElement('strong');
+        value.textContent = formatCurrency(remaining);
+        item.append(swatch, name, value);
+        elements.categoryLegend.append(item);
+    }
+}
+
+function createTransactionRow(transaction) {
+    const row = document.createElement('article');
+    row.className = 'transaction-row';
+
+    const main = document.createElement('div');
+    main.className = 'transaction-main';
+
+    const icon = document.createElement('span');
+    icon.className = 'transaction-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = getCategoryIcon(transaction.category, transaction.type);
+
+    const details = document.createElement('div');
+    details.style.minWidth = '0';
+    const description = document.createElement('div');
+    description.className = 'transaction-description';
+    description.textContent = String(transaction.desc || 'Transaksi tanpa keterangan');
+    const category = document.createElement('div');
+    category.className = 'transaction-category';
+    category.textContent = String(transaction.category || 'Umum');
+    details.append(description, category);
+    main.append(icon, details);
+
+    const date = document.createElement('time');
+    date.className = 'transaction-date';
+    date.dateTime = String(transaction.date || '');
+    date.textContent = formatTransactionDate(transaction.date);
+
+    const badge = document.createElement('span');
+    const isIncome = transaction.type === 'income';
+    badge.className = `type-badge${isIncome ? '' : ' expense'}`;
+    badge.textContent = isIncome ? 'Pemasukan' : 'Pengeluaran';
+
+    const amount = document.createElement('strong');
+    amount.className = `transaction-amount ${isIncome ? 'income' : 'expense'}`;
+    const numericAmount = Number(transaction.amount);
+    amount.textContent = `${isIncome ? '+' : '−'} ${formatCurrency(numericAmount)}`;
+
+    row.append(main, date, badge, amount);
+    return row;
+}
+
+function renderTransactions() {
+    const query = elements.search.value.trim().toLocaleLowerCase('id-ID');
+    const monthTransactions = selectedMonthTransactions();
+    const matchingTransactions = monthTransactions.filter((transaction) => {
+        const searchable = `${transaction.desc || ''} ${transaction.category || ''} ${transaction.type || ''}`.toLocaleLowerCase('id-ID');
+        return searchable.includes(query);
+    });
+    const visibleTransactions = showAllTransactions
+        ? matchingTransactions
+        : matchingTransactions.slice(0, VISIBLE_TRANSACTION_LIMIT);
+
+    elements.transactionList.replaceChildren(...visibleTransactions.map(createTransactionRow));
+    elements.emptyState.hidden = matchingTransactions.length > 0;
+    elements.transactionList.hidden = matchingTransactions.length === 0;
+    elements.listStatus.textContent = matchingTransactions.length > visibleTransactions.length
+        ? `Menampilkan ${visibleTransactions.length} dari ${matchingTransactions.length} transaksi`
+        : matchingTransactions.length
+            ? `${matchingTransactions.length} transaksi pada periode ini`
+            : query
+                ? 'Coba kata kunci lain atau pilih bulan yang berbeda.'
+                : '';
+
+    const showAllButton = document.getElementById('showAllTransactions');
+    showAllButton.hidden = matchingTransactions.length <= VISIBLE_TRANSACTION_LIMIT;
+    const arrow = document.createElement('span');
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.textContent = showAllTransactions ? '↑' : '→';
+    showAllButton.replaceChildren(
+        document.createTextNode(showAllTransactions ? 'Tampilkan lebih sedikit ' : 'Lihat semua '),
+        arrow
+    );
+}
+
+function renderDashboard() {
+    const monthTransactions = selectedMonthTransactions();
+    updateSummary(monthTransactions);
+    renderTransactions();
+}
+
+async function loadTransactions() {
+    elements.transactionList.hidden = false;
+    elements.emptyState.hidden = true;
+    const loadingState = document.createElement('div');
+    loadingState.className = 'loading-state';
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    loadingState.append(spinner, document.createTextNode('Memuat transaksi...'));
+    elements.transactionList.replaceChildren(loadingState);
+
+    try {
+        const response = await fetch(TRANSACTIONS_URL, {
+            headers: { Accept: 'application/json' }
+        });
+        if (!response.ok) throw new Error(`Server merespons ${response.status}`);
+
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('Format data transaksi tidak sesuai.');
+        transactions = data;
+        elements.emptyState.querySelector('strong').textContent = 'Belum ada transaksi';
+        elements.emptyState.querySelector('span:not(.empty-illustration)').textContent = 'Catat transaksi pertama untuk mulai melihat gambaran keuanganmu.';
+        elements.emptyState.querySelector('[data-open-form]').hidden = false;
+        renderDashboard();
+    } catch (error) {
+        console.error('Gagal memuat transaksi:', error);
+        elements.transactionList.replaceChildren();
+        elements.transactionList.hidden = true;
+        elements.emptyState.hidden = false;
+        elements.emptyState.querySelector('strong').textContent = 'Data belum bisa dimuat';
+        elements.emptyState.querySelector('span:not(.empty-illustration)').textContent = 'Periksa koneksi internetmu lalu coba muat ulang.';
+        elements.emptyState.querySelector('[data-open-form]').hidden = true;
+        setNotice('Gagal mengambil transaksi dari server. Coba lagi beberapa saat.', 'error');
+    }
+}
+
+function openTransactionDialog() {
+    elements.formError.hidden = true;
+    if (typeof elements.dialog.showModal === 'function') {
+        elements.dialog.showModal();
+    } else {
+        setNotice('Browser ini belum mendukung formulir transaksi. Coba gunakan browser versi terbaru.', 'error');
+    }
+}
+
+function closeTransactionDialog() {
+    elements.dialog.close();
+}
+
+async function submitTransaction(event) {
+    event.preventDefault();
+    elements.formError.hidden = true;
+
+    const formData = new FormData(elements.form);
+    const transaction = {
+        desc: String(formData.get('desc') || '').trim(),
+        amount: Number(formData.get('amount')),
+        type: String(formData.get('type')),
+        category: String(formData.get('category') || '').trim() || 'Umum'
+    };
+
+    if (!transaction.desc || !Number.isFinite(transaction.amount) || transaction.amount <= 0) {
+        elements.formError.textContent = 'Isi keterangan dan nominal yang valid terlebih dahulu.';
+        elements.formError.hidden = false;
+        return;
+    }
+
+    elements.saveButton.disabled = true;
+    elements.saveButton.textContent = 'Menyimpan...';
+
+    try {
+        const response = await fetch(TRANSACTIONS_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json'
+            },
+            body: JSON.stringify(transaction)
+        });
+
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            throw new Error(errorBody.error || `Server merespons ${response.status}`);
+        }
+
+        const savedTransaction = await response.json();
+        transactions.unshift(savedTransaction);
+        elements.form.reset();
+        document.querySelector('input[name="type"][value="expense"]').checked = true;
+        document.getElementById('transactionCategory').value = 'Umum';
+        showAllTransactions = false;
+        elements.search.value = '';
+        if (savedTransaction.date) {
+            elements.monthFilter.value = localMonthValue(new Date(savedTransaction.date));
+        }
+        renderDashboard();
+        closeTransactionDialog();
+        setNotice('Transaksi berhasil dicatat.');
+    } catch (error) {
+        console.error('Gagal menyimpan transaksi:', error);
+        elements.formError.textContent = error.message || 'Transaksi gagal disimpan. Silakan coba lagi.';
+        elements.formError.hidden = false;
+    } finally {
+        elements.saveButton.disabled = false;
+        elements.saveButton.textContent = 'Simpan transaksi';
+    }
+}
+
+function initializeTheme() {
+    const savedTheme = localStorage.getItem('saku-theme');
+    if (savedTheme === 'dark') document.documentElement.dataset.theme = 'dark';
+
+    document.getElementById('themeToggle').addEventListener('click', () => {
+        const isDark = document.documentElement.dataset.theme === 'dark';
+        if (isDark) {
+            delete document.documentElement.dataset.theme;
+            localStorage.setItem('saku-theme', 'light');
+        } else {
+            document.documentElement.dataset.theme = 'dark';
+            localStorage.setItem('saku-theme', 'dark');
+        }
+    });
+}
+
+function initializeNavigation() {
+    const navLinks = [...document.querySelectorAll('[data-nav]')];
+    const sections = [...document.querySelectorAll('#overview, #transactions, #insights')];
+
+    const observer = new IntersectionObserver((entries) => {
+        const visible = entries
+            .filter((entry) => entry.isIntersecting)
+            .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!visible) return;
+        navLinks.forEach((link) => {
+            link.classList.toggle('is-active', link.dataset.nav === visible.target.id);
+        });
+    }, { rootMargin: '-15% 0px -65% 0px', threshold: [0, 0.2, 0.5] });
+
+    sections.forEach((section) => observer.observe(section));
+}
+
+document.getElementById('todayLabel').textContent = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long'
+}).format(new Date()).toLocaleUpperCase('id-ID');
+elements.monthFilter.value = localMonthValue();
+elements.monthFilter.addEventListener('change', renderDashboard);
+elements.search.addEventListener('input', () => {
+    showAllTransactions = true;
+    renderTransactions();
+});
+document.getElementById('showAllTransactions').addEventListener('click', () => {
+    showAllTransactions = !showAllTransactions;
+    renderTransactions();
+});
+document.getElementById('openTransaction').addEventListener('click', openTransactionDialog);
+document.getElementById('refreshButton').addEventListener('click', loadTransactions);
+document.querySelectorAll('[data-open-form]').forEach((button) => {
+    button.addEventListener('click', openTransactionDialog);
+});
+document.getElementById('closeTransaction').addEventListener('click', closeTransactionDialog);
+document.getElementById('cancelTransaction').addEventListener('click', closeTransactionDialog);
+elements.dialog.addEventListener('click', (event) => {
+    if (event.target === elements.dialog) closeTransactionDialog();
+});
+elements.form.addEventListener('submit', submitTransaction);
+initializeTheme();
+initializeNavigation();
+loadTransactions();

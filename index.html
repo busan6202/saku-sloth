@@ -1,575 +1,186 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <!-- TAG SANGAT PENTING: Mencegah tampilan kecil-kecil di HP -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Saku Harian</title>
-    <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        :root {
-            --bg-color: #f8f9fa;
-            --card-bg: #ffffff;
-            --text-main: #111827;
-            --text-muted: #6b7280;
-            --primary-green: #10b981;
-            --dark-card: #0f172a;
-            --border-color: #f3f4f6;
-            --danger: #ef4444;
-        }
-
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background: var(--bg-color); 
-            margin: 0; 
-            padding: 20px 20px 90px 20px; /* Padding bawah untuk Bottom Nav */
-            color: var(--text-main); 
-            -webkit-font-smoothing: antialiased;
-        }
-
-        /* Container Pembungkus */
-        .app-container {
-            max-width: 600px; /* Lebar maksimal ala tampilan Mobile */
-            margin: 0 auto;
-        }
-
-        /* Header (Logo & Profil) */
-        .top-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 25px;
-        }
-
-        .brand {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .brand-icon {
-            background: var(--primary-green);
-            color: white;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 14px;
-            font-weight: 800;
-            font-size: 1.1rem;
-        }
-
-        .brand h2 {
-            margin: 0;
-            font-size: 1.2rem;
-            font-weight: 800;
-        }
-
-        .brand p {
-            margin: 2px 0 0 0;
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            font-weight: 600;
-        }
-
-        .btn-refresh {
-            background: white;
-            border: 1px solid #e5e7eb;
-            color: var(--text-main);
-            padding: 8px 14px;
-            border-radius: 12px;
-            font-size: 0.8rem;
-            font-weight: 700;
-            cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
-        }
-
-        /* Kartu Surplus (Dark Card) */
-        .surplus-card {
-            background: linear-gradient(145deg, #1e293b, #0f172a);
-            color: white;
-            border-radius: 24px;
-            padding: 25px;
-            box-shadow: 0 15px 30px rgba(15, 23, 42, 0.2);
-            margin-bottom: 25px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .surplus-badge {
-            background: rgba(255, 255, 255, 0.1);
-            color: #cbd5e1;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 0.7rem;
-            font-weight: 800;
-            letter-spacing: 1px;
-            display: inline-block;
-            margin-bottom: 15px;
-        }
-
-        .surplus-amount {
-            font-size: 2.2rem;
-            font-weight: 900;
-            margin-bottom: 5px;
-            letter-spacing: -0.5px;
-        }
-
-        .surplus-subtitle {
-            font-size: 0.8rem;
-            color: #94a3b8;
-            margin-bottom: 25px;
-        }
-
-        .io-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            background: rgba(0,0,0,0.2);
-            padding: 15px;
-            border-radius: 18px;
-        }
-
-        .io-item {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-        }
-
-        .io-label {
-            font-size: 0.75rem;
-            color: #94a3b8;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 5px;
-        }
-
-        .io-value {
-            font-size: 1.05rem;
-            font-weight: 800;
-        }
-
-        /* Menu Pintasan Cepat */
-        .action-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            margin-bottom: 25px;
-        }
-
-        .action-btn {
-            background: var(--card-bg);
-            padding: 15px 10px;
-            border-radius: 18px;
-            text-align: center;
-            border: 1px solid #f3f4f6;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.02);
-            font-size: 0.8rem;
-            font-weight: 700;
-            color: var(--text-main);
-            text-decoration: none;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .action-btn.primary {
-            background: var(--primary-green);
-            color: white;
-            border: none;
-        }
-
-        .action-btn .icon { font-size: 1.4rem; }
-
-        /* Banner Telegram */
-        .tg-banner {
-            background: #e6f4ea;
-            border: 1px solid #a7f3d0;
-            color: #065f46;
-            padding: 16px;
-            border-radius: 18px;
-            font-size: 0.85rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 25px;
-        }
-
-        /* Area Konten Tab */
-        .tab-content { display: none; animation: fadeIn 0.3s; }
-        .tab-content.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        .section-header h3 { margin: 0; font-size: 1.1rem; font-weight: 800; }
-        .section-header span { font-size: 0.85rem; color: var(--primary-green); font-weight: 700; }
-
-        /* List Transaksi ala Mobile */
-        .trx-card {
-            background: var(--card-bg);
-            border-radius: 18px;
-            padding: 10px 15px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.02);
-            margin-bottom: 10px;
-            border: 1px solid var(--border-color);
-        }
-
-        .trx-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--border-color);
-        }
-        .trx-item:last-child { border-bottom: none; }
-
-        .trx-left { display: flex; align-items: center; gap: 12px; }
-        .trx-icon {
-            width: 42px; height: 42px;
-            background: #f3f4f6;
-            border-radius: 14px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.2rem;
-        }
-        .trx-info h4 { margin: 0 0 4px 0; font-size: 0.9rem; font-weight: 700; }
-        .trx-info p { margin: 0; font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
-        
-        .trx-right {
-            text-align: right;
-            font-weight: 800;
-            font-size: 0.95rem;
-        }
-        .text-in { color: var(--primary-green); }
-        .text-out { color: var(--danger); }
-
-        /* Pesan Error Khusus */
-        .error-box {
-            background: #fee2e2;
-            color: #b91c1c;
-            padding: 15px;
-            border-radius: 14px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            text-align: center;
-            margin-top: 20px;
-        }
-
-        /* --- BOTTOM NAVIGATION (Gaya Aplikasi Native) --- */
-        .bottom-nav {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-top: 1px solid #e5e7eb;
-            display: flex;
-            justify-content: space-around;
-            padding: 12px 0;
-            padding-bottom: env(safe-area-inset-bottom, 12px); /* Support untuk layar iPhone notch */
-            z-index: 1000;
-        }
-
-        .nav-item {
-            background: none; border: none;
-            display: flex; flex-direction: column; align-items: center; gap: 5px;
-            color: var(--text-muted);
-            font-size: 0.7rem; font-weight: 700;
-            cursor: pointer;
-        }
-
-        .nav-item .icon { font-size: 1.4rem; transition: transform 0.2s; }
-        .nav-item.active { color: var(--primary-green); }
-        .nav-item.active .icon { transform: translateY(-3px); }
-
-        /* Khusus Desktop: Sembunyikan Nav Bawah & Atur Ulang Lebar */
-        @media(min-width: 768px) {
-            .bottom-nav { display: none; }
-            body { padding-bottom: 30px; }
-            .app-container { max-width: 800px; }
-        }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f6f2">
+    <meta name="description" content="Dashboard keuangan pribadi Saku Harian. Pantau pemasukan, pengeluaran, dan transaksi dalam satu tempat.">
+    <title>Saku Harian — Ruang finansialmu</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
 </head>
 <body>
+    <div class="app-shell">
+        <aside class="sidebar" aria-label="Navigasi utama">
+            <a class="brand" href="#overview" aria-label="Saku Harian, ke beranda">
+                <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+                <span class="brand-copy">saku<span>harian</span></span>
+            </a>
 
-    <div class="app-container">
-        
-        <!-- HEADER -->
-        <div class="top-header">
-            <div class="brand">
-                <div class="brand-icon">SH</div>
+            <div class="sidebar-label">MENU</div>
+            <nav class="side-nav">
+                <a class="nav-link is-active" href="#overview" data-nav="overview"><span class="nav-symbol" aria-hidden="true">⌂</span>Ringkasan</a>
+                <a class="nav-link" href="#transactions" data-nav="transactions"><span class="nav-symbol" aria-hidden="true">↕</span>Transaksi</a>
+                <a class="nav-link" href="#insights" data-nav="insights"><span class="nav-symbol" aria-hidden="true">◷</span>Analisis</a>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <div class="bot-card">
+                    <div class="bot-icon" aria-hidden="true">✳</div>
+                    <p class="bot-title">Catat lebih cepat</p>
+                    <p class="bot-copy">Kirim nota atau voice note ke bot Telegram kamu.</p>
+                    <a href="https://t.me/" target="_blank" rel="noreferrer" class="bot-link">Buka Telegram <span aria-hidden="true">↗</span></a>
+                </div>
+                <div class="profile">
+                    <div class="profile-avatar" aria-hidden="true">S</div>
+                    <div><strong>Ruang pribadimu</strong><span>Keuangan harian</span></div>
+                    <span class="profile-more" aria-hidden="true">···</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content" id="overview">
+            <header class="topbar">
+                <div class="breadcrumb"><span>Ruang finansial</span><span aria-hidden="true">/</span><strong>Ringkasan</strong></div>
+                <div class="topbar-actions">
+                    <label class="month-control">
+                        <span class="sr-only">Pilih bulan laporan</span>
+                        <span class="calendar-icon" aria-hidden="true">▦</span>
+                        <input id="monthFilter" type="month" aria-label="Pilih bulan laporan">
+                    </label>
+                    <a class="icon-button export-button" href="https://saku-sloth.vercel.app/api/export-excel" aria-label="Unduh laporan CSV" title="Unduh laporan CSV">
+                        <span aria-hidden="true">↓</span><span class="export-label">Unduh CSV</span>
+                    </a>
+                    <button class="icon-button" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data"><span aria-hidden="true">↻</span></button>
+                    <button class="icon-button theme-button" id="themeToggle" type="button" aria-label="Ganti tema" title="Ganti tema"><span aria-hidden="true">◐</span></button>
+                </div>
+            </header>
+
+            <section class="welcome-row" aria-labelledby="page-title">
                 <div>
-                    <h2>Saku Harian</h2>
-                    <p>Asisten Keuangan Pintar</p>
+                    <p class="eyebrow" id="todayLabel">HARI INI</p>
+                    <h1 id="page-title">Uangmu, lebih <span>terarah.</span></h1>
+                    <p class="welcome-copy">Satu pandangan untuk keputusan finansial yang lebih tenang.</p>
                 </div>
-            </div>
-            <button class="btn-refresh" onclick="loadDashboard()">🔄 Refresh</button>
-        </div>
+                <button class="button button-primary" id="openTransaction" type="button"><span aria-hidden="true">＋</span> Catat transaksi</button>
+            </section>
 
-        <!-- ================= TAB 1: BERANDA ================= -->
-        <div id="tab-beranda" class="tab-content active">
-            <!-- Kartu Surplus Dark Mewah -->
-            <div class="surplus-card">
-                <div class="surplus-badge">SURPLUS BULAN INI</div>
-                <div class="surplus-amount" id="netBalance">Rp 0</div>
-                <div class="surplus-subtitle" id="trxCount">0 Transaksi tercatat</div>
+            <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
 
-                <div class="io-grid">
-                    <div class="io-item">
-                        <span class="io-label">🟢 Pemasukan</span>
-                        <span class="io-value text-in" id="sumIncome">Rp 0</span>
+            <section class="summary-grid" aria-label="Ringkasan keuangan bulan terpilih">
+                <article class="summary-card balance-card">
+                    <div class="summary-head"><span class="summary-label">Sisa bersih</span><span class="card-orbit" aria-hidden="true">↗</span></div>
+                    <p class="summary-value" id="balanceValue">Rp 0</p>
+                    <div class="summary-foot"><span class="balance-dot"></span><span id="balanceCaption">Pemasukan dikurangi pengeluaran</span></div>
+                    <div class="balance-decoration" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                </article>
+
+                <article class="summary-card">
+                    <div class="summary-head"><span class="summary-label">Pemasukan</span><span class="metric-icon income-icon" aria-hidden="true">↙</span></div>
+                    <p class="summary-value" id="incomeValue">Rp 0</p>
+                    <div class="summary-foot"><span class="metric-indicator income-indicator"></span><span id="incomeCount">0 transaksi</span></div>
+                </article>
+
+                <article class="summary-card">
+                    <div class="summary-head"><span class="summary-label">Pengeluaran</span><span class="metric-icon expense-icon" aria-hidden="true">↗</span></div>
+                    <p class="summary-value" id="expenseValue">Rp 0</p>
+                    <div class="summary-foot"><span class="metric-indicator expense-indicator"></span><span id="expenseCount">0 transaksi</span></div>
+                </article>
+            </section>
+
+            <section class="content-grid" id="insights">
+                <article class="panel flow-panel">
+                    <div class="panel-heading">
+                        <div><p class="eyebrow">ARUS KAS</p><h2>Uang masuk & keluar</h2></div>
+                        <span class="period-chip" id="flowPeriod">Bulan ini</span>
                     </div>
-                    <div class="io-item">
-                        <span class="io-label">🔴 Pengeluaran</span>
-                        <span class="io-value text-out" id="sumExpense">Rp 0</span>
+                    <div class="flow-total" id="flowTotal">Rp 0 <span>total pergerakan</span></div>
+                    <div class="flow-track" aria-label="Perbandingan pemasukan dan pengeluaran">
+                        <span class="flow-income" id="incomeBar"></span><span class="flow-expense" id="expenseBar"></span>
                     </div>
-                </div>
-            </div>
+                    <div class="flow-legend">
+                        <div><span class="legend-dot income-dot"></span><span>Pemasukan</span><strong id="incomePercent">0%</strong></div>
+                        <div><span class="legend-dot expense-dot"></span><span>Pengeluaran</span><strong id="expensePercent">0%</strong></div>
+                    </div>
+                    <div class="health-note" id="healthNote"><span aria-hidden="true">✳</span><span>Mulai catat transaksi untuk melihat kondisi arus kasmu.</span></div>
+                </article>
 
-            <!-- Pintasan Cepat -->
-            <div class="action-grid">
-                <div class="action-btn primary" onclick="alert('Buka Telegram, kirim Voice Note / Foto Nota ke Bot Saku Harian Anda!')">
-                    <span class="icon">🎙️</span>
-                    <span>Catat Kilat</span>
-                </div>
-                <div class="action-btn" onclick="switchTab('laporan')">
-                    <span class="icon">📈</span>
-                    <span>Grafik</span>
-                </div>
-                <a href="https://saku-sloth.vercel.app/api/export-excel" class="action-btn">
-                    <span class="icon">📥</span>
-                    <span>Excel</span>
-                </a>
-            </div>
-
-            <!-- Banner Info -->
-            <div class="tg-banner">
-                <span>💬 Catat lewat Telegram — Coba Voice Note!</span>
-                <span>›</span>
-            </div>
-
-            <!-- List Transaksi Singkat -->
-            <div class="section-header">
-                <h3>Transaksi Terbaru</h3>
-                <span onclick="switchTab('transaksi')" style="cursor:pointer;">Semua ›</span>
-            </div>
-            <div class="trx-card" id="recentTrxList">
-                <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.9rem;">
-                    Sedang memuat data...
-                </div>
-            </div>
-        </div>
-
-        <!-- ================= TAB 2: TRANSAKSI ================= -->
-        <div id="tab-transaksi" class="tab-content">
-            <div class="section-header">
-                <h3>Semua Transaksi</h3>
-                <span id="allTrxCount">0 Entri</span>
-            </div>
-            <div class="trx-card" id="allTrxList">
-                <!-- Data akan dimuat di sini -->
-            </div>
-        </div>
-
-        <!-- ================= TAB 3: LAPORAN (GRAFIK) ================= -->
-        <div id="tab-laporan" class="tab-content">
-            <div class="section-header">
-                <h3>Grafik Analitik</h3>
-            </div>
-            <div style="background: white; padding: 20px; border-radius: 20px; border: 1px solid #eee; margin-bottom: 20px;">
-                <h4 style="margin:0 0 15px 0; font-size: 0.9rem; text-align: center;">Perbandingan Masuk vs Keluar</h4>
-                <canvas id="barChart"></canvas>
-            </div>
-            <div style="background: white; padding: 20px; border-radius: 20px; border: 1px solid #eee;">
-                <h4 style="margin:0 0 15px 0; font-size: 0.9rem; text-align: center;">Kategori Pengeluaran</h4>
-                <canvas id="pieChart"></canvas>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- BOTTOM NAVIGATION (Native Mobile App Style) -->
-    <div class="bottom-nav">
-        <button class="nav-item active" onclick="switchTab('beranda')" id="nav-beranda">
-            <span class="icon">🏠</span>
-            <span>Beranda</span>
-        </button>
-        <button class="nav-item" onclick="switchTab('transaksi')" id="nav-transaksi">
-            <span class="icon">💳</span>
-            <span>Transaksi</span>
-        </button>
-        <button class="nav-item" onclick="switchTab('laporan')" id="nav-laporan">
-            <span class="icon">📊</span>
-            <span>Laporan</span>
-        </button>
-    </div>
-
-    <script>
-        // =========================================================
-        // PENTING: GANTI URL DI BAWAH JIKA VERCEL ANDA BERBEDA
-        // =========================================================
-        const API_BASE_URL = 'https://saku-sloth.vercel.app';
-
-        let barChartInstance = null;
-        let pieChartInstance = null;
-
-        // Fungsi Ganti Tab
-        function switchTab(tabName) {
-            // Sembunyikan semua tab
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            // Hapus warna aktif di nav
-            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            
-            // Tampilkan tab yang dipilih
-            document.getElementById('tab-' + tabName).classList.add('active');
-            document.getElementById('nav-' + tabName).classList.add('active');
-        }
-
-        // Fungsi Menentukan Ikon berdasarkan Kategori
-        function getIconForCategory(cat) {
-            const c = cat.toLowerCase();
-            if (c.includes('makan') || c.includes('minum')) return '🍜';
-            if (c.includes('transport') || c.includes('bensin')) return '🚗';
-            if (c.includes('belanja') || c.includes('jajan')) return '🛍️';
-            if (c.includes('sehat') || c.includes('medis')) return '💊';
-            if (c.includes('tagihan') || c.includes('listrik')) return '⚡';
-            if (c.includes('hibur') || c.includes('main')) return '🎮';
-            if (c.includes('gaji') || c.includes('masuk')) return '💰';
-            return '📁';
-        }
-
-        // Fungsi Utama Tarik Data Vercel
-        async function loadDashboard() {
-            const recentContainer = document.getElementById('recentTrxList');
-            const allContainer = document.getElementById('allTrxList');
-
-            try {
-                recentContainer.innerHTML = '<div style="padding:20px; text-align:center;">⏳ Menghubungkan ke server Vercel...</div>';
-                
-                const response = await fetch(`${API_BASE_URL}/api/transactions`);
-                
-                if (!response.ok) {
-                    throw new Error(`Server Vercel merespon dengan kode: ${response.status}`);
-                }
-
-                const data = await response.json();
-                
-                let totalIncome = 0;
-                let totalExpense = 0;
-                let categoryMap = {};
-
-                if (data.length === 0) {
-                    recentContainer.innerHTML = '<div style="padding:20px; text-align:center; color:#6b7280; font-size:0.9rem;">Belum ada transaksi bulan ini.</div>';
-                    allContainer.innerHTML = recentContainer.innerHTML;
-                } else {
-                    recentContainer.innerHTML = '';
-                    allContainer.innerHTML = '';
-                }
-
-                document.getElementById('trxCount').innerText = `${data.length} Transaksi Tercatat`;
-                document.getElementById('allTrxCount').innerText = `${data.length} Entri`;
-
-                data.forEach((trx, index) => {
-                    const amt = Number(trx.amount);
-                    if (trx.type === 'income') {
-                        totalIncome += amt;
-                    } else {
-                        totalExpense += amt;
-                        categoryMap[trx.category] = (categoryMap[trx.category] || 0) + amt;
-                    }
-
-                    // Pembuatan Baris Transaksi
-                    const formattedDate = new Date(trx.date).toLocaleDateString('id-ID', { day:'numeric', month:'short' });
-                    const isIncome = trx.type === 'income';
-                    const sign = isIncome ? '+' : '-';
-                    const amountClass = isIncome ? 'text-in' : 'text-out';
-                    const icon = getIconForCategory(trx.category);
-
-                    const trxHTML = `
-                        <div class="trx-item">
-                            <div class="trx-left">
-                                <div class="trx-icon">${icon}</div>
-                                <div class="trx-info">
-                                    <h4>${trx.desc}</h4>
-                                    <p>${formattedDate} • ${trx.category}</p>
-                                </div>
-                            </div>
-                            <div class="trx-right ${amountClass}">
-                                ${sign}Rp ${amt.toLocaleString('id-ID')}
-                            </div>
+                <article class="panel category-panel">
+                    <div class="panel-heading">
+                        <div><p class="eyebrow">KE MANA UANGMU?</p><h2>Pengeluaran per kategori</h2></div>
+                        <span class="panel-menu" aria-hidden="true">···</span>
+                    </div>
+                    <div class="category-content">
+                        <div class="donut-wrap">
+                            <div class="donut" id="categoryDonut" role="img" aria-label="Grafik pengeluaran per kategori"></div>
+                            <div class="donut-center"><span>Total keluar</span><strong id="categoryTotal">Rp 0</strong></div>
                         </div>
-                    `;
-
-                    // Masukkan ke Semua Transaksi
-                    allContainer.innerHTML += trxHTML;
-                    // Masukkan ke Transaksi Terbaru (Maksimal 5)
-                    if (index < 5) recentContainer.innerHTML += trxHTML;
-                });
-
-                // Update Saldo
-                const netBalance = totalIncome - totalExpense;
-                document.getElementById('netBalance').innerText = `Rp ${netBalance.toLocaleString('id-ID')}`;
-                document.getElementById('sumIncome').innerText = `Rp ${totalIncome.toLocaleString('id-ID')}`;
-                document.getElementById('sumExpense').innerText = `Rp ${totalExpense.toLocaleString('id-ID')}`;
-
-                // Update Grafik
-                if (barChartInstance) barChartInstance.destroy();
-                if (pieChartInstance) pieChartInstance.destroy();
-
-                barChartInstance = new Chart(document.getElementById('barChart'), {
-                    type: 'bar',
-                    data: {
-                        labels: ['Pemasukan', 'Pengeluaran'],
-                        datasets: [{
-                            data: [totalIncome, totalExpense],
-                            backgroundColor: ['#10b981', '#ef4444'],
-                            borderRadius: 8
-                        }]
-                    },
-                    options: { responsive: true, plugins: { legend: { display: false } } }
-                });
-
-                pieChartInstance = new Chart(document.getElementById('pieChart'), {
-                    type: 'doughnut',
-                    data: {
-                        labels: Object.keys(categoryMap),
-                        datasets: [{
-                            data: Object.values(categoryMap),
-                            backgroundColor: ['#3b82f6', '#f59e0b', '#8b5cf6', '#10b981', '#ec4899', '#64748b'],
-                            borderWidth: 2
-                        }]
-                    },
-                    options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
-                });
-
-            } catch (err) {
-                console.error("Gagal memuat data:", err);
-                const errorMsg = `
-                    <div class="error-box">
-                        <strong>❌ Gagal Terhubung ke Vercel</strong><br>
-                        Pesan Error: ${err.message}<br><br>
-                        <em>Tips: Pastikan variabel API_BASE_URL di file index.html sudah sesuai dengan URL Vercel Anda, dan periksa logs di dashboard Vercel.</em>
+                        <div class="category-legend" id="categoryLegend"><p class="empty-copy">Belum ada pengeluaran di bulan ini.</p></div>
                     </div>
-                `;
-                recentContainer.innerHTML = errorMsg;
-                allContainer.innerHTML = errorMsg;
-            }
-        }
+                </article>
+            </section>
 
-        // Panggil fungsi saat halaman pertama kali dibuka
-        loadDashboard();
-    </script>
+            <section class="panel transactions-panel" id="transactions">
+                <div class="panel-heading transaction-heading">
+                    <div><p class="eyebrow">AKTIVITAS</p><h2>Transaksi terbaru</h2></div>
+                    <div class="transaction-tools">
+                        <label class="search-box"><span aria-hidden="true">⌕</span><span class="sr-only">Cari transaksi</span><input id="transactionSearch" type="search" placeholder="Cari transaksi..." autocomplete="off"></label>
+                        <button class="text-button" id="showAllTransactions" type="button">Lihat semua <span aria-hidden="true">→</span></button>
+                    </div>
+                </div>
+                <div class="transaction-list" id="transactionList" aria-live="polite">
+                    <div class="loading-state"><span class="spinner" aria-hidden="true"></span>Memuat transaksi...</div>
+                </div>
+                <div class="empty-state" id="emptyState" hidden>
+                    <span class="empty-illustration" aria-hidden="true">↗</span>
+                    <strong>Belum ada transaksi</strong>
+                    <span>Catat transaksi pertama untuk mulai melihat gambaran keuanganmu.</span>
+                    <button class="text-button" type="button" data-open-form>Catat transaksi <span aria-hidden="true">→</span></button>
+                </div>
+                <p class="list-status" id="listStatus" aria-live="polite"></p>
+            </section>
+
+            <footer class="page-footer"><span>Saku Harian</span><span>Keuangan yang jelas, langkah yang lebih yakin.</span></footer>
+        </main>
+    </div>
+
+    <nav class="mobile-nav" aria-label="Navigasi bawah">
+        <a href="#overview" class="mobile-nav-link is-active" data-nav="overview"><span aria-hidden="true">⌂</span><span>Ringkasan</span></a>
+        <a href="#transactions" class="mobile-nav-link" data-nav="transactions"><span aria-hidden="true">↕</span><span>Transaksi</span></a>
+        <a href="#insights" class="mobile-nav-link" data-nav="insights"><span aria-hidden="true">◷</span><span>Analisis</span></a>
+        <button class="mobile-add" type="button" data-open-form aria-label="Catat transaksi">＋</button>
+    </nav>
+
+    <dialog class="transaction-dialog" id="transactionDialog" aria-labelledby="dialogTitle">
+        <form id="transactionForm">
+            <div class="dialog-heading">
+                <div><p class="eyebrow">CATAT MANUAL</p><h2 id="dialogTitle">Transaksi baru</h2></div>
+                <button class="dialog-close" id="closeTransaction" type="button" aria-label="Tutup">×</button>
+            </div>
+            <div class="form-label"><span>Jenis transaksi</span>
+                <span class="type-switch">
+                    <label><input type="radio" name="type" value="expense" checked><span>Pengeluaran</span></label>
+                    <label><input type="radio" name="type" value="income"><span>Pemasukan</span></label>
+                </span>
+            </div>
+            <label class="form-label" for="transactionDescription">Keterangan
+                <input id="transactionDescription" name="desc" type="text" maxlength="160" placeholder="Contoh: Makan siang" required>
+            </label>
+            <label class="form-label" for="transactionAmount">Nominal
+                <span class="amount-input"><span>Rp</span><input id="transactionAmount" name="amount" type="number" min="1" step="1" inputmode="numeric" placeholder="0" required></span>
+            </label>
+            <label class="form-label" for="transactionCategory">Kategori
+                <input id="transactionCategory" name="category" type="text" maxlength="100" placeholder="Contoh: Makan & minum" value="Umum">
+            </label>
+            <p class="form-error" id="formError" role="alert" hidden></p>
+            <div class="dialog-actions">
+                <button class="button button-secondary" id="cancelTransaction" type="button">Batal</button>
+                <button class="button button-primary" id="saveTransaction" type="submit">Simpan transaksi</button>
+            </div>
+        </form>
+    </dialog>
 </body>
 </html>
