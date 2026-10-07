@@ -32,7 +32,7 @@ Konfigurasi Web Firebase untuk project `saku-sloth` dan email pemilik awal `busa
 3. Buka **Neon SQL Editor**, pilih database `neondb`, lalu jalankan seluruh isi [`neon-data-api-setup.sql`](./neon-data-api-setup.sql). Buat backup terlebih dahulu. Skrip menyiapkan tabel, mengganti policy yang sudah ada pada tabel aplikasi terkait dengan RLS per pengguna, dan membuat RPC Telegram; migrasi data lama yang masih tanpa `user_id` dilakukan saat pemilik masuk pertama kali.
 4. Tambahkan `NEON_DATA_API_URL` di environment Vercel dengan URL REST base, tanpa menambahkan path resource. Untuk endpoint saat ini:
    `https://ep-winter-poetry-arl51lwx.apirest.c-4.us-west-2.aws.neon.tech/neondb/rest/v1`
-5. Atur `DATABASE_URL` di Vercel ke connection string PostgreSQL Neon (simpan hanya sebagai server-side secret). Bot Telegram memanggil fungsi database melalui Neon serverless driver dengan HTTP, bukan koneksi TCP; string koneksi ini diperlukan untuk autentikasi server-to-database. Gunakan connection string role yang menjalankan skrip SQL atau beri role tersebut `USAGE` pada schema `public` dan `EXECUTE` pada fungsi-fungsi Telegram. `DATABASE_URI` juga didukung sebagai nama lama. Jangan pernah menaruh connection string ini di frontend.
+5. Atur `DATABASE_URL` di Vercel ke connection string PostgreSQL Neon (simpan hanya sebagai server-side secret), dari project, branch, dan database yang sama. Server memakai URL ini untuk fungsi Telegram dan bootstrap data pemilik melalui HTTP. Gunakan role database yang memiliki hak menjalankan fungsi yang dibuat skrip (umumnya owner yang digunakan di SQL Editor). `DATABASE_URI` juga didukung sebagai nama lama. Jangan pernah menaruh connection string ini di frontend.
 
 Skrip SQL menggunakan `busan6202@gmail.com` sebagai email pemilik awal. Jika `FIREBASE_BOOTSTRAP_EMAIL` diubah, sesuaikan juga nilai di database, setelah menjalankan skrip:
 
@@ -42,7 +42,7 @@ SET value = lower('email-pemilik-anda@example.com')
 WHERE key = 'bootstrap_owner_email';
 ```
 
-Jangan memberi akses Data API `anonymous` ke tabel atau RPC Telegram. Skrip hanya memberi akses tabel kepada role `authenticated` dengan RLS per UID. Telegram memakai `DATABASE_URL` di sisi server untuk memanggil fungsi `SECURITY DEFINER`; fungsi tersebut memeriksa secret webhook dan tidak diekspos ke role Data API. Bila versi skrip sebelumnya sudah dijalankan, jalankan ulang blok `REVOKE ALL ON FUNCTION public.telegram_...` di bagian akhir skrip agar RPC tidak dapat dipanggil melalui role Data API `anonymous`. Pastikan Neon berhasil memuat ulang schema setelah skrip selesai; skrip mengirim `NOTIFY pgrst, 'reload schema'`.
+Jangan memberi akses Data API `anonymous` ke tabel atau RPC Telegram/bootstrap. Skrip hanya memberi akses tabel kepada role `authenticated` dengan RLS per UID. Telegram dan bootstrap pemilik memakai `DATABASE_URL` di server untuk memanggil fungsi `SECURITY DEFINER`; fungsi tersebut tidak diekspos ke role Data API. Jalankan ulang seluruh skrip terbaru setelah update. Pastikan Neon berhasil memuat ulang schema setelah skrip selesai; skrip mengirim `NOTIFY pgrst, 'reload schema'`.
 
 Firebase Web API key memang dikirim ke browser dan bukan kata sandi. Jangan pernah menaruh token bot Telegram, `GEMINI_API_KEY`, atau kredensial database di frontend. Batasi API key pada layanan yang diperlukan melalui pengaturan Firebase/Google Cloud dan jangan gunakan key ini sebagai pengganti aturan keamanan. `GOOGLE_CLIENT_ID` tidak lagi digunakan oleh aplikasi untuk login.
 

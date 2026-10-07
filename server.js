@@ -120,6 +120,21 @@ async function telegramDatabaseFunction(name, args) {
     return rows[0].result;
 }
 
+async function initializeOwnerDatabase(userId, email) {
+    if (!databaseSql) {
+        throw new Error('DATABASE_URL belum dikonfigurasi untuk menyiapkan database Neon.');
+    }
+
+    await databaseSql`
+        SELECT public.claim_legacy_saku_data(${userId}, ${email})
+    `;
+    if (TELEGRAM_WEBHOOK_SECRET) {
+        await databaseSql`
+            SELECT public.set_telegram_webhook_secret(${email}, ${TELEGRAM_WEBHOOK_SECRET})
+        `;
+    }
+}
+
 async function userDataRows(req, resource, query) {
     const pageSize = 500;
     const rows = [];
@@ -422,16 +437,10 @@ async function authenticateFirebaseUser(req, res, next) {
 app.post('/api/auth/session', authenticateFirebaseUser, async (req, res) => {
     if (req.user.email === FIREBASE_BOOTSTRAP_EMAIL) {
         try {
-            await userDataRequest(req, 'rpc/claim_legacy_saku_data', { method: 'POST', body: {} });
-            if (TELEGRAM_WEBHOOK_SECRET) {
-                await userDataRequest(req, 'rpc/set_telegram_webhook_secret', {
-                    method: 'POST',
-                    body: { p_secret: TELEGRAM_WEBHOOK_SECRET }
-                });
-            }
+            await initializeOwnerDatabase(req.user.id, req.user.email);
         } catch (err) {
-            console.error('Gagal menyiapkan data pemilik di Neon Data API:', err);
-            return res.status(503).json({ error: 'Data akun belum siap di Neon. Pastikan skrip SQL Data API telah dijalankan.' });
+            console.error('Gagal menyiapkan data pemilik di Neon:', err);
+            return res.status(503).json({ error: 'Database Neon belum siap. Pastikan DATABASE_URL, hak akses fungsi pemilik, dan skrip SQL migrasi sudah sesuai.' });
         }
     }
     res.json({ user: req.user });

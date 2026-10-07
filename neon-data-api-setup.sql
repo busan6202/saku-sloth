@@ -135,15 +135,19 @@ CREATE POLICY telegram_link_codes_owner_policy ON public.telegram_link_codes
     USING (user_id = auth.user_id())
     WITH CHECK (user_id = auth.user_id());
 
-CREATE OR REPLACE FUNCTION public.claim_legacy_saku_data()
+DROP FUNCTION IF EXISTS public.claim_legacy_saku_data();
+CREATE OR REPLACE FUNCTION public.claim_legacy_saku_data(
+    p_user_id TEXT,
+    p_email TEXT
+)
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
-    current_uid TEXT := auth.user_id();
-    current_email TEXT := lower(COALESCE(auth.jwt() ->> 'email', ''));
+    current_uid TEXT := p_user_id;
+    current_email TEXT := lower(COALESCE(p_email, ''));
     bootstrap_email TEXT;
     previous_owner TEXT;
 BEGIN
@@ -152,9 +156,6 @@ BEGIN
     FROM public.app_settings WHERE key = 'bootstrap_owner_email';
     IF current_uid IS NULL OR current_email IS DISTINCT FROM bootstrap_email THEN
         RAISE EXCEPTION 'Only the configured bootstrap account can claim legacy data';
-    END IF;
-    IF COALESCE(auth.jwt() ->> 'email_verified', 'false') <> 'true' THEN
-        RAISE EXCEPTION 'The bootstrap email must be verified';
     END IF;
 
     SELECT value INTO previous_owner
@@ -191,7 +192,11 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.set_telegram_webhook_secret(p_secret TEXT)
+DROP FUNCTION IF EXISTS public.set_telegram_webhook_secret(TEXT);
+CREATE OR REPLACE FUNCTION public.set_telegram_webhook_secret(
+    p_email TEXT,
+    p_secret TEXT
+)
 RETURNS VOID
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -202,9 +207,7 @@ DECLARE
 BEGIN
     SELECT lower(value) INTO bootstrap_email
     FROM public.app_settings WHERE key = 'bootstrap_owner_email';
-    IF auth.user_id() IS NULL
-       OR lower(COALESCE(auth.jwt() ->> 'email', '')) IS DISTINCT FROM bootstrap_email
-       OR COALESCE(auth.jwt() ->> 'email_verified', 'false') <> 'true'
+    IF lower(COALESCE(p_email, '')) IS DISTINCT FROM bootstrap_email
        OR p_secret IS NULL
        OR p_secret !~ '^[A-Za-z0-9_-]{32,256}$' THEN
         RAISE EXCEPTION 'Not authorized to configure Telegram';
@@ -468,10 +471,8 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.claim_legacy_saku_data() FROM PUBLIC, anonymous;
-REVOKE ALL ON FUNCTION public.set_telegram_webhook_secret(TEXT) FROM PUBLIC, anonymous;
-GRANT EXECUTE ON FUNCTION public.claim_legacy_saku_data() TO authenticated;
-GRANT EXECUTE ON FUNCTION public.set_telegram_webhook_secret(TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION public.claim_legacy_saku_data(TEXT, TEXT) FROM PUBLIC, anonymous, authenticated;
+REVOKE ALL ON FUNCTION public.set_telegram_webhook_secret(TEXT, TEXT) FROM PUBLIC, anonymous, authenticated;
 
 REVOKE ALL ON FUNCTION public.telegram_link_account(TEXT, TEXT, TEXT) FROM PUBLIC, anonymous, authenticated;
 REVOKE ALL ON FUNCTION public.telegram_get_user(TEXT, TEXT) FROM PUBLIC, anonymous, authenticated;
