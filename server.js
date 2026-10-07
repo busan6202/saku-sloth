@@ -18,8 +18,8 @@ const pool = new Pool({
     max: 5
 });
 
-// Inisialisasi Tabel Transaksi
-pool.query(`
+// Inisialisasi tabel transaksi dan penanda update Telegram yang sudah diproses.
+const databaseReady = pool.query(`
     CREATE TABLE IF NOT EXISTS transactions (
         id SERIAL PRIMARY KEY,
         "desc" TEXT NOT NULL,
@@ -28,7 +28,12 @@ pool.query(`
         category VARCHAR(100) DEFAULT 'Umum',
         date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
-`).then(() => console.log("Berhasil terhubung ke Neon PostgreSQL! 🐘"))
+`).then(() => pool.query(`
+    CREATE TABLE IF NOT EXISTS telegram_processed_updates (
+        update_id BIGINT PRIMARY KEY,
+        processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+`)).then(() => console.log("Berhasil terhubung ke Neon PostgreSQL! 🐘"))
   .catch(err => console.error("Gagal inisialisasi database Neon:", err));
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8584715332:AAEF5F54-ipvf8vQGH-Eh7bqrYZYCIuLHjQ';
@@ -115,11 +120,31 @@ async function callGeminiAudioAPI(prompt, base64Audio, retries = 3, delay = 2000
 }
 
 // Fungsi Simpan Transaksi & Analisis Saku Harian AI
-async function saveAndNotify(trxData, chatId) {
-    const query = `INSERT INTO transactions ("desc", amount, type, category) VALUES ($1, $2, $3, $4) RETURNING *`;
-    const values = [trxData.desc, trxData.amount, trxData.type, trxData.category || 'Umum'];
-    
+async function saveAndNotify(trxData, chatId, updateId) {
+    if (!Number.isSafeInteger(updateId) || updateId < 0) {
+        throw new Error('ID update Telegram tidak valid.');
+    }
+
+    await databaseReady;
+    const query = `
+        WITH claimed_update AS (
+            INSERT INTO telegram_processed_updates (update_id)
+            VALUES ($1)
+            ON CONFLICT (update_id) DO NOTHING
+            RETURNING update_id
+        )
+        INSERT INTO transactions ("desc", amount, type, category)
+        SELECT $2, $3, $4, $5
+        FROM claimed_update
+        RETURNING *
+    `;
+    const values = [updateId, trxData.desc, trxData.amount, trxData.type, trxData.category || 'Umum'];
     const result = await pool.query(query, values);
+    if (result.rowCount === 0) {
+        console.info(`Update Telegram ${updateId} sudah diproses; transaksi duplikat diabaikan.`);
+        return false;
+    }
+
     const savedTrx = result.rows[0];
 
     const resIncome = await pool.query("SELECT SUM(amount) as total FROM transactions WHERE type = 'income'");
@@ -154,6 +179,7 @@ ${financialAdvice}
     `.trim();
 
     await sendTelegramMessage(chatId, message);
+    return true;
 }
 
 // API: Ambil Semua Transaksi (Untuk Web)
@@ -227,7 +253,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             
             const rawText = await callGeminiAPI(prompt, base64Image);
             let parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
-            await saveAndNotify(parsed, chatId);
+            await saveAndNotify(parsed, chatId, update.update_id);
         } 
         // 2. VOICE NOTE (REKAMAN SUARA)
         else if (voice) {
@@ -243,7 +269,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             
             const rawText = await callGeminiAudioAPI(prompt, base64Audio);
             let parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
-            await saveAndNotify(parsed, chatId);
+            await saveAndNotify(parsed, chatId, update.update_id);
         }
         // 3. PESAN TEKS / KONSULTASI
         else if (text) {
@@ -302,7 +328,7 @@ Anda juga bisa bertanya apa saja tentang kondisi keuangan Anda!
             const parsed = JSON.parse(cleanedJson);
 
             if (parsed.isTransaction) {
-                await saveAndNotify(parsed, chatId);
+                await saveAndNotify(parsed, chatId, update.update_id);
             } else {
                 await sendTelegramMessage(chatId, `🤖 *Saku Harian:* ${parsed.reply}`);
             }
