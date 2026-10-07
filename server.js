@@ -1,7 +1,6 @@
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
-const { OAuth2Client } = require('google-auth-library');
 require('dotenv').config();
 
 const app = express();
@@ -71,9 +70,13 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-const GOOGLE_BOOTSTRAP_EMAIL = (process.env.GOOGLE_BOOTSTRAP_EMAIL || '').trim().toLowerCase();
-const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+const FIREBASE_AUTH_DOMAIN = process.env.FIREBASE_AUTH_DOMAIN;
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
+const FIREBASE_APP_ID = process.env.FIREBASE_APP_ID;
+const FIREBASE_BOOTSTRAP_EMAIL = (
+    process.env.FIREBASE_BOOTSTRAP_EMAIL || process.env.GOOGLE_BOOTSTRAP_EMAIL || ''
+).trim().toLowerCase();
 
 // Fungsi Kirim Pesan Telegram
 async function sendTelegramMessage(chatId, text) {
@@ -231,7 +234,7 @@ ${financialAdvice}
 }
 
 // API: Ambil Semua Transaksi (Untuk Web)
-app.get('/api/transactions', authenticateGoogleUser, async (req, res) => {
+app.get('/api/transactions', authenticateFirebaseUser, async (req, res) => {
     try {
         const result = await pool.query(
             'SELECT id, "desc", amount, type, category, date FROM transactions WHERE user_id = $1 ORDER BY date DESC',
@@ -244,7 +247,7 @@ app.get('/api/transactions', authenticateGoogleUser, async (req, res) => {
 });
 
 // API: Tambah Transaksi (Untuk Web)
-app.post('/api/transactions', authenticateGoogleUser, async (req, res) => {
+app.post('/api/transactions', authenticateFirebaseUser, async (req, res) => {
     try {
         const { desc, amount, type, category } = req.body;
         const query = `INSERT INTO transactions ("desc", amount, type, category, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, "desc", amount, type, category, date`;
@@ -257,7 +260,7 @@ app.post('/api/transactions', authenticateGoogleUser, async (req, res) => {
 });
 
 // API: Hapus transaksi dari web
-app.delete('/api/transactions/:id', authenticateGoogleUser, async (req, res) => {
+app.delete('/api/transactions/:id', authenticateFirebaseUser, async (req, res) => {
     const { id } = req.params;
     if (!/^[1-9]\d*$/.test(id)) {
         return res.status(400).json({ error: 'ID transaksi tidak valid.' });
@@ -293,74 +296,117 @@ function isValidPositiveId(value) {
 }
 
 app.get('/api/auth/config', (req, res) => {
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_BOOTSTRAP_EMAIL) {
-        return res.status(503).json({ error: 'Login Google belum dikonfigurasi di server.' });
+    if (!FIREBASE_API_KEY || !FIREBASE_AUTH_DOMAIN || !FIREBASE_PROJECT_ID || !FIREBASE_APP_ID
+        || !FIREBASE_BOOTSTRAP_EMAIL) {
+        return res.status(503).json({ error: 'Firebase Authentication belum dikonfigurasi di server.' });
     }
-    res.json({ clientId: GOOGLE_CLIENT_ID });
+    res.json({
+        firebaseConfig: {
+            apiKey: FIREBASE_API_KEY,
+            authDomain: FIREBASE_AUTH_DOMAIN,
+            projectId: FIREBASE_PROJECT_ID,
+            appId: FIREBASE_APP_ID
+        }
+    });
 });
 
-async function authenticateGoogleUser(req, res, next) {
-    if (!googleClient || !GOOGLE_BOOTSTRAP_EMAIL) {
-        return res.status(503).json({ error: 'Login Google belum dikonfigurasi di server.' });
+async function authenticateFirebaseUser(req, res, next) {
+    if (!FIREBASE_API_KEY || !FIREBASE_PROJECT_ID || !FIREBASE_BOOTSTRAP_EMAIL) {
+        return res.status(503).json({ error: 'Firebase Authentication belum dikonfigurasi di server.' });
     }
     const authorization = req.get('authorization') || '';
     const tokenMatch = authorization.match(/^Bearer ([^\s]+)$/i);
-    if (!tokenMatch) return res.status(401).json({ error: 'Silakan masuk dengan akun Google.' });
-
-    let payload;
-    try {
-        const ticket = await googleClient.verifyIdToken({
-            idToken: tokenMatch[1],
-            audience: GOOGLE_CLIENT_ID
-        });
-        payload = ticket.getPayload();
-    } catch (err) {
-        console.warn('Verifikasi token Google gagal:', err.message);
-        return res.status(401).json({ error: 'Sesi Google tidak valid atau sudah kedaluwarsa. Silakan masuk kembali.' });
-    }
-    if (!payload?.sub || !payload.email || payload.email_verified !== true) {
-        return res.status(401).json({ error: 'Token Google tidak valid atau email belum terverifikasi.' });
-    }
+    if (!tokenMatch) return res.status(401).json({ error: 'Silakan masuk dengan akun Google terlebih dahulu.' });
 
     try {
+        let response;
+        try {
+            response = await fetch(
+                `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_API_KEY)}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    body: JSON.stringify({ idToken: tokenMatch[1] })
+                }
+            );
+        } catch (err) {
+            console.error('Tidak dapat menghubungi Firebase untuk memverifikasi token:', err);
+            return res.status(502).json({ error: 'Firebase tidak dapat dihubungi untuk memverifikasi login. Coba lagi nanti.' });
+        }
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const firebaseError = result.error?.message || 'Firebase token verification failed.';
+            if (/INVALID_ID_TOKEN|TOKEN_EXPIRED|USER_DISABLED|MISSING_ID_TOKEN/i.test(firebaseError)) {
+                return res.status(401).json({ error: 'Sesi Firebase tidak valid atau sudah kedaluwarsa. Silakan masuk kembali.' });
+            }
+            console.error('Firebase menolak verifikasi token:', firebaseError);
+            return res.status(502).json({ error: 'Token tidak dapat diverifikasi oleh Firebase. Coba lagi nanti.' });
+        }
+
+        const firebaseUser = result.users?.[0];
+        if (!firebaseUser?.localId || !firebaseUser.email || firebaseUser.emailVerified !== true) {
+            return res.status(401).json({ error: 'Token Firebase tidak valid atau email belum terverifikasi.' });
+        }
+
         await databaseReady;
         const user = {
-            id: payload.sub,
-            email: payload.email.toLowerCase(),
-            name: payload.name || payload.email,
-            picture: payload.picture || ''
+            id: firebaseUser.localId,
+            email: firebaseUser.email.toLowerCase(),
+            name: firebaseUser.displayName || firebaseUser.email,
+            picture: firebaseUser.photoUrl || ''
         };
-        if (GOOGLE_BOOTSTRAP_EMAIL && user.email === GOOGLE_BOOTSTRAP_EMAIL) {
-            await pool.query(`
-                INSERT INTO app_settings (key, value)
-                VALUES ('bootstrap_google_sub', $1)
-                ON CONFLICT (key) DO NOTHING
-            `, [user.id]);
-            const owner = await pool.query(
-                "SELECT value FROM app_settings WHERE key = 'bootstrap_google_sub'"
-            );
-            if (owner.rows[0]?.value !== user.id) {
-                return res.status(403).json({ error: 'Akun Google ini tidak cocok dengan pemilik data awal.' });
+        if (user.email === FIREBASE_BOOTSTRAP_EMAIL) {
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+                await client.query(`
+                    INSERT INTO app_settings (key, value)
+                    VALUES ('bootstrap_google_sub', $1)
+                    ON CONFLICT (key) DO NOTHING
+                `, [user.id]);
+                const owner = await client.query(
+                    "SELECT value FROM app_settings WHERE key = 'bootstrap_google_sub' FOR UPDATE"
+                );
+                const previousOwnerId = owner.rows[0]?.value;
+                await client.query(
+                    'UPDATE transactions SET user_id = $1 WHERE user_id IS NULL OR user_id = $2',
+                    [user.id, previousOwnerId]
+                );
+                await client.query(
+                    'UPDATE monthly_budgets SET user_id = $1 WHERE user_id IS NULL OR user_id = $2',
+                    [user.id, previousOwnerId]
+                );
+                await client.query(
+                    'UPDATE savings_goals SET user_id = $1 WHERE user_id IS NULL OR user_id = $2',
+                    [user.id, previousOwnerId]
+                );
+                if (previousOwnerId !== user.id) {
+                    await client.query(
+                        "UPDATE app_settings SET value = $1 WHERE key = 'bootstrap_google_sub'",
+                        [user.id]
+                    );
+                }
+                await client.query('COMMIT');
+            } catch (err) {
+                await client.query('ROLLBACK');
+                throw err;
+            } finally {
+                client.release();
             }
-            await Promise.all([
-                pool.query('UPDATE transactions SET user_id = $1 WHERE user_id IS NULL', [user.id]),
-                pool.query('UPDATE monthly_budgets SET user_id = $1 WHERE user_id IS NULL', [user.id]),
-                pool.query('UPDATE savings_goals SET user_id = $1 WHERE user_id IS NULL', [user.id])
-            ]);
         }
         req.user = user;
         next();
     } catch (err) {
-        console.error('Gagal menyiapkan data pengguna Google:', err);
-        res.status(500).json({ error: 'Data akun tidak dapat dimuat.' });
+        console.error('Gagal memverifikasi sesi Firebase atau menyiapkan data pengguna:', err);
+        res.status(500).json({ error: 'Sesi akun tidak dapat diverifikasi atau data akun tidak dapat dimuat.' });
     }
 }
 
-app.post('/api/auth/session', authenticateGoogleUser, (req, res) => {
+app.post('/api/auth/session', authenticateFirebaseUser, (req, res) => {
     res.json({ user: req.user });
 });
 
-app.get('/api/budgets', authenticateGoogleUser, async (req, res) => {
+app.get('/api/budgets', authenticateFirebaseUser, async (req, res) => {
     const { month } = req.query;
     if (!isValidMonth(month)) return res.status(400).json({ error: 'Bulan budget tidak valid.' });
     try {
@@ -376,7 +422,7 @@ app.get('/api/budgets', authenticateGoogleUser, async (req, res) => {
     }
 });
 
-app.put('/api/budgets', authenticateGoogleUser, async (req, res) => {
+app.put('/api/budgets', authenticateFirebaseUser, async (req, res) => {
     const { month, category, limitAmount } = req.body;
     const normalizedCategory = typeof category === 'string' ? category.trim() : '';
     if (!isValidMonth(month) || !normalizedCategory || normalizedCategory.length > 100 || !isValidPositiveAmount(limitAmount)) {
@@ -397,7 +443,7 @@ app.put('/api/budgets', authenticateGoogleUser, async (req, res) => {
     }
 });
 
-app.delete('/api/budgets/:id', authenticateGoogleUser, async (req, res) => {
+app.delete('/api/budgets/:id', authenticateFirebaseUser, async (req, res) => {
     if (!isValidPositiveId(req.params.id)) return res.status(400).json({ error: 'ID budget tidak valid.' });
     try {
         await databaseReady;
@@ -410,7 +456,7 @@ app.delete('/api/budgets/:id', authenticateGoogleUser, async (req, res) => {
     }
 });
 
-app.get('/api/savings-goals', authenticateGoogleUser, async (req, res) => {
+app.get('/api/savings-goals', authenticateFirebaseUser, async (req, res) => {
     try {
         await databaseReady;
         const result = await pool.query('SELECT id, name, target_amount, current_amount FROM savings_goals WHERE user_id = $1 ORDER BY created_at, id', [req.user.id]);
@@ -421,7 +467,7 @@ app.get('/api/savings-goals', authenticateGoogleUser, async (req, res) => {
     }
 });
 
-app.post('/api/savings-goals', authenticateGoogleUser, async (req, res) => {
+app.post('/api/savings-goals', authenticateFirebaseUser, async (req, res) => {
     const { name, targetAmount, currentAmount = 0 } = req.body;
     const normalizedName = typeof name === 'string' ? name.trim() : '';
     const validCurrentAmount = isValidNonnegativeAmount(currentAmount);
@@ -442,7 +488,7 @@ app.post('/api/savings-goals', authenticateGoogleUser, async (req, res) => {
     }
 });
 
-app.patch('/api/savings-goals/:id', authenticateGoogleUser, async (req, res) => {
+app.patch('/api/savings-goals/:id', authenticateFirebaseUser, async (req, res) => {
     const { currentAmount } = req.body;
     if (!isValidPositiveId(req.params.id) || !isValidNonnegativeAmount(currentAmount)) {
         return res.status(400).json({ error: 'ID atau saldo target tabungan tidak valid.' });
@@ -462,7 +508,7 @@ app.patch('/api/savings-goals/:id', authenticateGoogleUser, async (req, res) => 
     }
 });
 
-app.delete('/api/savings-goals/:id', authenticateGoogleUser, async (req, res) => {
+app.delete('/api/savings-goals/:id', authenticateFirebaseUser, async (req, res) => {
     if (!isValidPositiveId(req.params.id)) return res.status(400).json({ error: 'ID target tabungan tidak valid.' });
     try {
         await databaseReady;
@@ -475,7 +521,7 @@ app.delete('/api/savings-goals/:id', authenticateGoogleUser, async (req, res) =>
     }
 });
 
-app.post('/api/financial-analysis', authenticateGoogleUser, async (req, res) => {
+app.post('/api/financial-analysis', authenticateFirebaseUser, async (req, res) => {
     const { month } = req.body;
     if (!isValidMonth(month)) return res.status(400).json({ error: 'Bulan analisis tidak valid.' });
     if (!GEMINI_API_KEY) return res.status(503).json({ error: 'Analisis AI belum dikonfigurasi di server.' });
@@ -558,7 +604,7 @@ app.post('/api/financial-analysis', authenticateGoogleUser, async (req, res) => 
 });
 
 // API: Export Excel (CSV)
-app.get('/api/export-excel', authenticateGoogleUser, async (req, res) => {
+app.get('/api/export-excel', authenticateFirebaseUser, async (req, res) => {
     try {
         const result = await pool.query('SELECT id, "desc", amount, type, category, date FROM transactions WHERE user_id = $1 ORDER BY date DESC', [req.user.id]);
         let csvContent = "ID,Keterangan,Nominal,Tipe,Kategori,Tanggal\n";

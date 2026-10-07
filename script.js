@@ -64,6 +64,7 @@ let monthlyBudgets = [];
 let savingsGoals = [];
 let googleIdToken = null;
 let signedInUser = null;
+let firebaseAuth = null;
 let authGeneration = 0;
 let showAllTransactions = false;
 let noticeTimeout;
@@ -71,6 +72,15 @@ let noticeTimeout;
 async function apiFetch(url, options = {}) {
     if (!googleIdToken) throw new Error('Silakan masuk dengan akun Google terlebih dahulu.');
     const requestGeneration = authGeneration;
+    const firebaseUser = firebaseAuth?.currentUser;
+    if (!firebaseUser) throw new Error('Sesi Firebase sudah berakhir. Silakan masuk kembali.');
+    const freshToken = await firebaseUser.getIdToken();
+    if (requestGeneration !== authGeneration || firebaseAuth?.currentUser !== firebaseUser) {
+        const error = new Error('Sesi login sudah berubah.');
+        error.name = 'AbortError';
+        throw error;
+    }
+    googleIdToken = freshToken;
     const headers = new Headers(options.headers || {});
     headers.set('Authorization', `Bearer ${googleIdToken}`);
     const response = await fetch(url, { ...options, headers });
@@ -607,10 +617,18 @@ async function deleteSavingsGoal(goalId) {
     }
 }
 
-async function handleGoogleCredential(credentialResponse) {
-    const credential = credentialResponse?.credential;
+async function handleFirebaseUser(firebaseUser) {
+    let credential;
+    try {
+        credential = await firebaseUser?.getIdToken();
+    } catch (error) {
+        console.error('Gagal memperoleh token Firebase:', error);
+        elements.authStatus.textContent = 'Sesi Google tidak dapat dibaca. Silakan coba masuk kembali.';
+        return;
+    }
+    if (firebaseAuth?.currentUser !== firebaseUser) return;
     if (!credential) {
-        elements.authStatus.textContent = 'Google tidak mengembalikan kredensial. Silakan coba lagi.';
+        elements.authStatus.textContent = 'Firebase tidak memberikan sesi login yang valid. Silakan coba lagi.';
         return;
     }
 
@@ -644,41 +662,60 @@ async function handleGoogleCredential(credentialResponse) {
         googleIdToken = null;
         signedInUser = null;
         elements.authStatus.textContent = error.message || 'Login Google gagal. Silakan coba lagi.';
+        if (firebaseAuth?.currentUser === firebaseUser) {
+            firebaseAuth.signOut().catch((signOutError) => console.error('Gagal membersihkan sesi Firebase:', signOutError));
+        }
     }
 }
 
-async function initializeGoogleSignIn() {
-    elements.authStatus.textContent = 'Menghubungkan ke layanan Google...';
+async function initializeFirebaseAuthentication() {
+    elements.authStatus.textContent = 'Menghubungkan ke Firebase...';
     try {
         const response = await fetch(AUTH_CONFIG_URL, { headers: { Accept: 'application/json' } });
         const config = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(config.error || `Server merespons ${response.status}`);
-        if (!config.clientId) throw new Error('Client ID Google belum tersedia.');
-        if (!window.google?.accounts?.id) throw new Error('Layanan Google Sign-In gagal dimuat. Periksa koneksi lalu muat ulang.');
+        if (!config.firebaseConfig) throw new Error('Konfigurasi Firebase belum tersedia.');
+        if (!window.firebase?.auth) throw new Error('Firebase gagal dimuat. Periksa koneksi lalu muat ulang.');
 
-        window.google.accounts.id.initialize({
-            client_id: config.clientId,
-            callback: handleGoogleCredential,
-            auto_select: false,
-            cancel_on_tap_outside: false
+        const firebaseApp = window.firebase.apps.length
+            ? window.firebase.app()
+            : window.firebase.initializeApp(config.firebaseConfig);
+        firebaseAuth = window.firebase.auth(firebaseApp);
+        elements.googleSignInButton.addEventListener('click', async () => {
+            elements.googleSignInButton.disabled = true;
+            elements.authStatus.textContent = 'Membuka pilihan akun Google...';
+            try {
+                const provider = new window.firebase.auth.GoogleAuthProvider();
+                await firebaseAuth.signInWithPopup(provider);
+            } catch (error) {
+                if (error.code !== 'auth/popup-closed-by-user') {
+                    console.error('Gagal masuk dengan Firebase:', error);
+                    elements.authStatus.textContent = error.message || 'Login Google gagal. Silakan coba lagi.';
+                } else {
+                    elements.authStatus.textContent = 'Pilih akun Google untuk masuk.';
+                }
+            } finally {
+                elements.googleSignInButton.disabled = false;
+            }
         });
-        window.google.accounts.id.renderButton(elements.googleSignInButton, {
-            type: 'standard',
-            theme: 'outline',
-            size: 'large',
-            text: 'signin_with',
-            shape: 'rectangular',
-            width: Math.min(Math.floor(elements.googleSignInButton.getBoundingClientRect().width), 400),
-            logo_alignment: 'left'
+        firebaseAuth.onAuthStateChanged((user) => {
+            if (user) {
+                handleFirebaseUser(user);
+            } else if (googleIdToken) {
+                signOut(false);
+            }
         });
         elements.authStatus.textContent = 'Pilih akun Google untuk masuk.';
     } catch (error) {
-        console.error('Gagal menyiapkan Google Sign-In:', error);
-        elements.authStatus.textContent = error.message || 'Google Sign-In belum bisa disiapkan. Coba muat ulang.';
+        console.error('Gagal menyiapkan Firebase Authentication:', error);
+        elements.authStatus.textContent = error.message || 'Firebase Authentication belum bisa disiapkan. Coba muat ulang.';
     }
 }
 
 function signOut(showStatus = true) {
+    if (firebaseAuth?.currentUser) {
+        firebaseAuth.signOut().catch((error) => console.error('Gagal keluar dari Firebase:', error));
+    }
     authGeneration += 1;
     googleIdToken = null;
     signedInUser = null;
@@ -735,7 +772,6 @@ function signOut(showStatus = true) {
     elements.incomeBar.style.width = '0%';
     elements.expenseBar.style.width = '0%';
     if (showStatus) elements.authStatus.textContent = 'Anda telah keluar. Pilih akun Google untuk masuk kembali.';
-    window.google?.accounts?.id?.disableAutoSelect();
 }
 
 async function requestFinancialAnalysis() {
@@ -1325,4 +1361,4 @@ initializeTheme();
 initializeNavigation();
 renderIcons();
 document.getElementById('signOutButton').addEventListener('click', () => signOut());
-initializeGoogleSignIn();
+initializeFirebaseAuthentication();
