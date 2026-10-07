@@ -209,7 +209,9 @@ BEGIN
     FROM public.app_settings WHERE key = 'bootstrap_owner_email';
     IF lower(COALESCE(p_email, '')) IS DISTINCT FROM bootstrap_email
        OR p_secret IS NULL
-       OR p_secret !~ '^[A-Za-z0-9_-]{32,256}$' THEN
+       OR length(p_secret) < 32
+       OR length(p_secret) > 256
+       OR p_secret !~ '^[A-Za-z0-9_-]+$' THEN
         RAISE EXCEPTION 'Not authorized to configure Telegram';
     END IF;
 
