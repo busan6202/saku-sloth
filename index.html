@@ -123,6 +123,71 @@
                         <div class="category-legend" id="categoryLegend"><p class="empty-copy">Belum ada pengeluaran di bulan ini.</p></div>
                     </div>
                 </article>
+
+                <article class="panel trend-panel">
+                    <div class="panel-heading">
+                        <div><p class="eyebrow">PERJALANAN UANG</p><h2>Tren arus kas 6 bulan</h2></div>
+                        <span class="period-chip" id="trendPeriod">6 bulan terakhir</span>
+                    </div>
+                    <div class="trend-legend" aria-hidden="true">
+                        <span><i class="legend-dot income-dot"></i>Pemasukan</span>
+                        <span><i class="legend-dot expense-dot"></i>Pengeluaran</span>
+                    </div>
+                    <div class="trend-chart" id="trendChart" role="group" aria-label="Tren pemasukan dan pengeluaran selama enam bulan"></div>
+                    <p class="trend-caption" id="trendCaption" aria-live="polite"></p>
+                </article>
+            </section>
+
+            <section class="financial-tools-grid" aria-label="Perencanaan keuangan">
+                <article class="panel budget-panel">
+                    <div class="panel-heading">
+                        <div><p class="eyebrow">ANGGARAN BULANAN</p><h2>Budget per kategori</h2></div>
+                        <span class="period-chip" id="budgetPeriod">Bulan terpilih</span>
+                    </div>
+                    <p class="feature-copy">Tetapkan batas pengeluaran tiap kategori dan pantau pemakaiannya.</p>
+                    <form class="feature-form" id="budgetForm">
+                        <label class="form-label" for="budgetCategory">Kategori
+                            <input id="budgetCategory" name="category" type="text" maxlength="100" list="transactionCategories" placeholder="Contoh: Makan" required>
+                            <datalist id="transactionCategories"></datalist>
+                        </label>
+                        <label class="form-label" for="budgetLimit">Batas per bulan
+                            <span class="amount-input"><span>Rp</span><input id="budgetLimit" name="limitAmount" type="number" min="1" step="1" inputmode="numeric" placeholder="0" required></span>
+                        </label>
+                        <button class="button button-primary" id="saveBudget" type="submit">Simpan budget</button>
+                    </form>
+                    <div class="budget-list" id="budgetList" aria-live="polite"><p class="empty-copy">Memuat budget...</p></div>
+                </article>
+
+                <article class="panel savings-panel">
+                    <div class="panel-heading">
+                        <div><p class="eyebrow">LANGKAH MENUJU IMPIAN</p><h2>Target tabungan</h2></div>
+                    </div>
+                    <p class="feature-copy">Buat beberapa tujuan dan perbarui jumlah yang sudah terkumpul.</p>
+                    <form class="feature-form goal-create-form" id="goalForm">
+                        <label class="form-label" for="goalName">Nama tujuan
+                            <input id="goalName" name="name" type="text" maxlength="100" placeholder="Contoh: Dana darurat" required>
+                        </label>
+                        <label class="form-label" for="goalTarget">Nominal target
+                            <span class="amount-input"><span>Rp</span><input id="goalTarget" name="targetAmount" type="number" min="1" step="1" inputmode="numeric" placeholder="0" required></span>
+                        </label>
+                        <label class="form-label" for="goalCurrent">Sudah terkumpul
+                            <span class="amount-input"><span>Rp</span><input id="goalCurrent" name="currentAmount" type="number" min="0" step="1" inputmode="numeric" placeholder="0" value="0"></span>
+                        </label>
+                        <button class="button button-primary" id="saveGoal" type="submit">Tambah target</button>
+                    </form>
+                    <div class="goal-list" id="goalList" aria-live="polite"><p class="empty-copy">Memuat target tabungan...</p></div>
+                </article>
+
+                <article class="panel ai-analysis-panel">
+                    <div class="panel-heading">
+                        <div><p class="eyebrow">ASISTEN FINANSIAL</p><h2>Analisis keuangan AI</h2></div>
+                        <span class="ai-mark" aria-hidden="true"><i data-lucide="sparkles"></i></span>
+                    </div>
+                    <p class="feature-copy">Dapatkan ringkasan pola pengeluaran, status budget, dan langkah praktis berdasarkan bulan terpilih.</p>
+                    <p class="privacy-note">Saat Anda meminta analisis, ringkasan angka transaksi per kategori, budget, dan target tabungan dikirim ke Google Gemini. Keterangan transaksi tidak dikirim.</p>
+                    <button class="button button-primary" id="runFinancialAnalysis" type="button"><i data-lucide="sparkles" aria-hidden="true"></i> Analisis bulan ini</button>
+                    <div class="analysis-result" id="analysisResult" role="status" aria-live="polite" hidden></div>
+                </article>
             </section>
 
             <section class="panel transactions-panel" id="transactions">
@@ -130,6 +195,21 @@
                     <div><p class="eyebrow">AKTIVITAS</p><h2>Transaksi terbaru</h2></div>
                     <div class="transaction-tools">
                         <label class="search-box"><span aria-hidden="true">⌕</span><span class="sr-only">Cari transaksi</span><input id="transactionSearch" type="search" placeholder="Cari transaksi..." autocomplete="off"></label>
+                        <label class="filter-control"><span class="sr-only">Filter jenis transaksi</span><select id="transactionTypeFilter" aria-label="Filter jenis transaksi">
+                            <option value="all">Semua jenis</option>
+                            <option value="income">Pemasukan</option>
+                            <option value="expense">Pengeluaran</option>
+                        </select></label>
+                        <label class="filter-control"><span class="sr-only">Filter kategori transaksi</span><select id="transactionCategoryFilter" aria-label="Filter kategori transaksi">
+                            <option value="all">Semua kategori</option>
+                        </select></label>
+                        <label class="filter-control"><span class="sr-only">Urutkan transaksi</span><select id="transactionSort" aria-label="Urutkan transaksi">
+                            <option value="newest">Terbaru</option>
+                            <option value="oldest">Terlama</option>
+                            <option value="amount-desc">Nominal terbesar</option>
+                            <option value="amount-asc">Nominal terkecil</option>
+                        </select></label>
+                        <button class="text-button clear-filters" id="clearTransactionFilters" type="button" hidden>Reset filter</button>
                         <button class="text-button" id="showAllTransactions" type="button">Lihat semua <span aria-hidden="true">→</span></button>
                     </div>
                 </div>

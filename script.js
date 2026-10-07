@@ -1,5 +1,7 @@
 const API_BASE_URL = 'https://saku-sloth.vercel.app/api';
 const TRANSACTIONS_URL = `${API_BASE_URL}/transactions`;
+const BUDGETS_URL = `${API_BASE_URL}/budgets`;
+const SAVINGS_GOALS_URL = `${API_BASE_URL}/savings-goals`;
 const VISIBLE_TRANSACTION_LIMIT = 5;
 const CATEGORY_COLORS = ['#a9df71', '#f0a096', '#91a8d0', '#e6c46b', '#ba9dd4', '#78c9b7', '#e79a5a'];
 
@@ -25,6 +27,22 @@ const elements = {
     listStatus: document.getElementById('listStatus'),
     monthFilter: document.getElementById('monthFilter'),
     search: document.getElementById('transactionSearch'),
+    typeFilter: document.getElementById('transactionTypeFilter'),
+    categoryFilter: document.getElementById('transactionCategoryFilter'),
+    sort: document.getElementById('transactionSort'),
+    trendChart: document.getElementById('trendChart'),
+    trendPeriod: document.getElementById('trendPeriod'),
+    trendCaption: document.getElementById('trendCaption'),
+    budgetForm: document.getElementById('budgetForm'),
+    budgetCategory: document.getElementById('budgetCategory'),
+    budgetLimit: document.getElementById('budgetLimit'),
+    budgetList: document.getElementById('budgetList'),
+    budgetPeriod: document.getElementById('budgetPeriod'),
+    categoryOptions: document.getElementById('transactionCategories'),
+    goalForm: document.getElementById('goalForm'),
+    goalList: document.getElementById('goalList'),
+    analysisButton: document.getElementById('runFinancialAnalysis'),
+    analysisResult: document.getElementById('analysisResult'),
     notice: document.getElementById('notice'),
     dialog: document.getElementById('transactionDialog'),
     form: document.getElementById('transactionForm'),
@@ -33,6 +51,8 @@ const elements = {
 };
 
 let transactions = [];
+let monthlyBudgets = [];
+let savingsGoals = [];
 let showAllTransactions = false;
 let noticeTimeout;
 
@@ -155,6 +175,419 @@ function updateSummary(monthTransactions) {
     elements.healthNote.lastElementChild.textContent = healthMessage;
 
     renderCategories(categoryTotals, expense);
+    renderMonthlyTrend();
+}
+
+function renderMonthlyTrend() {
+    const selectedDate = new Date(`${elements.monthFilter.value}-01T12:00:00`);
+    const months = Array.from({ length: 6 }, (_, index) => {
+        const date = new Date(selectedDate);
+        date.setMonth(date.getMonth() - (5 - index));
+        return { date, key: localMonthValue(date), income: 0, expense: 0 };
+    });
+    const monthTotals = new Map(months.map((month) => [month.key, month]));
+
+    transactions.forEach((transaction) => {
+        const date = new Date(transaction.date);
+        const month = monthTotals.get(localMonthValue(date));
+        const amount = Number(transaction.amount);
+        if (!month || !Number.isFinite(amount)) return;
+        if (transaction.type === 'income') month.income += amount;
+        else month.expense += amount;
+    });
+
+    const maxTotal = Math.max(0, ...months.map((month) => month.income + month.expense));
+    const selectedMonth = months[months.length - 1];
+    const previousMonth = months[months.length - 2];
+    const selectedMonthName = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(selectedDate);
+    const expenseChange = previousMonth.expense
+        ? Math.round(((selectedMonth.expense - previousMonth.expense) / previousMonth.expense) * 100)
+        : null;
+
+    elements.trendPeriod.textContent = `${new Intl.DateTimeFormat('id-ID', { month: 'short' }).format(months[0].date)} – ${new Intl.DateTimeFormat('id-ID', { month: 'short', year: 'numeric' }).format(selectedDate)}`;
+    elements.trendCaption.textContent = maxTotal === 0
+        ? 'Belum ada transaksi pada rentang enam bulan ini.'
+        : expenseChange === null
+            ? `Pengeluaran pada ${selectedMonthName} sebesar ${formatCurrency(selectedMonth.expense)}. Belum ada pengeluaran pada bulan sebelumnya untuk dibandingkan.`
+            : expenseChange > 0
+                ? `Pengeluaran pada ${selectedMonthName} naik ${expenseChange}% dibanding bulan sebelumnya.`
+                : expenseChange < 0
+                    ? `Pengeluaran pada ${selectedMonthName} turun ${Math.abs(expenseChange)}% dibanding bulan sebelumnya.`
+                    : `Pengeluaran pada ${selectedMonthName} sama dengan bulan sebelumnya.`;
+
+    elements.trendChart.replaceChildren(...months.map((month) => {
+        const column = document.createElement('div');
+        column.className = `trend-month${month.key === selectedMonth.key ? ' is-current' : ''}`;
+        column.setAttribute('role', 'img');
+        column.setAttribute('aria-label', `${new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(month.date)}: pemasukan ${formatCurrency(month.income)}, pengeluaran ${formatCurrency(month.expense)}`);
+
+        const bars = document.createElement('div');
+        bars.className = 'trend-bars';
+        const incomeBar = document.createElement('span');
+        incomeBar.className = 'trend-bar trend-income';
+        incomeBar.style.height = `${maxTotal ? Math.max(month.income ? 3 : 0, (month.income / maxTotal) * 100) : 0}%`;
+        const expenseBar = document.createElement('span');
+        expenseBar.className = 'trend-bar trend-expense';
+        expenseBar.style.height = `${maxTotal ? Math.max(month.expense ? 3 : 0, (month.expense / maxTotal) * 100) : 0}%`;
+        bars.append(incomeBar, expenseBar);
+
+        const label = document.createElement('span');
+        label.className = 'trend-month-label';
+        label.textContent = new Intl.DateTimeFormat('id-ID', { month: 'short' }).format(month.date);
+        column.append(bars, label);
+        return column;
+    }));
+}
+
+function renderBudgets() {
+    const selectedMonth = elements.monthFilter.value;
+    const selectedDate = new Date(`${selectedMonth}-01T12:00:00`);
+    elements.budgetPeriod.textContent = new Intl.DateTimeFormat('id-ID', {
+        month: 'long',
+        year: 'numeric'
+    }).format(selectedDate);
+
+    const categories = [...new Set(transactions.map((transaction) => String(transaction.category || 'Umum').trim() || 'Umum'))]
+        .sort((a, b) => a.localeCompare(b, 'id-ID'));
+    elements.categoryOptions.replaceChildren(...categories.map((category) => new Option(category, category)));
+
+    if (!monthlyBudgets.length) {
+        elements.budgetList.replaceChildren();
+        const emptyMessage = document.createElement('p');
+        emptyMessage.className = 'empty-copy';
+        emptyMessage.textContent = 'Belum ada budget untuk bulan ini.';
+        elements.budgetList.append(emptyMessage);
+        return;
+    }
+
+    const monthlyExpenses = selectedMonthTransactions()
+        .filter((transaction) => transaction.type !== 'income')
+        .reduce((totals, transaction) => {
+            const category = String(transaction.category || 'Umum').trim() || 'Umum';
+            totals.set(category, (totals.get(category) || 0) + Number(transaction.amount || 0));
+            return totals;
+        }, new Map());
+
+    elements.budgetList.replaceChildren(...monthlyBudgets.map((budget) => {
+        const item = document.createElement('article');
+        item.className = 'budget-item';
+        item.dataset.budgetId = String(budget.id);
+        const spent = monthlyExpenses.get(budget.category) || 0;
+        const limit = Number(budget.limit_amount);
+        const percent = limit > 0 ? (spent / limit) * 100 : 0;
+
+        const heading = document.createElement('div');
+        heading.className = 'budget-item-heading';
+        const category = document.createElement('strong');
+        category.textContent = budget.category;
+        const amounts = document.createElement('span');
+        amounts.textContent = `${formatCurrency(spent)} / ${formatCurrency(limit)}`;
+        heading.append(category, amounts);
+
+        const progress = document.createElement('progress');
+        progress.className = `budget-progress${percent >= 100 ? ' is-over' : percent >= 80 ? ' is-near' : ''}`;
+        progress.max = 100;
+        progress.value = Math.min(percent, 100);
+        progress.setAttribute('aria-label', `${budget.category}: ${Math.round(percent)} persen dari budget terpakai`);
+
+        const controls = document.createElement('div');
+        controls.className = 'budget-item-controls';
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '1';
+        input.step = '1';
+        input.value = String(limit);
+        input.setAttribute('aria-label', `Batas budget ${budget.category}`);
+        const saveButton = document.createElement('button');
+        saveButton.className = 'text-button';
+        saveButton.type = 'button';
+        saveButton.dataset.action = 'save-budget';
+        saveButton.textContent = 'Ubah batas';
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'text-button destructive-text';
+        deleteButton.type = 'button';
+        deleteButton.dataset.action = 'delete-budget';
+        deleteButton.textContent = 'Hapus';
+        controls.append(input, saveButton, deleteButton);
+        item.append(heading, progress, controls);
+        return item;
+    }));
+}
+
+function renderSavingsGoals() {
+    if (!savingsGoals.length) {
+        elements.goalList.replaceChildren();
+        const emptyMessage = document.createElement('p');
+        emptyMessage.className = 'empty-copy';
+        emptyMessage.textContent = 'Belum ada target. Tambahkan tujuan tabungan pertamamu.';
+        elements.goalList.append(emptyMessage);
+        return;
+    }
+
+    elements.goalList.replaceChildren(...savingsGoals.map((goal) => {
+        const item = document.createElement('article');
+        item.className = 'goal-item';
+        item.dataset.goalId = String(goal.id);
+        const saved = Number(goal.current_amount);
+        const target = Number(goal.target_amount);
+        const percent = target > 0 ? (saved / target) * 100 : 0;
+
+        const heading = document.createElement('div');
+        heading.className = 'goal-item-heading';
+        const name = document.createElement('strong');
+        name.textContent = goal.name;
+        const percentage = document.createElement('span');
+        percentage.textContent = `${Math.round(percent)}%`;
+        heading.append(name, percentage);
+
+        const progress = document.createElement('progress');
+        progress.className = 'goal-progress';
+        progress.max = 100;
+        progress.value = Math.min(percent, 100);
+        progress.setAttribute('aria-label', `${goal.name}: ${Math.round(percent)} persen tercapai`);
+
+        const amounts = document.createElement('p');
+        amounts.className = 'goal-amounts';
+        amounts.textContent = `${formatCurrency(saved)} terkumpul dari ${formatCurrency(target)}`;
+
+        const controls = document.createElement('div');
+        controls.className = 'goal-item-controls';
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '0';
+        input.step = '1';
+        input.value = String(saved);
+        input.setAttribute('aria-label', `Saldo terkumpul untuk ${goal.name}`);
+        const saveButton = document.createElement('button');
+        saveButton.className = 'text-button';
+        saveButton.type = 'button';
+        saveButton.dataset.action = 'save-goal';
+        saveButton.textContent = 'Perbarui saldo';
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'text-button destructive-text';
+        deleteButton.type = 'button';
+        deleteButton.dataset.action = 'delete-goal';
+        deleteButton.textContent = 'Hapus';
+        controls.append(input, saveButton, deleteButton);
+        item.append(heading, progress, amounts, controls);
+        return item;
+    }));
+}
+
+async function loadBudgets() {
+    const month = elements.monthFilter.value;
+    monthlyBudgets = [];
+    renderBudgets();
+    try {
+        const response = await fetch(`${BUDGETS_URL}?month=${encodeURIComponent(month)}`, {
+            headers: { Accept: 'application/json' }
+        });
+        if (!response.ok) throw new Error(`Server merespons ${response.status}`);
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('Format budget tidak sesuai.');
+        if (month !== elements.monthFilter.value) return;
+        monthlyBudgets = data;
+        renderBudgets();
+    } catch (error) {
+        if (month !== elements.monthFilter.value) return;
+        console.error('Gagal memuat budget:', error);
+        elements.budgetList.replaceChildren();
+        const errorMessage = document.createElement('p');
+        errorMessage.className = 'empty-copy';
+        errorMessage.textContent = 'Budget gagal dimuat. Coba muat ulang data.';
+        elements.budgetList.append(errorMessage);
+        setNotice('Budget tidak dapat dimuat dari server. Coba muat ulang data.', 'error');
+    }
+}
+
+async function loadSavingsGoals() {
+    try {
+        const response = await fetch(SAVINGS_GOALS_URL, {
+            headers: { Accept: 'application/json' }
+        });
+        if (!response.ok) throw new Error(`Server merespons ${response.status}`);
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('Format target tabungan tidak sesuai.');
+        savingsGoals = data;
+        renderSavingsGoals();
+    } catch (error) {
+        console.error('Gagal memuat target tabungan:', error);
+        elements.goalList.replaceChildren();
+        const errorMessage = document.createElement('p');
+        errorMessage.className = 'empty-copy';
+        errorMessage.textContent = 'Target tabungan gagal dimuat. Coba muat ulang data.';
+        elements.goalList.append(errorMessage);
+        setNotice('Target tabungan tidak dapat dimuat dari server. Coba muat ulang data.', 'error');
+    }
+}
+
+async function saveBudget(category, limitAmount) {
+    const normalizedCategory = String(category || '').trim();
+    const amount = Number(limitAmount);
+    const month = elements.monthFilter.value;
+    if (!normalizedCategory || !Number.isFinite(amount) || amount <= 0) {
+        setNotice('Masukkan kategori dan batas budget yang valid.', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(BUDGETS_URL, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ month, category: normalizedCategory, limitAmount: amount })
+        });
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            throw new Error(errorBody.error || `Server merespons ${response.status}`);
+        }
+        const savedBudget = await response.json();
+        if (month !== elements.monthFilter.value) {
+            setNotice(`Budget untuk ${month} berhasil disimpan.`);
+            return;
+        }
+        monthlyBudgets = [...monthlyBudgets.filter((budget) => budget.category !== savedBudget.category), savedBudget]
+            .sort((a, b) => a.category.localeCompare(b.category, 'id-ID'));
+        elements.budgetForm.reset();
+        renderBudgets();
+        setNotice('Budget berhasil disimpan.');
+    } catch (error) {
+        console.error('Gagal menyimpan budget:', error);
+        setNotice(error.message || 'Budget gagal disimpan. Silakan coba lagi.', 'error');
+    }
+}
+
+async function deleteBudget(budgetId) {
+    const budget = monthlyBudgets.find((item) => String(item.id) === String(budgetId));
+    if (!budget || !window.confirm(`Hapus budget kategori "${budget.category}" untuk ${budget.month}?`)) return;
+    try {
+        const response = await fetch(`${BUDGETS_URL}/${encodeURIComponent(budgetId)}`, { method: 'DELETE' });
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            throw new Error(errorBody.error || `Server merespons ${response.status}`);
+        }
+        monthlyBudgets = monthlyBudgets.filter((budget) => String(budget.id) !== String(budgetId));
+        renderBudgets();
+        setNotice('Budget berhasil dihapus.');
+    } catch (error) {
+        console.error('Gagal menghapus budget:', error);
+        setNotice(error.message || 'Budget gagal dihapus. Silakan coba lagi.', 'error');
+    }
+}
+
+async function createSavingsGoal(event) {
+    event.preventDefault();
+    const formData = new FormData(elements.goalForm);
+    const goal = {
+        name: String(formData.get('name') || '').trim(),
+        targetAmount: Number(formData.get('targetAmount')),
+        currentAmount: Number(formData.get('currentAmount') || 0)
+    };
+    if (!goal.name || !Number.isFinite(goal.targetAmount) || goal.targetAmount <= 0
+        || !Number.isFinite(goal.currentAmount) || goal.currentAmount < 0) {
+        setNotice('Masukkan nama tujuan dan nominal tabungan yang valid.', 'error');
+        return;
+    }
+
+    const button = document.getElementById('saveGoal');
+    button.disabled = true;
+    try {
+        const response = await fetch(SAVINGS_GOALS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(goal)
+        });
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            throw new Error(errorBody.error || `Server merespons ${response.status}`);
+        }
+        savingsGoals.push(await response.json());
+        elements.goalForm.reset();
+        document.getElementById('goalCurrent').value = '0';
+        renderSavingsGoals();
+        setNotice('Target tabungan berhasil ditambahkan.');
+    } catch (error) {
+        console.error('Gagal membuat target tabungan:', error);
+        setNotice(error.message || 'Target tabungan gagal dibuat. Silakan coba lagi.', 'error');
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function updateSavingsGoal(goalId, currentAmount) {
+    const amount = Number(currentAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+        setNotice('Masukkan saldo terkumpul yang valid.', 'error');
+        return;
+    }
+    try {
+        const response = await fetch(`${SAVINGS_GOALS_URL}/${encodeURIComponent(goalId)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ currentAmount: amount })
+        });
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            throw new Error(errorBody.error || `Server merespons ${response.status}`);
+        }
+        const updatedGoal = await response.json();
+        savingsGoals = savingsGoals.map((goal) => String(goal.id) === String(goalId) ? updatedGoal : goal);
+        renderSavingsGoals();
+        setNotice('Saldo target tabungan berhasil diperbarui.');
+    } catch (error) {
+        console.error('Gagal memperbarui target tabungan:', error);
+        setNotice(error.message || 'Saldo target tabungan gagal diperbarui.', 'error');
+    }
+}
+
+async function deleteSavingsGoal(goalId) {
+    const goal = savingsGoals.find((item) => String(item.id) === String(goalId));
+    if (!goal || !window.confirm(`Hapus target tabungan "${goal.name}"?`)) return;
+    try {
+        const response = await fetch(`${SAVINGS_GOALS_URL}/${encodeURIComponent(goalId)}`, { method: 'DELETE' });
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            throw new Error(errorBody.error || `Server merespons ${response.status}`);
+        }
+        savingsGoals = savingsGoals.filter((goal) => String(goal.id) !== String(goalId));
+        renderSavingsGoals();
+        setNotice('Target tabungan berhasil dihapus.');
+    } catch (error) {
+        console.error('Gagal menghapus target tabungan:', error);
+        setNotice(error.message || 'Target tabungan gagal dihapus.', 'error');
+    }
+}
+
+async function requestFinancialAnalysis() {
+    const button = elements.analysisButton;
+    button.disabled = true;
+    button.textContent = 'Menganalisis...';
+    elements.analysisResult.hidden = false;
+    elements.analysisResult.textContent = 'Mengirim ringkasan keuangan agregat ke Google Gemini...';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/financial-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ month: elements.monthFilter.value })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || `Server merespons ${response.status}`);
+        if (typeof result.analysis !== 'string' || !result.analysis.trim()) {
+            throw new Error('Hasil analisis dari server tidak valid.');
+        }
+        elements.analysisResult.textContent = result.analysis;
+    } catch (error) {
+        console.error('Gagal meminta analisis AI:', error);
+        elements.analysisResult.textContent = error.message || 'Analisis AI gagal dibuat. Coba lagi beberapa saat.';
+        setNotice('Analisis AI gagal dibuat. Coba lagi beberapa saat.', 'error');
+    } finally {
+        button.disabled = false;
+        const icon = document.createElement('i');
+        icon.dataset.lucide = 'sparkles';
+        icon.setAttribute('aria-hidden', 'true');
+        button.replaceChildren(icon, document.createTextNode(' Analisis bulan ini'));
+        renderIcons();
+    }
 }
 
 function renderCategories(categoryTotals, totalExpense) {
@@ -280,13 +713,26 @@ function renderIcons() {
 }
 
 function renderTransactions() {
+    updateCategoryFilter();
     const query = elements.search.value.trim().toLocaleLowerCase('id-ID');
     const monthTransactions = selectedMonthTransactions();
+    const type = elements.typeFilter.value;
+    const category = elements.categoryFilter.value;
     const matchingTransactions = monthTransactions.filter((transaction) => {
         const searchable = `${transaction.desc || ''} ${transaction.category || ''} ${transaction.type || ''}`.toLocaleLowerCase('id-ID');
-        return searchable.includes(query);
+        const transactionCategory = String(transaction.category || 'Umum').trim() || 'Umum';
+        return searchable.includes(query)
+            && (type === 'all' || transaction.type === type)
+            && (category === 'all' || transactionCategory === category);
+    }).sort((a, b) => {
+        if (elements.sort.value === 'oldest') return new Date(a.date) - new Date(b.date);
+        if (elements.sort.value === 'amount-desc') return Number(b.amount) - Number(a.amount);
+        if (elements.sort.value === 'amount-asc') return Number(a.amount) - Number(b.amount);
+        return new Date(b.date) - new Date(a.date);
     });
-    const visibleTransactions = showAllTransactions
+    const hasFilters = Boolean(query) || type !== 'all' || category !== 'all';
+    const hasActiveControls = hasFilters || elements.sort.value !== 'newest';
+    const visibleTransactions = showAllTransactions || hasFilters
         ? matchingTransactions
         : matchingTransactions.slice(0, VISIBLE_TRANSACTION_LIMIT);
 
@@ -294,16 +740,24 @@ function renderTransactions() {
     renderIcons();
     elements.emptyState.hidden = matchingTransactions.length > 0;
     elements.transactionList.hidden = matchingTransactions.length === 0;
+    elements.emptyState.querySelector('strong').textContent = !matchingTransactions.length && monthTransactions.length && hasFilters
+        ? 'Tidak ada transaksi yang cocok'
+        : 'Belum ada transaksi';
+    elements.emptyState.querySelector('span:not(.empty-illustration)').textContent = monthTransactions.length && hasFilters
+        ? 'Coba ubah kata kunci atau pilihan filter.'
+        : 'Catat transaksi pertama untuk mulai melihat gambaran keuanganmu.';
+    elements.emptyState.querySelector('[data-open-form]').hidden = monthTransactions.length > 0;
     elements.listStatus.textContent = matchingTransactions.length > visibleTransactions.length
         ? `Menampilkan ${visibleTransactions.length} dari ${matchingTransactions.length} transaksi`
         : matchingTransactions.length
-            ? `${matchingTransactions.length} transaksi pada periode ini`
-            : query
-                ? 'Coba kata kunci lain atau pilih bulan yang berbeda.'
+            ? `${matchingTransactions.length} transaksi ditemukan pada periode ini`
+            : hasFilters
+                ? 'Coba ubah kata kunci atau pilihan filter.'
                 : '';
 
     const showAllButton = document.getElementById('showAllTransactions');
-    showAllButton.hidden = matchingTransactions.length <= VISIBLE_TRANSACTION_LIMIT;
+    showAllButton.hidden = matchingTransactions.length <= VISIBLE_TRANSACTION_LIMIT || hasFilters;
+    document.getElementById('clearTransactionFilters').hidden = !hasActiveControls;
     const arrow = document.createElement('span');
     arrow.setAttribute('aria-hidden', 'true');
     arrow.textContent = showAllTransactions ? '↑' : '→';
@@ -313,10 +767,20 @@ function renderTransactions() {
     );
 }
 
+function updateCategoryFilter() {
+    const selectedCategory = elements.categoryFilter.value;
+    const categories = [...new Set(transactions.map((transaction) => String(transaction.category || 'Umum').trim() || 'Umum'))]
+        .sort((a, b) => a.localeCompare(b, 'id-ID'));
+    const options = [new Option('Semua kategori', 'all'), ...categories.map((category) => new Option(category, category))];
+    elements.categoryFilter.replaceChildren(...options);
+    elements.categoryFilter.value = categories.includes(selectedCategory) ? selectedCategory : 'all';
+}
+
 function renderDashboard() {
     const monthTransactions = selectedMonthTransactions();
     updateSummary(monthTransactions);
     renderTransactions();
+    renderBudgets();
 }
 
 async function loadTransactions() {
@@ -589,9 +1053,49 @@ document.getElementById('todayLabel').textContent = new Intl.DateTimeFormat('id-
     month: 'long'
 }).format(new Date()).toLocaleUpperCase('id-ID');
 elements.monthFilter.value = localMonthValue();
-elements.monthFilter.addEventListener('change', renderDashboard);
+elements.monthFilter.addEventListener('change', () => {
+    renderDashboard();
+    loadBudgets();
+});
+elements.budgetForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    saveBudget(elements.budgetCategory.value, elements.budgetLimit.value);
+});
+elements.budgetList.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-action]');
+    const item = button?.closest('.budget-item');
+    if (!button || !item) return;
+    if (button.dataset.action === 'save-budget') {
+        saveBudget(item.querySelector('strong').textContent, item.querySelector('input').value);
+    } else if (button.dataset.action === 'delete-budget') {
+        deleteBudget(item.dataset.budgetId);
+    }
+});
+elements.goalForm.addEventListener('submit', createSavingsGoal);
+elements.goalList.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-action]');
+    const item = button?.closest('.goal-item');
+    if (!button || !item) return;
+    if (button.dataset.action === 'save-goal') {
+        updateSavingsGoal(item.dataset.goalId, item.querySelector('input').value);
+    } else if (button.dataset.action === 'delete-goal') {
+        deleteSavingsGoal(item.dataset.goalId);
+    }
+});
+elements.analysisButton.addEventListener('click', requestFinancialAnalysis);
 elements.search.addEventListener('input', () => {
     showAllTransactions = true;
+    renderTransactions();
+});
+elements.typeFilter.addEventListener('change', renderTransactions);
+elements.categoryFilter.addEventListener('change', renderTransactions);
+elements.sort.addEventListener('change', renderTransactions);
+document.getElementById('clearTransactionFilters').addEventListener('click', () => {
+    elements.search.value = '';
+    elements.typeFilter.value = 'all';
+    elements.categoryFilter.value = 'all';
+    elements.sort.value = 'newest';
+    showAllTransactions = false;
     renderTransactions();
 });
 document.getElementById('showAllTransactions').addEventListener('click', () => {
@@ -603,7 +1107,11 @@ elements.transactionList.addEventListener('click', (event) => {
     if (button) deleteTransaction(button);
 });
 document.getElementById('openTransaction').addEventListener('click', openTransactionDialog);
-document.getElementById('refreshButton').addEventListener('click', loadTransactions);
+document.getElementById('refreshButton').addEventListener('click', () => {
+    loadTransactions();
+    loadBudgets();
+    loadSavingsGoals();
+});
 document.getElementById('exportXlsx').addEventListener('click', exportTransactionsToXlsx);
 document.querySelectorAll('[data-open-form]').forEach((button) => {
     button.addEventListener('click', openTransactionDialog);
@@ -617,4 +1125,6 @@ elements.form.addEventListener('submit', submitTransaction);
 initializeTheme();
 initializeNavigation();
 renderIcons();
+loadBudgets();
+loadSavingsGoals();
 loadTransactions();
