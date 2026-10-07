@@ -1,5 +1,4 @@
 const express = require('express');
-const { Pool } = require('pg');
 const cors = require('cors');
 const { createHash, randomBytes } = require('node:crypto');
 require('dotenv').config();
@@ -7,88 +6,6 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 app.use(cors());
-
-// Koneksi ke Neon PostgreSQL (Konfigurasi SSL yang bersih & aman)
-const DATABASE_CONNECTION_STRING = process.env.DATABASE_URL
-    || process.env.DATABASE_URI
-    || process.env.MONGO_URI;
-if (!DATABASE_CONNECTION_STRING) {
-    console.error('Database belum dikonfigurasi. Atur DATABASE_URL atau DATABASE_URI ke connection string PostgreSQL.');
-}
-const pool = new Pool({
-    connectionString: DATABASE_CONNECTION_STRING,
-    ssl: { 
-        rejectUnauthorized: false 
-    },
-    connectionTimeoutMillis: 20000,
-    idleTimeoutMillis: 30000,
-    max: 5
-});
-
-// Inisialisasi tabel transaksi dan penanda update Telegram yang sudah diproses.
-const databaseReady = pool.query(`
-    CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-    )
-`).then(() => pool.query(`
-    CREATE TABLE IF NOT EXISTS telegram_link_codes (
-        code_hash TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        expires_at TIMESTAMP NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE TABLE IF NOT EXISTS telegram_user_links (
-        telegram_user_id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS telegram_user_links_owner_idx ON telegram_user_links (user_id);
-`)).then(() => pool.query(`
-    CREATE TABLE IF NOT EXISTS transactions (
-        id SERIAL PRIMARY KEY,
-        "desc" TEXT NOT NULL,
-        amount NUMERIC NOT NULL,
-        type VARCHAR(20) NOT NULL,
-        category VARCHAR(100) DEFAULT 'Umum',
-        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-`)).then(() => pool.query(`
-    CREATE TABLE IF NOT EXISTS telegram_processed_updates (
-        update_id BIGINT PRIMARY KEY,
-        processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-`)).then(() => pool.query(`
-    CREATE TABLE IF NOT EXISTS monthly_budgets (
-        id SERIAL PRIMARY KEY,
-        month CHAR(7) NOT NULL,
-        category VARCHAR(100) NOT NULL,
-        limit_amount NUMERIC NOT NULL CHECK (limit_amount > 0),
-        UNIQUE (month, category)
-    )
-`)).then(() => pool.query(`
-    CREATE TABLE IF NOT EXISTS savings_goals (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        target_amount NUMERIC NOT NULL CHECK (target_amount > 0),
-        current_amount NUMERIC NOT NULL DEFAULT 0 CHECK (current_amount >= 0),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-`)).then(() => pool.query(`
-    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id TEXT;
-    ALTER TABLE monthly_budgets ADD COLUMN IF NOT EXISTS user_id TEXT;
-    ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS user_id TEXT;
-    ALTER TABLE monthly_budgets DROP CONSTRAINT IF EXISTS monthly_budgets_month_category_key;
-    CREATE UNIQUE INDEX IF NOT EXISTS monthly_budgets_owner_month_category_idx
-        ON monthly_budgets (user_id, month, category);
-    CREATE INDEX IF NOT EXISTS transactions_owner_date_idx ON transactions (user_id, date DESC);
-    CREATE INDEX IF NOT EXISTS savings_goals_owner_idx ON savings_goals (user_id, created_at, id);
-`)).then(() => console.log("Berhasil terhubung ke Neon PostgreSQL! 🐘"))
-  .catch(err => {
-      console.error("Gagal inisialisasi database Neon:", err);
-      throw err;
-  });
-databaseReady.catch(() => {});
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
@@ -100,6 +17,67 @@ const FIREBASE_APP_ID = process.env.FIREBASE_APP_ID || '1:711365669554:web:4f7bd
 const FIREBASE_BOOTSTRAP_EMAIL = (
     process.env.FIREBASE_BOOTSTRAP_EMAIL || process.env.GOOGLE_BOOTSTRAP_EMAIL || 'busan6202@gmail.com'
 ).trim().toLowerCase();
+const NEON_DATA_API_URL = (
+    process.env.NEON_DATA_API_URL
+    || 'https://ep-winter-poetry-arl51lwx.apirest.c-4.us-west-2.aws.neon.tech/neondb/rest/v1'
+).replace(/\/+$/, '');
+
+async function dataApiRequest(resource, { token, method = 'GET', query, body, prefer, range } = {}) {
+    const url = new URL(`${NEON_DATA_API_URL}/${resource}`);
+    if (query) {
+        for (const [key, value] of Object.entries(query)) {
+            url.searchParams.set(key, value);
+        }
+    }
+    const headers = { Accept: 'application/json' };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (prefer) headers.Prefer = prefer;
+    if (range) {
+        headers['Range-Unit'] = 'items';
+        headers.Range = `${range.start}-${range.end}`;
+    }
+
+    const response = await fetch(url, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body)
+    });
+    const responseText = await response.text();
+    let result;
+    try {
+        result = responseText ? JSON.parse(responseText) : null;
+    } catch {
+        result = responseText;
+    }
+    if (!response.ok) {
+        const message = typeof result === 'object' && result
+            ? result.message || result.details || result.hint || result.code
+            : null;
+        const error = new Error(message || `Neon Data API merespons HTTP ${response.status}.`);
+        error.status = response.status;
+        throw error;
+    }
+    return result;
+}
+
+function userDataRequest(req, resource, options = {}) {
+    return dataApiRequest(resource, { ...options, token: req.firebaseToken });
+}
+
+async function userDataRows(req, resource, query) {
+    const pageSize = 500;
+    const rows = [];
+    for (let start = 0; ; start += pageSize) {
+        const page = await userDataRequest(req, resource, {
+            query,
+            range: { start, end: start + pageSize - 1 }
+        });
+        if (!Array.isArray(page)) throw new Error(`Neon Data API mengembalikan format data yang tidak valid untuk ${resource}.`);
+        rows.push(...page);
+        if (page.length < pageSize) return rows;
+    }
+}
 
 // Fungsi Kirim Pesan Telegram
 async function sendTelegramMessage(chatId, text) {
@@ -187,43 +165,32 @@ async function callGeminiAudioAPI(prompt, base64Audio, retries = 3, delay = 2000
 }
 
 // Fungsi Simpan Transaksi & Analisis Saku Harian AI
-async function saveAndNotify(trxData, chatId, updateId, userId) {
+async function saveAndNotify(trxData, chatId, updateId, telegramUserId) {
     if (!Number.isSafeInteger(updateId) || updateId < 0) {
         throw new Error('ID update Telegram tidak valid.');
     }
-    if (!userId) throw new Error('Akun Telegram belum ditautkan ke pengguna.');
+    if (!telegramUserId) throw new Error('Akun Telegram belum tertaut.');
 
-    await databaseReady;
-    const query = `
-        WITH claimed_update AS (
-            INSERT INTO telegram_processed_updates (update_id)
-            VALUES ($1)
-            ON CONFLICT (update_id) DO NOTHING
-            RETURNING update_id
-        )
-        INSERT INTO transactions ("desc", amount, type, category, user_id)
-        SELECT $2, $3, $4, $5, $6
-        FROM claimed_update
-        RETURNING *
-    `;
-    const values = [updateId, trxData.desc, trxData.amount, trxData.type, trxData.category || 'Umum', userId];
-    const result = await pool.query(query, values);
-    if (result.rowCount === 0) {
+    const result = await dataApiRequest('rpc/telegram_save_transaction', {
+        method: 'POST',
+        body: {
+            p_telegram_user_id: telegramUserId,
+            p_update_id: updateId,
+            p_desc: trxData.desc,
+            p_amount: trxData.amount,
+            p_type: trxData.type,
+            p_category: trxData.category || 'Umum',
+            p_secret: TELEGRAM_WEBHOOK_SECRET
+        }
+    });
+    if (!result?.inserted) {
         console.info(`Update Telegram ${updateId} sudah diproses; transaksi duplikat diabaikan.`);
         return false;
     }
 
-    const savedTrx = result.rows[0];
-
-    const totals = await pool.query(`
-        SELECT
-            COALESCE(SUM(amount) FILTER (WHERE type = 'income'), 0) AS income,
-            COALESCE(SUM(amount) FILTER (WHERE type = 'expense'), 0) AS expense
-        FROM transactions
-            WHERE user_id = $1
-    `, [savedTrx.user_id]);
-    const totalIncome = Number(totals.rows[0].income);
-    const totalExpense = Number(totals.rows[0].expense);
+    const savedTrx = result.transaction;
+    const totalIncome = Number(result.income);
+    const totalExpense = Number(result.expense);
     const balance = totalIncome - totalExpense;
 
     let financialAdvice = "";
@@ -258,12 +225,14 @@ ${financialAdvice}
 // API: Ambil Semua Transaksi (Untuk Web)
 app.get('/api/transactions', authenticateFirebaseUser, async (req, res) => {
     try {
-        const result = await pool.query(
-            'SELECT id, "desc", amount, type, category, date FROM transactions WHERE user_id = $1 ORDER BY date DESC',
-            [req.user.id]
-        );
-        res.json(result.rows);
+        const result = await userDataRows(req, 'transactions', {
+            select: 'id,desc,amount,type,category,date',
+            user_id: `eq.${req.user.id}`,
+            order: 'date.desc,id.desc'
+        });
+        res.json(result);
     } catch (err) {
+        console.error('Gagal memuat transaksi dari Neon Data API:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -272,11 +241,24 @@ app.get('/api/transactions', authenticateFirebaseUser, async (req, res) => {
 app.post('/api/transactions', authenticateFirebaseUser, async (req, res) => {
     try {
         const { desc, amount, type, category } = req.body;
-        const query = `INSERT INTO transactions ("desc", amount, type, category, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, "desc", amount, type, category, date`;
-        const values = [desc, amount, type, category || 'Umum', req.user.id];
-        const result = await pool.query(query, values);
-        res.status(201).json(result.rows[0]);
+        if (typeof desc !== 'string' || !desc.trim() || desc.length > 500
+            || !isValidPositiveAmount(amount) || !['income', 'expense'].includes(type)) {
+            return res.status(400).json({ error: 'Keterangan, nominal, atau tipe transaksi tidak valid.' });
+        }
+        const result = await userDataRequest(req, 'transactions', {
+            method: 'POST',
+            prefer: 'return=representation',
+            body: {
+                desc: desc.trim(),
+                amount: Number(amount),
+                type,
+                category: typeof category === 'string' && category.trim() ? category.trim().slice(0, 100) : 'Umum',
+                user_id: req.user.id
+            }
+        });
+        res.status(201).json(result[0]);
     } catch (err) {
+        console.error('Gagal menyimpan transaksi:', err);
         res.status(400).json({ error: err.message });
     }
 });
@@ -289,8 +271,12 @@ app.delete('/api/transactions/:id', authenticateFirebaseUser, async (req, res) =
     }
 
     try {
-        const result = await pool.query('DELETE FROM transactions WHERE id = $1 AND user_id = $2 RETURNING id', [id, req.user.id]);
-        if (result.rowCount === 0) {
+        const result = await userDataRequest(req, 'transactions', {
+            method: 'DELETE',
+            prefer: 'return=representation',
+            query: { id: `eq.${id}`, user_id: `eq.${req.user.id}`, select: 'id' }
+        });
+        if (!result.length) {
             return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
         }
         res.sendStatus(204);
@@ -337,13 +323,6 @@ async function authenticateFirebaseUser(req, res, next) {
     if (!tokenMatch) return res.status(401).json({ error: 'Silakan masuk dengan akun Google terlebih dahulu.' });
 
     try {
-        await databaseReady;
-    } catch (err) {
-        console.error('Database belum siap untuk autentikasi Firebase:', err);
-        return res.status(503).json({ error: 'Database belum siap. Coba login lagi beberapa saat kemudian.' });
-    }
-
-    try {
         let response;
         try {
             response = await fetch(
@@ -379,71 +358,46 @@ async function authenticateFirebaseUser(req, res, next) {
             name: firebaseUser.displayName || firebaseUser.email,
             picture: firebaseUser.photoUrl || ''
         };
-        if (user.email === FIREBASE_BOOTSTRAP_EMAIL) {
-            const client = await pool.connect();
-            try {
-                await client.query('BEGIN');
-                await client.query(`
-                    INSERT INTO app_settings (key, value)
-                    VALUES ('bootstrap_google_sub', $1)
-                    ON CONFLICT (key) DO NOTHING
-                `, [user.id]);
-                const owner = await client.query(
-                    "SELECT value FROM app_settings WHERE key = 'bootstrap_google_sub' FOR UPDATE"
-                );
-                const previousOwnerId = owner.rows[0]?.value;
-                await client.query(
-                    'UPDATE transactions SET user_id = $1 WHERE user_id IS NULL OR user_id = $2',
-                    [user.id, previousOwnerId]
-                );
-                await client.query(
-                    'UPDATE monthly_budgets SET user_id = $1 WHERE user_id IS NULL OR user_id = $2',
-                    [user.id, previousOwnerId]
-                );
-                await client.query(
-                    'UPDATE savings_goals SET user_id = $1 WHERE user_id IS NULL OR user_id = $2',
-                    [user.id, previousOwnerId]
-                );
-                if (previousOwnerId !== user.id) {
-                    await client.query(
-                        "UPDATE app_settings SET value = $1 WHERE key = 'bootstrap_google_sub'",
-                        [user.id]
-                    );
-                }
-                await client.query('COMMIT');
-            } catch (err) {
-                await client.query('ROLLBACK');
-                throw err;
-            } finally {
-                client.release();
-            }
-        }
         req.user = user;
+        req.firebaseToken = tokenMatch[1];
         next();
     } catch (err) {
-        console.error('Gagal memverifikasi sesi Firebase atau menyiapkan data pengguna:', err);
-        res.status(500).json({ error: 'Sesi akun tidak dapat diverifikasi atau data akun tidak dapat dimuat.' });
+        console.error('Gagal memverifikasi sesi Firebase:', err);
+        res.status(500).json({ error: 'Sesi akun tidak dapat diverifikasi.' });
     }
 }
 
-app.post('/api/auth/session', authenticateFirebaseUser, (req, res) => {
+app.post('/api/auth/session', authenticateFirebaseUser, async (req, res) => {
+    if (req.user.email === FIREBASE_BOOTSTRAP_EMAIL) {
+        try {
+            await userDataRequest(req, 'rpc/claim_legacy_saku_data', { method: 'POST', body: {} });
+            if (TELEGRAM_WEBHOOK_SECRET) {
+                await userDataRequest(req, 'rpc/set_telegram_webhook_secret', {
+                    method: 'POST',
+                    body: { p_secret: TELEGRAM_WEBHOOK_SECRET }
+                });
+            }
+        } catch (err) {
+            console.error('Gagal menyiapkan data pemilik di Neon Data API:', err);
+            return res.status(503).json({ error: 'Data akun belum siap di Neon. Pastikan skrip SQL Data API telah dijalankan.' });
+        }
+    }
     res.json({ user: req.user });
 });
 
 app.post('/api/telegram/link-code', authenticateFirebaseUser, async (req, res) => {
     try {
-        await databaseReady;
         const code = randomBytes(5).toString('hex').toUpperCase();
         const codeHash = createHash('sha256').update(code).digest('hex');
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-        await pool.query(
-            'DELETE FROM telegram_link_codes WHERE user_id = $1 OR expires_at <= NOW()',
-            [req.user.id]
-        );
-        await pool.query(
-            'INSERT INTO telegram_link_codes (code_hash, user_id, expires_at) VALUES ($1, $2, $3)',
-            [codeHash, req.user.id, expiresAt]
-        );
+        await userDataRequest(req, 'telegram_link_codes', {
+            method: 'DELETE',
+            query: { user_id: `eq.${req.user.id}` }
+        });
+        await userDataRequest(req, 'telegram_link_codes', {
+            method: 'POST',
+            body: { code_hash: codeHash, user_id: req.user.id, expires_at: expiresAt.toISOString() }
+        });
         res.json({ code, expiresAt: expiresAt.toISOString() });
     } catch (err) {
         console.error('Gagal membuat kode pengaitan Telegram:', err);
@@ -455,12 +409,15 @@ app.get('/api/budgets', authenticateFirebaseUser, async (req, res) => {
     const { month } = req.query;
     if (!isValidMonth(month)) return res.status(400).json({ error: 'Bulan budget tidak valid.' });
     try {
-        await databaseReady;
-        const result = await pool.query(
-            'SELECT id, month, category, limit_amount FROM monthly_budgets WHERE month = $1 AND user_id = $2 ORDER BY category',
-            [month, req.user.id]
-        );
-        res.json(result.rows);
+        const result = await userDataRequest(req, 'monthly_budgets', {
+            query: {
+                select: 'id,month,category,limit_amount',
+                month: `eq.${month}`,
+                user_id: `eq.${req.user.id}`,
+                order: 'category.asc'
+            }
+        });
+        res.json(result);
     } catch (err) {
         console.error('Gagal mengambil budget:', err);
         res.status(500).json({ error: 'Budget tidak dapat dimuat.' });
@@ -474,14 +431,18 @@ app.put('/api/budgets', authenticateFirebaseUser, async (req, res) => {
         return res.status(400).json({ error: 'Bulan, kategori, atau batas budget tidak valid.' });
     }
     try {
-        await databaseReady;
-        const result = await pool.query(`
-            INSERT INTO monthly_budgets (month, category, limit_amount, user_id)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (user_id, month, category) DO UPDATE SET limit_amount = EXCLUDED.limit_amount
-            RETURNING id, month, category, limit_amount
-        `, [month, normalizedCategory, Number(limitAmount), req.user.id]);
-        res.json(result.rows[0]);
+        const result = await userDataRequest(req, 'monthly_budgets', {
+            method: 'POST',
+            prefer: 'resolution=merge-duplicates,return=representation',
+            query: { on_conflict: 'user_id,month,category', select: 'id,month,category,limit_amount' },
+            body: {
+                month,
+                category: normalizedCategory,
+                limit_amount: Number(limitAmount),
+                user_id: req.user.id
+            }
+        });
+        res.json(result[0]);
     } catch (err) {
         console.error('Gagal menyimpan budget:', err);
         res.status(500).json({ error: 'Budget gagal disimpan.' });
@@ -491,9 +452,12 @@ app.put('/api/budgets', authenticateFirebaseUser, async (req, res) => {
 app.delete('/api/budgets/:id', authenticateFirebaseUser, async (req, res) => {
     if (!isValidPositiveId(req.params.id)) return res.status(400).json({ error: 'ID budget tidak valid.' });
     try {
-        await databaseReady;
-        const result = await pool.query('DELETE FROM monthly_budgets WHERE id = $1 AND user_id = $2 RETURNING id', [req.params.id, req.user.id]);
-        if (result.rowCount === 0) return res.status(404).json({ error: 'Budget tidak ditemukan.' });
+        const result = await userDataRequest(req, 'monthly_budgets', {
+            method: 'DELETE',
+            prefer: 'return=representation',
+            query: { id: `eq.${req.params.id}`, user_id: `eq.${req.user.id}`, select: 'id' }
+        });
+        if (!result.length) return res.status(404).json({ error: 'Budget tidak ditemukan.' });
         res.sendStatus(204);
     } catch (err) {
         console.error('Gagal menghapus budget:', err);
@@ -503,9 +467,14 @@ app.delete('/api/budgets/:id', authenticateFirebaseUser, async (req, res) => {
 
 app.get('/api/savings-goals', authenticateFirebaseUser, async (req, res) => {
     try {
-        await databaseReady;
-        const result = await pool.query('SELECT id, name, target_amount, current_amount FROM savings_goals WHERE user_id = $1 ORDER BY created_at, id', [req.user.id]);
-        res.json(result.rows);
+        const result = await userDataRequest(req, 'savings_goals', {
+            query: {
+                select: 'id,name,target_amount,current_amount',
+                user_id: `eq.${req.user.id}`,
+                order: 'created_at.asc,id.asc'
+            }
+        });
+        res.json(result);
     } catch (err) {
         console.error('Gagal mengambil target tabungan:', err);
         res.status(500).json({ error: 'Target tabungan tidak dapat dimuat.' });
@@ -520,13 +489,17 @@ app.post('/api/savings-goals', authenticateFirebaseUser, async (req, res) => {
         return res.status(400).json({ error: 'Nama atau nominal target tabungan tidak valid.' });
     }
     try {
-        await databaseReady;
-        const result = await pool.query(`
-            INSERT INTO savings_goals (name, target_amount, current_amount, user_id)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id, name, target_amount, current_amount
-        `, [normalizedName, Number(targetAmount), Number(currentAmount), req.user.id]);
-        res.status(201).json(result.rows[0]);
+        const result = await userDataRequest(req, 'savings_goals', {
+            method: 'POST',
+            prefer: 'return=representation',
+            body: {
+                name: normalizedName,
+                target_amount: Number(targetAmount),
+                current_amount: Number(currentAmount),
+                user_id: req.user.id
+            }
+        });
+        res.status(201).json(result[0]);
     } catch (err) {
         console.error('Gagal membuat target tabungan:', err);
         res.status(500).json({ error: 'Target tabungan gagal dibuat.' });
@@ -539,14 +512,14 @@ app.patch('/api/savings-goals/:id', authenticateFirebaseUser, async (req, res) =
         return res.status(400).json({ error: 'ID atau saldo target tabungan tidak valid.' });
     }
     try {
-        await databaseReady;
-        const result = await pool.query(`
-            UPDATE savings_goals SET current_amount = $1
-            WHERE id = $2 AND user_id = $3
-            RETURNING id, name, target_amount, current_amount
-        `, [Number(currentAmount), req.params.id, req.user.id]);
-        if (result.rowCount === 0) return res.status(404).json({ error: 'Target tabungan tidak ditemukan.' });
-        res.json(result.rows[0]);
+        const result = await userDataRequest(req, 'savings_goals', {
+            method: 'PATCH',
+            prefer: 'return=representation',
+            query: { id: `eq.${req.params.id}`, user_id: `eq.${req.user.id}` },
+            body: { current_amount: Number(currentAmount) }
+        });
+        if (!result.length) return res.status(404).json({ error: 'Target tabungan tidak ditemukan.' });
+        res.json(result[0]);
     } catch (err) {
         console.error('Gagal memperbarui target tabungan:', err);
         res.status(500).json({ error: 'Saldo target tabungan gagal diperbarui.' });
@@ -556,9 +529,12 @@ app.patch('/api/savings-goals/:id', authenticateFirebaseUser, async (req, res) =
 app.delete('/api/savings-goals/:id', authenticateFirebaseUser, async (req, res) => {
     if (!isValidPositiveId(req.params.id)) return res.status(400).json({ error: 'ID target tabungan tidak valid.' });
     try {
-        await databaseReady;
-        const result = await pool.query('DELETE FROM savings_goals WHERE id = $1 AND user_id = $2 RETURNING id', [req.params.id, req.user.id]);
-        if (result.rowCount === 0) return res.status(404).json({ error: 'Target tabungan tidak ditemukan.' });
+        const result = await userDataRequest(req, 'savings_goals', {
+            method: 'DELETE',
+            prefer: 'return=representation',
+            query: { id: `eq.${req.params.id}`, user_id: `eq.${req.user.id}`, select: 'id' }
+        });
+        if (!result.length) return res.status(404).json({ error: 'Target tabungan tidak ditemukan.' });
         res.sendStatus(204);
     } catch (err) {
         console.error('Gagal menghapus target tabungan:', err);
@@ -572,67 +548,91 @@ app.post('/api/financial-analysis', authenticateFirebaseUser, async (req, res) =
     if (!GEMINI_API_KEY) return res.status(503).json({ error: 'Analisis AI belum dikonfigurasi di server.' });
 
     try {
-        await databaseReady;
-        const [monthlyResult, categoryResult, trendResult, budgetResult, goalsResult] = await Promise.all([
-            pool.query(`
-                SELECT type, COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count
-                FROM transactions
-                WHERE date >= $1::date AND date < ($1::date + INTERVAL '1 month')
-                    AND user_id = $2
-                GROUP BY type
-            `, [`${month}-01`, req.user.id]),
-            pool.query(`
-                SELECT category, SUM(amount) AS total, COUNT(*) AS count
-                FROM transactions
-                WHERE type = 'expense'
-                    AND date >= $1::date AND date < ($1::date + INTERVAL '1 month')
-                    AND user_id = $2
-                GROUP BY category ORDER BY total DESC LIMIT 10
-            `, [`${month}-01`, req.user.id]),
-            pool.query(`
-                SELECT TO_CHAR(date, 'YYYY-MM') AS month, type, SUM(amount) AS total
-                FROM transactions
-                WHERE date >= ($1::date - INTERVAL '5 months')
-                    AND date < ($1::date + INTERVAL '1 month')
-                    AND user_id = $2
-                GROUP BY TO_CHAR(date, 'YYYY-MM'), type
-                ORDER BY month
-            `, [`${month}-01`, req.user.id]),
-            pool.query(`
-                SELECT b.category, b.limit_amount, COALESCE(SUM(t.amount), 0) AS spent
-                FROM monthly_budgets b
-                LEFT JOIN transactions t
-                    ON t.category = b.category AND t.type = 'expense'
-                    AND t.date >= $1::date AND t.date < ($1::date + INTERVAL '1 month')
-                    AND t.user_id = $3
-                WHERE b.month = $2 AND b.user_id = $3
-                GROUP BY b.id, b.category, b.limit_amount
-                ORDER BY b.category
-            `, [`${month}-01`, month, req.user.id]),
-            pool.query('SELECT name, target_amount, current_amount FROM savings_goals WHERE user_id = $1 ORDER BY created_at, id', [req.user.id])
+        const [year, monthIndex] = month.split('-').map(Number);
+        const periodStart = new Date(Date.UTC(year, monthIndex - 1, 1));
+        const periodEnd = new Date(Date.UTC(year, monthIndex, 1));
+        const trendStart = new Date(Date.UTC(year, monthIndex - 6, 1));
+        const iso = (date) => date.toISOString();
+        const [transactions, budgetRows, goalsRows] = await Promise.all([
+            userDataRows(req, 'transactions', {
+                select: 'amount,type,category,date',
+                user_id: `eq.${req.user.id}`,
+                and: `(date.gte.${iso(trendStart)},date.lt.${iso(periodEnd)})`,
+                order: 'date.asc,id.asc'
+            }),
+            userDataRequest(req, 'monthly_budgets', {
+                query: {
+                    select: 'category,limit_amount',
+                    user_id: `eq.${req.user.id}`,
+                    month: `eq.${month}`,
+                    order: 'category.asc'
+                }
+            }),
+            userDataRequest(req, 'savings_goals', {
+                query: {
+                    select: 'name,target_amount,current_amount',
+                    user_id: `eq.${req.user.id}`,
+                    order: 'created_at.asc,id.asc'
+                }
+            })
         ]);
-
+        const inPeriod = transactions.filter((row) => {
+            const date = new Date(row.date);
+            return date >= periodStart && date < periodEnd;
+        });
         const totals = { income: 0, expense: 0 };
-        monthlyResult.rows.forEach((row) => { totals[row.type] = Number(row.total); });
+        const typeCounts = { income: 0, expense: 0 };
+        const categoryTotals = new Map();
+        const trendTotals = new Map();
+        for (const row of transactions) {
+            const amount = Number(row.amount);
+            const transactionMonth = new Date(row.date).toISOString().slice(0, 7);
+            const trendKey = `${transactionMonth}:${row.type}`;
+            trendTotals.set(trendKey, (trendTotals.get(trendKey) || 0) + amount);
+            if (new Date(row.date) >= periodStart && new Date(row.date) < periodEnd) {
+                totals[row.type] += amount;
+                typeCounts[row.type] += 1;
+                if (row.type === 'expense') {
+                    const category = categoryTotals.get(row.category) || { total: 0, count: 0 };
+                    category.total += amount;
+                    category.count += 1;
+                    categoryTotals.set(row.category, category);
+                }
+            }
+        }
+        const expensesByCategory = [...categoryTotals.entries()]
+            .map(([category, values]) => ({
+                category,
+                amount: values.total,
+                transactionCount: values.count
+            }))
+            .sort((a, b) => b.amount - a.amount)
+            .slice(0, 10);
+        const sixMonthTrend = [...trendTotals.entries()]
+            .map(([key, amount]) => {
+                const [trendMonth, type] = key.split(':');
+                return { month: trendMonth, type, amount };
+            })
+            .sort((a, b) => a.month.localeCompare(b.month));
+        const expensesForPeriodByCategory = new Map();
+        inPeriod.filter((row) => row.type === 'expense').forEach((row) => {
+            expensesForPeriodByCategory.set(
+                row.category,
+                (expensesForPeriodByCategory.get(row.category) || 0) + Number(row.amount)
+            );
+        });
         const promptData = {
             month,
             totals,
-            expensesByCategory: categoryResult.rows.map((row) => ({
-                category: row.category,
-                amount: Number(row.total),
-                transactionCount: Number(row.count)
-            })),
-            sixMonthTrend: trendResult.rows.map((row) => ({
-                month: row.month,
-                type: row.type,
-                amount: Number(row.total)
-            })),
-            categoryBudgets: budgetResult.rows.map((row) => ({
+            transactionCounts: typeCounts,
+            expensesByCategory,
+            sixMonthTrend,
+            categoryBudgets: budgetRows.map((row) => ({
                 category: row.category,
                 limit: Number(row.limit_amount),
-                spent: Number(row.spent)
+                spent: expensesForPeriodByCategory.get(row.category) || 0
             })),
-            savingsGoals: goalsResult.rows.map((row) => ({
+            savingsGoals: goalsRows.map((row) => ({
                 name: row.name,
                 target: Number(row.target_amount),
                 saved: Number(row.current_amount)
@@ -651,9 +651,13 @@ app.post('/api/financial-analysis', authenticateFirebaseUser, async (req, res) =
 // API: Export Excel (CSV)
 app.get('/api/export-excel', authenticateFirebaseUser, async (req, res) => {
     try {
-        const result = await pool.query('SELECT id, "desc", amount, type, category, date FROM transactions WHERE user_id = $1 ORDER BY date DESC', [req.user.id]);
+        const result = await userDataRows(req, 'transactions', {
+            select: 'id,desc,amount,type,category,date',
+            user_id: `eq.${req.user.id}`,
+            order: 'date.desc,id.desc'
+        });
         let csvContent = "ID,Keterangan,Nominal,Tipe,Kategori,Tanggal\n";
-        result.rows.forEach(row => {
+        result.forEach(row => {
             const desc = `"${row.desc.replace(/"/g, '""')}"`;
             csvContent += `${row.id},${desc},${row.amount},${row.type === 'income' ? 'Pemasukan' : 'Pengeluaran'},"${row.category}","${row.date}"\n`;
         });
@@ -661,6 +665,7 @@ app.get('/api/export-excel', authenticateFirebaseUser, async (req, res) => {
         res.setHeader('Content-Disposition', 'attachment; filename="laporan-keuangan-saku-harian.csv"');
         res.status(200).send(csvContent);
     } catch (err) {
+        console.error('Gagal mengekspor transaksi:', err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -694,7 +699,6 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
     if (message.chat.type !== 'private' || !telegramUserId) return res.sendStatus(200);
 
     try {
-        await databaseReady;
         const linkCommand = text.match(/^\/link(?:@\w+)?(?:\s+([A-Fa-f0-9]{10}))?$/);
         if (linkCommand) {
             if (!linkCommand[1]) {
@@ -702,40 +706,29 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
                 return res.sendStatus(200);
             }
             const codeHash = createHash('sha256').update(linkCommand[1].toUpperCase()).digest('hex');
-            const client = await pool.connect();
-            try {
-                await client.query('BEGIN');
-                const codeResult = await client.query(
-                    'DELETE FROM telegram_link_codes WHERE code_hash = $1 AND expires_at > NOW() RETURNING user_id',
-                    [codeHash]
-                );
-                if (!codeResult.rows[0]) {
-                    await client.query('ROLLBACK');
-                    await sendTelegramMessage(chatId, 'Kode tidak valid atau sudah kedaluwarsa. Buat kode baru dari dashboard.');
-                    return res.sendStatus(200);
+            const linked = await dataApiRequest('rpc/telegram_link_account', {
+                method: 'POST',
+                body: {
+                    p_telegram_user_id: telegramUserId,
+                    p_code_hash: codeHash,
+                    p_secret: TELEGRAM_WEBHOOK_SECRET
                 }
-                await client.query(`
-                    INSERT INTO telegram_user_links (telegram_user_id, user_id, linked_at)
-                    VALUES ($1, $2, CURRENT_TIMESTAMP)
-                    ON CONFLICT (telegram_user_id) DO UPDATE
-                    SET user_id = EXCLUDED.user_id, linked_at = CURRENT_TIMESTAMP
-                `, [telegramUserId, codeResult.rows[0].user_id]);
-                await client.query('COMMIT');
-            } catch (err) {
-                await client.query('ROLLBACK');
-                throw err;
-            } finally {
-                client.release();
+            });
+            if (linked !== true) {
+                await sendTelegramMessage(chatId, 'Kode tidak valid atau sudah kedaluwarsa. Buat kode baru dari dashboard.');
+                return res.sendStatus(200);
             }
             await sendTelegramMessage(chatId, '✅ Akun Telegram berhasil ditautkan. Transaksi bot sekarang akan masuk ke akun Saku Harian Anda.');
             return res.sendStatus(200);
         }
 
-        const linkResult = await pool.query(
-            'SELECT user_id FROM telegram_user_links WHERE telegram_user_id = $1',
-            [telegramUserId]
-        );
-        const userId = linkResult.rows[0]?.user_id;
+        const userId = await dataApiRequest('rpc/telegram_get_user', {
+            method: 'POST',
+            body: {
+                p_telegram_user_id: telegramUserId,
+                p_secret: TELEGRAM_WEBHOOK_SECRET
+            }
+        });
 
         // 1. FOTO NOTA
         if (photo && photo.length > 0) {
@@ -756,7 +749,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             
             const rawText = await callGeminiAPI(prompt, base64Image);
             let parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
-            await saveAndNotify(parsed, chatId, update.update_id, userId);
+            await saveAndNotify(parsed, chatId, update.update_id, telegramUserId);
         } 
         // 2. VOICE NOTE (REKAMAN SUARA)
         else if (voice) {
@@ -776,7 +769,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             
             const rawText = await callGeminiAudioAPI(prompt, base64Audio);
             let parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
-            await saveAndNotify(parsed, chatId, update.update_id, userId);
+            await saveAndNotify(parsed, chatId, update.update_id, telegramUserId);
         }
         // 3. PESAN TEKS / KONSULTASI
         else if (text) {
@@ -793,7 +786,10 @@ ${userId
             }
 
             if (/^\/unlink(?:@\w+)?(?:\s|$)/.test(text)) {
-                await pool.query('DELETE FROM telegram_user_links WHERE telegram_user_id = $1', [telegramUserId]);
+                await dataApiRequest('rpc/telegram_unlink_user', {
+                    method: 'POST',
+                    body: { p_telegram_user_id: telegramUserId, p_secret: TELEGRAM_WEBHOOK_SECRET }
+                });
                 await sendTelegramMessage(chatId, 'Akun Telegram berhasil dilepas dari Saku Harian.');
                 return res.sendStatus(200);
             }
@@ -804,15 +800,12 @@ ${userId
             }
 
             if (text.startsWith('/saldo') || text.startsWith('/rekap')) {
-                const result = await pool.query(`
-                    SELECT
-                        COALESCE(SUM(amount) FILTER (WHERE type = 'income'), 0) AS income,
-                        COALESCE(SUM(amount) FILTER (WHERE type = 'expense'), 0) AS expense
-                    FROM transactions
-                    WHERE user_id = $1
-                `, [userId]);
-                const totalIncome = Number(result.rows[0].income);
-                const totalExpense = Number(result.rows[0].expense);
+                const result = await dataApiRequest('rpc/telegram_get_balance', {
+                    method: 'POST',
+                    body: { p_telegram_user_id: telegramUserId, p_secret: TELEGRAM_WEBHOOK_SECRET }
+                });
+                const totalIncome = Number(result.income);
+                const totalExpense = Number(result.expense);
                 const balance = totalIncome - totalExpense;
 
                 await sendTelegramMessage(chatId, `📊 *REKAP KEUANGAN SAKU HARIAN*\n🟢 Pemasukan: Rp ${totalIncome.toLocaleString('id-ID')}\n🔴 Pengeluaran: Rp ${totalExpense.toLocaleString('id-ID')}\n💰 *Saldo:* Rp ${balance.toLocaleString('id-ID')}`);
@@ -820,16 +813,16 @@ ${userId
             }
 
             if (text.startsWith('/history') || text.startsWith('/riwayat')) {
-                const result = await pool.query(
-                    'SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC LIMIT 5',
-                    [userId]
-                );
-                if (result.rows.length === 0) {
+                const result = await dataApiRequest('rpc/telegram_get_history', {
+                    method: 'POST',
+                    body: { p_telegram_user_id: telegramUserId, p_secret: TELEGRAM_WEBHOOK_SECRET }
+                });
+                if (result.length === 0) {
                     await sendTelegramMessage(chatId, "📂 Belum ada catatan transaksi.");
                     return res.sendStatus(200);
                 }
                 let msg = "📜 *5 TRANSAKSI TERAKHIR*\n";
-                result.rows.forEach((t, i) => {
+                result.forEach((t, i) => {
                     msg += `${i+1}. *${t.desc}* (${t.category}) — ${t.type==='income'?'+':'-'}Rp ${Number(t.amount).toLocaleString('id-ID')}\n`;
                 });
                 await sendTelegramMessage(chatId, msg);
@@ -837,7 +830,10 @@ ${userId
             }
 
             if (text.startsWith('/reset')) {
-                await pool.query('DELETE FROM transactions WHERE user_id = $1', [userId]);
+                await dataApiRequest('rpc/telegram_reset_transactions', {
+                    method: 'POST',
+                    body: { p_telegram_user_id: telegramUserId, p_secret: TELEGRAM_WEBHOOK_SECRET }
+                });
                 await sendTelegramMessage(chatId, "🗑️ *Reset Berhasil!* Semua data keuangan dibersihkan.");
                 return res.sendStatus(200);
             }
@@ -855,7 +851,7 @@ ${userId
             const parsed = JSON.parse(cleanedJson);
 
             if (parsed.isTransaction) {
-                await saveAndNotify(parsed, chatId, update.update_id, userId);
+                await saveAndNotify(parsed, chatId, update.update_id, telegramUserId);
             } else {
                 await sendTelegramMessage(chatId, `🤖 *Saku Harian:* ${parsed.reply}`);
             }
