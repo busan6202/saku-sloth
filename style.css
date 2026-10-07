@@ -54,7 +54,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .auth-card h1 span { color: #71964f; }
 [data-theme="dark"] .auth-card h1 span { color: var(--green); }
 .auth-card .welcome-copy { margin: 12px 0 22px; line-height: 1.6; }
-.google-signin { min-height: 42px; }
+.google-signin { display: flex; justify-content: center; width: 100%; min-height: 44px; }
 .auth-status { min-height: 18px; margin: 12px 0 0; color: var(--muted); font-size: 11px; }
 .auth-data-note { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.55; }
 .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 5; display: flex; flex-direction: column; width: 246px; padding: 30px 20px 18px; background: var(--surface); border-right: 1px solid var(--line); }

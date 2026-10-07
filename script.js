@@ -668,7 +668,7 @@ async function initializeGoogleSignIn() {
             size: 'large',
             text: 'signin_with',
             shape: 'rectangular',
-            width: 300,
+            width: Math.min(Math.floor(elements.googleSignInButton.getBoundingClientRect().width), 400),
             logo_alignment: 'left'
         });
         elements.authStatus.textContent = 'Pilih akun Google untuk masuk.';
