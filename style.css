@@ -171,7 +171,7 @@ h1 span { color: #71964f; }
 .text-button:hover { color: var(--ink); }
 .text-button span { margin-left: 4px; font-size: 14px; }
 .transaction-list { display: grid; }
-.transaction-row { display: grid; grid-template-columns: minmax(165px, 1.5fr) minmax(100px, 1fr) minmax(110px, 1fr) auto; align-items: center; gap: 12px; min-height: 66px; border-top: 1px solid var(--line); }
+.transaction-row { display: grid; grid-template-columns: minmax(165px, 1.5fr) minmax(100px, 1fr) minmax(110px, 1fr) auto auto; align-items: center; gap: 12px; min-height: 66px; border-top: 1px solid var(--line); }
 .transaction-main { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .transaction-icon { display: grid; flex: 0 0 38px; width: 38px; height: 38px; place-items: center; border-radius: 12px; background: var(--surface-soft); color: var(--muted); }
 .transaction-icon svg { width: 19px; height: 19px; stroke-width: 1.8; }
@@ -191,6 +191,10 @@ h1 span { color: #71964f; }
 .transaction-amount { font-family: var(--font-display); font-size: 12px; font-weight: 700; text-align: right; white-space: nowrap; }
 .transaction-amount.income { color: #668e43; }
 .transaction-amount.expense { color: var(--ink); }
+.transaction-delete { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; transition: .18s ease; }
+.transaction-delete:hover { border-color: #f0c2ba; background: var(--red-soft); color: #b35c52; }
+.transaction-delete:disabled { opacity: .6; cursor: progress; }
+.transaction-delete svg { width: 16px; height: 16px; }
 .loading-state { display: flex; align-items: center; justify-content: center; gap: 9px; min-height: 100px; color: var(--muted); font-size: 11px; }
 .spinner { width: 15px; height: 15px; border: 2px solid var(--line); border-top-color: #83ab58; border-radius: 50%; animation: spin .75s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -265,7 +269,7 @@ h1 span { color: #71964f; }
     .transaction-tools { width: 100%; justify-content: space-between; }
     .search-box { flex: 1; }
     .search-box input { width: 100%; }
-    .transaction-row { grid-template-columns: minmax(0, 1fr) auto; gap: 7px 12px; min-height: 80px; padding: 13px 0; }
+    .transaction-row { grid-template-columns: minmax(0, 1fr) auto auto; gap: 7px 12px; min-height: 80px; padding: 13px 0; }
     .transaction-main { grid-column: 1; grid-row: 1; }
     .transaction-icon { flex-basis: 44px; width: 44px; height: 44px; border-radius: 14px; }
     .transaction-icon svg { width: 21px; height: 21px; }
@@ -274,6 +278,7 @@ h1 span { color: #71964f; }
     .transaction-date { grid-column: 1; grid-row: 2; padding-left: 55px; font-size: 10px; }
     .type-badge { grid-column: 2; grid-row: 2; justify-self: end; padding: 5px 8px; font-size: 9px; }
     .transaction-amount { grid-column: 2; grid-row: 1; font-size: 13px; }
+    .transaction-delete { grid-column: 3; grid-row: 1; }
     .page-footer { flex-direction: column; gap: 5px; }
     .mobile-nav { position: fixed; inset: auto 0 0; z-index: 10; display: flex; align-items: center; justify-content: space-around; min-height: calc(64px + env(safe-area-inset-bottom)); padding: 7px 10px calc(7px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(16px); }
     .mobile-nav-link { display: flex; min-width: 63px; flex-direction: column; align-items: center; gap: 3px; color: var(--muted); font-size: 9px; text-decoration: none; }

@@ -205,6 +205,25 @@ app.post('/api/transactions', async (req, res) => {
     }
 });
 
+// API: Hapus transaksi dari web
+app.delete('/api/transactions/:id', async (req, res) => {
+    const { id } = req.params;
+    if (!/^[1-9]\d*$/.test(id)) {
+        return res.status(400).json({ error: 'ID transaksi tidak valid.' });
+    }
+
+    try {
+        const result = await pool.query('DELETE FROM transactions WHERE id = $1 RETURNING id', [id]);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
+        }
+        res.sendStatus(204);
+    } catch (err) {
+        console.error('Gagal menghapus transaksi:', err);
+        res.status(500).json({ error: 'Transaksi gagal dihapus.' });
+    }
+});
+
 // API: Export Excel (CSV)
 app.get('/api/export-excel', async (req, res) => {
     try {

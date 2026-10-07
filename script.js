@@ -220,6 +220,7 @@ function renderCategories(categoryTotals, totalExpense) {
 function createTransactionRow(transaction) {
     const row = document.createElement('article');
     row.className = 'transaction-row';
+    row.dataset.transactionId = String(transaction.id);
 
     const main = document.createElement('div');
     main.className = 'transaction-main';
@@ -258,7 +259,17 @@ function createTransactionRow(transaction) {
     const numericAmount = Number(transaction.amount);
     amount.textContent = `${isIncome ? '+' : '−'} ${formatCurrency(numericAmount)}`;
 
-    row.append(main, date, badge, amount);
+    const deleteButton = document.createElement('button');
+    deleteButton.className = 'transaction-delete';
+    deleteButton.type = 'button';
+    deleteButton.setAttribute('aria-label', `Hapus transaksi ${transaction.desc || 'tanpa keterangan'}`);
+    deleteButton.title = 'Hapus transaksi';
+    const deleteIcon = document.createElement('i');
+    deleteIcon.dataset.lucide = 'trash-2';
+    deleteIcon.setAttribute('aria-hidden', 'true');
+    deleteButton.append(deleteIcon);
+
+    row.append(main, date, badge, amount, deleteButton);
     return row;
 }
 
@@ -494,6 +505,38 @@ async function submitTransaction(event) {
     }
 }
 
+async function deleteTransaction(button) {
+    const row = button.closest('.transaction-row');
+    const transaction = transactions.find((item) => String(item.id) === row?.dataset.transactionId);
+    if (!transaction) {
+        setNotice('Transaksi tidak ditemukan. Muat ulang data lalu coba lagi.', 'error');
+        return;
+    }
+
+    const description = String(transaction.desc || 'Transaksi tanpa keterangan');
+    if (!window.confirm(`Hapus transaksi "${description}"? Tindakan ini tidak dapat dibatalkan.`)) return;
+
+    button.disabled = true;
+    try {
+        const response = await fetch(`${TRANSACTIONS_URL}/${encodeURIComponent(transaction.id)}`, {
+            method: 'DELETE',
+            headers: { Accept: 'application/json' }
+        });
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            throw new Error(errorBody.error || `Server merespons ${response.status}`);
+        }
+
+        transactions = transactions.filter((item) => String(item.id) !== String(transaction.id));
+        renderDashboard();
+        setNotice('Transaksi berhasil dihapus.');
+    } catch (error) {
+        console.error('Gagal menghapus transaksi:', error);
+        setNotice(error.message || 'Transaksi gagal dihapus. Silakan coba lagi.', 'error');
+        button.disabled = false;
+    }
+}
+
 function initializeTheme() {
     const savedTheme = localStorage.getItem('saku-theme');
     if (savedTheme === 'dark') document.documentElement.dataset.theme = 'dark';
@@ -554,6 +597,10 @@ elements.search.addEventListener('input', () => {
 document.getElementById('showAllTransactions').addEventListener('click', () => {
     showAllTransactions = !showAllTransactions;
     renderTransactions();
+});
+elements.transactionList.addEventListener('click', (event) => {
+    const button = event.target.closest('.transaction-delete');
+    if (button) deleteTransaction(button);
 });
 document.getElementById('openTransaction').addEventListener('click', openTransactionDialog);
 document.getElementById('refreshButton').addEventListener('click', loadTransactions);
