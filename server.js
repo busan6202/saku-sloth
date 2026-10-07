@@ -1,6 +1,7 @@
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
+const { createHash, randomBytes } = require('node:crypto');
 require('dotenv').config();
 
 const app = express();
@@ -25,6 +26,19 @@ const databaseReady = pool.query(`
         value TEXT NOT NULL
     )
 `).then(() => pool.query(`
+    CREATE TABLE IF NOT EXISTS telegram_link_codes (
+        code_hash TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE TABLE IF NOT EXISTS telegram_user_links (
+        telegram_user_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS telegram_user_links_owner_idx ON telegram_user_links (user_id);
+`)).then(() => pool.query(`
     CREATE TABLE IF NOT EXISTS transactions (
         id SERIAL PRIMARY KEY,
         "desc" TEXT NOT NULL,
@@ -71,7 +85,6 @@ const databaseReady = pool.query(`
 databaseReady.catch(() => {});
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || 'AIzaSyAIdRIMZgPHnl2lBHQDCqhH8CRoUK7aMSE';
@@ -93,12 +106,6 @@ async function sendTelegramMessage(chatId, text) {
     } catch (err) {
         console.error("Gagal kirim pesan Telegram:", err.message);
     }
-}
-
-async function getTelegramOwnerId() {
-    await databaseReady;
-    const result = await pool.query("SELECT value FROM app_settings WHERE key = 'bootstrap_google_sub'");
-    return result.rows[0]?.value || null;
 }
 
 // Fungsi Panggil Gemini Teks & Gambar (Auto-Retry 503)
@@ -168,10 +175,11 @@ async function callGeminiAudioAPI(prompt, base64Audio, retries = 3, delay = 2000
 }
 
 // Fungsi Simpan Transaksi & Analisis Saku Harian AI
-async function saveAndNotify(trxData, chatId, updateId) {
+async function saveAndNotify(trxData, chatId, updateId, userId) {
     if (!Number.isSafeInteger(updateId) || updateId < 0) {
         throw new Error('ID update Telegram tidak valid.');
     }
+    if (!userId) throw new Error('Akun Telegram belum ditautkan ke pengguna.');
 
     await databaseReady;
     const query = `
@@ -182,13 +190,11 @@ async function saveAndNotify(trxData, chatId, updateId) {
             RETURNING update_id
         )
         INSERT INTO transactions ("desc", amount, type, category, user_id)
-        SELECT $2, $3, $4, $5, (
-            SELECT value FROM app_settings WHERE key = 'bootstrap_google_sub'
-        )
+        SELECT $2, $3, $4, $5, $6
         FROM claimed_update
         RETURNING *
     `;
-    const values = [updateId, trxData.desc, trxData.amount, trxData.type, trxData.category || 'Umum'];
+    const values = [updateId, trxData.desc, trxData.amount, trxData.type, trxData.category || 'Umum', userId];
     const result = await pool.query(query, values);
     if (result.rowCount === 0) {
         console.info(`Update Telegram ${updateId} sudah diproses; transaksi duplikat diabaikan.`);
@@ -412,6 +418,27 @@ app.post('/api/auth/session', authenticateFirebaseUser, (req, res) => {
     res.json({ user: req.user });
 });
 
+app.post('/api/telegram/link-code', authenticateFirebaseUser, async (req, res) => {
+    try {
+        await databaseReady;
+        const code = randomBytes(5).toString('hex').toUpperCase();
+        const codeHash = createHash('sha256').update(code).digest('hex');
+        const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+        await pool.query(
+            'DELETE FROM telegram_link_codes WHERE user_id = $1 OR expires_at <= NOW()',
+            [req.user.id]
+        );
+        await pool.query(
+            'INSERT INTO telegram_link_codes (code_hash, user_id, expires_at) VALUES ($1, $2, $3)',
+            [codeHash, req.user.id, expiresAt]
+        );
+        res.json({ code, expiresAt: expiresAt.toISOString() });
+    } catch (err) {
+        console.error('Gagal membuat kode pengaitan Telegram:', err);
+        res.status(500).json({ error: 'Kode Telegram tidak dapat dibuat. Silakan coba lagi.' });
+    }
+});
+
 app.get('/api/budgets', authenticateFirebaseUser, async (req, res) => {
     const { month } = req.query;
     if (!isValidMonth(month)) return res.status(400).json({ error: 'Bulan budget tidak valid.' });
@@ -628,8 +655,8 @@ app.get('/api/export-excel', authenticateFirebaseUser, async (req, res) => {
 
 // ================= WEBHOOK TELEGRAM BOT =================
 app.post(`/api/telegram-webhook`, async (req, res) => {
-    if (!TELEGRAM_BOT_TOKEN || !ADMIN_TELEGRAM_ID || !TELEGRAM_WEBHOOK_SECRET) {
-        console.error('Telegram webhook memerlukan TELEGRAM_BOT_TOKEN, ADMIN_TELEGRAM_ID, dan TELEGRAM_WEBHOOK_SECRET.');
+    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_WEBHOOK_SECRET) {
+        console.error('Telegram webhook memerlukan TELEGRAM_BOT_TOKEN dan TELEGRAM_WEBHOOK_SECRET.');
         return res.status(503).json({ error: 'Telegram webhook belum dikonfigurasi dengan aman.' });
     }
     if (req.get('x-telegram-bot-api-secret-token') !== TELEGRAM_WEBHOOK_SECRET) {
@@ -639,19 +666,65 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
     const update = req.body;
     if (!update.message) return res.sendStatus(200);
 
-    const chatId = String(update.message.chat.id);
-    const text = update.message.text;
-    const photo = update.message.photo;
-    const voice = update.message.voice;
+    const message = update.message;
+    const chatId = String(message.chat.id);
+    const telegramUserId = message.from?.id ? String(message.from.id) : null;
+    const text = message.text?.trim() || '';
+    const photo = message.photo;
+    const voice = message.voice;
 
-    if (chatId !== String(ADMIN_TELEGRAM_ID)) {
-        await sendTelegramMessage(chatId, "⚠️ Maaf, bot finansial ini terkunci.");
-        return res.sendStatus(200);
-    }
+    if (message.chat.type !== 'private' || !telegramUserId) return res.sendStatus(200);
 
     try {
+        await databaseReady;
+        const linkCommand = text.match(/^\/link(?:@\w+)?(?:\s+([A-Fa-f0-9]{10}))?$/);
+        if (linkCommand) {
+            if (!linkCommand[1]) {
+                await sendTelegramMessage(chatId, 'Untuk menautkan akun, minta kode dari dashboard Saku Harian, lalu kirim `/link KODE`.');
+                return res.sendStatus(200);
+            }
+            const codeHash = createHash('sha256').update(linkCommand[1].toUpperCase()).digest('hex');
+            const client = await pool.connect();
+            try {
+                await client.query('BEGIN');
+                const codeResult = await client.query(
+                    'DELETE FROM telegram_link_codes WHERE code_hash = $1 AND expires_at > NOW() RETURNING user_id',
+                    [codeHash]
+                );
+                if (!codeResult.rows[0]) {
+                    await client.query('ROLLBACK');
+                    await sendTelegramMessage(chatId, 'Kode tidak valid atau sudah kedaluwarsa. Buat kode baru dari dashboard.');
+                    return res.sendStatus(200);
+                }
+                await client.query(`
+                    INSERT INTO telegram_user_links (telegram_user_id, user_id, linked_at)
+                    VALUES ($1, $2, CURRENT_TIMESTAMP)
+                    ON CONFLICT (telegram_user_id) DO UPDATE
+                    SET user_id = EXCLUDED.user_id, linked_at = CURRENT_TIMESTAMP
+                `, [telegramUserId, codeResult.rows[0].user_id]);
+                await client.query('COMMIT');
+            } catch (err) {
+                await client.query('ROLLBACK');
+                throw err;
+            } finally {
+                client.release();
+            }
+            await sendTelegramMessage(chatId, '✅ Akun Telegram berhasil ditautkan. Transaksi bot sekarang akan masuk ke akun Saku Harian Anda.');
+            return res.sendStatus(200);
+        }
+
+        const linkResult = await pool.query(
+            'SELECT user_id FROM telegram_user_links WHERE telegram_user_id = $1',
+            [telegramUserId]
+        );
+        const userId = linkResult.rows[0]?.user_id;
+
         // 1. FOTO NOTA
         if (photo && photo.length > 0) {
+            if (!userId) {
+                await sendTelegramMessage(chatId, 'Tautkan akun Google Anda terlebih dahulu dari dashboard Saku Harian. Buka menu Telegram, buat kode, lalu kirim `/link KODE` di sini.');
+                return res.sendStatus(200);
+            }
             const fileId = photo[photo.length - 1].file_id;
             const fileRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`);
             const fileData = await fileRes.json();
@@ -665,10 +738,14 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             
             const rawText = await callGeminiAPI(prompt, base64Image);
             let parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
-            await saveAndNotify(parsed, chatId, update.update_id);
+            await saveAndNotify(parsed, chatId, update.update_id, userId);
         } 
         // 2. VOICE NOTE (REKAMAN SUARA)
         else if (voice) {
+            if (!userId) {
+                await sendTelegramMessage(chatId, 'Tautkan akun Google Anda terlebih dahulu dari dashboard Saku Harian. Buka menu Telegram, buat kode, lalu kirim `/link KODE` di sini.');
+                return res.sendStatus(200);
+            }
             const fileId = voice.file_id;
             const fileRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`);
             const fileData = await fileRes.json();
@@ -681,30 +758,41 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             
             const rawText = await callGeminiAudioAPI(prompt, base64Audio);
             let parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
-            await saveAndNotify(parsed, chatId, update.update_id);
+            await saveAndNotify(parsed, chatId, update.update_id, userId);
         }
         // 3. PESAN TEKS / KONSULTASI
         else if (text) {
             if (text.startsWith('/start')) {
                 await sendTelegramMessage(chatId, `
 💰 *Halo! Selamat datang di Saku Harian Bot.*
-Kirim foto nota, **Voice Note (rekaman suara)**, atau ketik transaksi Anda secara bebas (Contoh: *"Beli bensin 50rb kategori Transport"*). 
-Anda juga bisa bertanya apa saja tentang kondisi keuangan Anda!
+${userId
+        ? 'Akun Anda sudah tertaut. Kirim foto nota, voice note, atau ketik transaksi, misalnya: "Beli bensin 50rb kategori Transport".'
+        : 'Untuk mulai, tautkan dahulu akun Google dari dashboard Saku Harian. Buat kode tautan di menu Telegram, lalu kirim /link KODE di chat ini.'}
 
-📋 *Perintah:* /saldo, /history, /reset
+📋 *Perintah:* /saldo, /history, /reset, /unlink
                 `.trim());
                 return res.sendStatus(200);
             }
 
+            if (/^\/unlink(?:@\w+)?(?:\s|$)/.test(text)) {
+                await pool.query('DELETE FROM telegram_user_links WHERE telegram_user_id = $1', [telegramUserId]);
+                await sendTelegramMessage(chatId, 'Akun Telegram berhasil dilepas dari Saku Harian.');
+                return res.sendStatus(200);
+            }
+
+            if (!userId) {
+                await sendTelegramMessage(chatId, 'Akun Telegram ini belum tertaut. Buka dashboard Saku Harian, buat kode tautan di menu Telegram, lalu kirim `/link KODE`.');
+                return res.sendStatus(200);
+            }
+
             if (text.startsWith('/saldo') || text.startsWith('/rekap')) {
-                const ownerId = await getTelegramOwnerId();
                 const result = await pool.query(`
                     SELECT
                         COALESCE(SUM(amount) FILTER (WHERE type = 'income'), 0) AS income,
                         COALESCE(SUM(amount) FILTER (WHERE type = 'expense'), 0) AS expense
                     FROM transactions
                     WHERE user_id = $1
-                `, [ownerId]);
+                `, [userId]);
                 const totalIncome = Number(result.rows[0].income);
                 const totalExpense = Number(result.rows[0].expense);
                 const balance = totalIncome - totalExpense;
@@ -714,10 +802,9 @@ Anda juga bisa bertanya apa saja tentang kondisi keuangan Anda!
             }
 
             if (text.startsWith('/history') || text.startsWith('/riwayat')) {
-                const ownerId = await getTelegramOwnerId();
                 const result = await pool.query(
                     'SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC LIMIT 5',
-                    [ownerId]
+                    [userId]
                 );
                 if (result.rows.length === 0) {
                     await sendTelegramMessage(chatId, "📂 Belum ada catatan transaksi.");
@@ -732,8 +819,7 @@ Anda juga bisa bertanya apa saja tentang kondisi keuangan Anda!
             }
 
             if (text.startsWith('/reset')) {
-                const ownerId = await getTelegramOwnerId();
-                await pool.query('DELETE FROM transactions WHERE user_id = $1', [ownerId]);
+                await pool.query('DELETE FROM transactions WHERE user_id = $1', [userId]);
                 await sendTelegramMessage(chatId, "🗑️ *Reset Berhasil!* Semua data keuangan dibersihkan.");
                 return res.sendStatus(200);
             }
@@ -751,7 +837,7 @@ Anda juga bisa bertanya apa saja tentang kondisi keuangan Anda!
             const parsed = JSON.parse(cleanedJson);
 
             if (parsed.isTransaction) {
-                await saveAndNotify(parsed, chatId, update.update_id);
+                await saveAndNotify(parsed, chatId, update.update_id, userId);
             } else {
                 await sendTelegramMessage(chatId, `🤖 *Saku Harian:* ${parsed.reply}`);
             }

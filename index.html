@@ -85,6 +85,7 @@
                     <div class="account-actions" id="accountActions" hidden>
                         <img class="account-avatar" id="accountAvatar" alt="" hidden>
                         <span class="account-name" id="accountName"></span>
+                        <button class="text-button telegram-link-button" id="telegramLinkButton" type="button">Hubungkan Telegram</button>
                         <button class="text-button" id="signOutButton" type="button">Keluar</button>
                     </div>
                 </div>
@@ -292,6 +293,19 @@
                 <button class="button button-primary" id="saveTransaction" type="submit">Simpan transaksi</button>
             </div>
         </form>
+    </dialog>
+    <dialog class="transaction-dialog telegram-link-dialog" id="telegramLinkDialog" aria-labelledby="telegramLinkTitle">
+        <div class="dialog-heading">
+            <div><p class="eyebrow">BOT SAKU HARIAN</p><h2 id="telegramLinkTitle">Hubungkan Telegram</h2></div>
+            <button class="dialog-close" id="closeTelegramLink" type="button" aria-label="Tutup">×</button>
+        </div>
+        <p class="telegram-link-copy">Buka <a href="https://t.me/duitandaBOT" target="_blank" rel="noopener noreferrer">@duitandaBOT</a>, lalu kirim pesan berikut sebelum 10 menit:</p>
+        <code class="telegram-link-code" id="telegramLinkCode" aria-live="polite">Meminta kode...</code>
+        <div class="dialog-actions telegram-link-actions">
+            <button class="button button-secondary" id="copyTelegramLinkCode" type="button">Salin kode</button>
+        </div>
+        <p class="auth-status" id="telegramLinkStatus" role="status" aria-live="polite"></p>
+        <p class="auth-data-note">Telegram yang tertaut akan dapat mencatat, melihat saldo, dan menghapus transaksi di akun ini. Jangan bagikan kode tautan kepada siapa pun.</p>
     </dialog>
 </body>
 </html>

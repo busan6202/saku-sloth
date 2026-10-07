@@ -50,6 +50,11 @@ const elements = {
     authStatus: document.getElementById('authStatus'),
     googleSignInButton: document.getElementById('googleSignInButton'),
     accountActions: document.getElementById('accountActions'),
+    telegramLinkButton: document.getElementById('telegramLinkButton'),
+    telegramLinkDialog: document.getElementById('telegramLinkDialog'),
+    telegramLinkCode: document.getElementById('telegramLinkCode'),
+    telegramLinkStatus: document.getElementById('telegramLinkStatus'),
+    copyTelegramLinkCode: document.getElementById('copyTelegramLinkCode'),
     accountName: document.getElementById('accountName'),
     accountAvatar: document.getElementById('accountAvatar'),
     notice: document.getElementById('notice'),
@@ -712,6 +717,29 @@ async function initializeFirebaseAuthentication() {
     }
 }
 
+async function createTelegramLinkCode() {
+    elements.telegramLinkDialog.showModal();
+    elements.telegramLinkCode.textContent = 'Meminta kode...';
+    elements.telegramLinkStatus.textContent = '';
+    elements.copyTelegramLinkCode.disabled = true;
+    try {
+        const response = await apiFetch(`${API_BASE_URL}/telegram/link-code`, {
+            method: 'POST',
+            headers: { Accept: 'application/json' }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || `Server merespons ${response.status}`);
+        elements.telegramLinkCode.textContent = `/link ${result.code}`;
+        elements.copyTelegramLinkCode.disabled = false;
+        elements.telegramLinkStatus.textContent = 'Kirim kode ini di chat pribadi bot @duitandaBOT.';
+    } catch (error) {
+        if (error.name === 'AbortError') return;
+        console.error('Gagal membuat kode tautan Telegram:', error);
+        elements.telegramLinkCode.textContent = 'Kode belum tersedia.';
+        elements.telegramLinkStatus.textContent = error.message || 'Kode tidak dapat dibuat. Silakan coba lagi.';
+    }
+}
+
 function signOut(showStatus = true) {
     if (firebaseAuth?.currentUser) {
         firebaseAuth.signOut().catch((error) => console.error('Gagal keluar dari Firebase:', error));
@@ -1361,4 +1389,17 @@ initializeTheme();
 initializeNavigation();
 renderIcons();
 document.getElementById('signOutButton').addEventListener('click', () => signOut());
+elements.telegramLinkButton.addEventListener('click', createTelegramLinkCode);
+document.getElementById('closeTelegramLink').addEventListener('click', () => elements.telegramLinkDialog.close());
+elements.copyTelegramLinkCode.addEventListener('click', async () => {
+    const code = elements.telegramLinkCode.textContent;
+    if (!code.startsWith('/link ')) return;
+    try {
+        await navigator.clipboard.writeText(code);
+        elements.telegramLinkStatus.textContent = 'Kode berhasil disalin. Tempelkan di chat bot Telegram.';
+    } catch (error) {
+        console.error('Gagal menyalin kode tautan Telegram:', error);
+        elements.telegramLinkStatus.textContent = 'Tidak dapat menyalin otomatis. Silakan pilih dan salin kode secara manual.';
+    }
+});
 initializeFirebaseAuthentication();

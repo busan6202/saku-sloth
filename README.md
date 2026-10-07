@@ -27,4 +27,12 @@ Firebase Web API key memang dikirim ke browser dan bukan kata sandi. Jangan pern
 
 Saat akun pemilik masuk pertama kali, data lama akan dipindahkan secara aman ke identitas Firebase yang baru. Pastikan `FIREBASE_BOOTSTRAP_EMAIL` benar dan buat backup database sebelum pergantian provider. Login pertama membutuhkan koneksi ke Firebase untuk menyiapkan sesi serta memigrasikan data pemilik lama.
 
-Jika menggunakan integrasi Telegram, atur juga `TELEGRAM_BOT_TOKEN`, `ADMIN_TELEGRAM_ID`, dan `TELEGRAM_WEBHOOK_SECRET`. Webhook hanya menerima secret yang cocok dan pesan dari ID admin. Analisis Gemini tetap memerlukan `GEMINI_API_KEY`.
+### Menghubungkan bot Telegram
+
+Atur `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_WEBHOOK_SECRET` di environment variables server, lalu pastikan webhook bot Telegram dikonfigurasi dengan URL `/api/telegram-webhook` dan secret token yang sama. `ADMIN_TELEGRAM_ID` tidak lagi digunakan.
+
+1. Login ke dashboard menggunakan akun Google.
+2. Pilih **Hubungkan Telegram**, lalu buka tautan `@duitandaBOT` yang tersedia dan salin kode sekali pakai.
+3. Kirim `/link KODE` di chat pribadi bot dalam waktu 10 menit.
+
+Setelah berhasil tertaut, bot menyimpan transaksi, membaca saldo/riwayat, dan menjalankan `/reset` hanya untuk akun pemilik Telegram tersebut. Perintah `/unlink` melepas tautan. Setiap pengguna harus menautkan Telegram sendiri; bot tidak menerima pesan grup. Tabel tautan dan kode dibuat otomatis oleh server. Analisis AI di bot tetap memerlukan `GEMINI_API_KEY`.
