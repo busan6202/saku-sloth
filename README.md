@@ -21,15 +21,9 @@ Login menggunakan Firebase Authentication dengan penyedia Google. Firebase menye
 
 ### Pengaturan deployment
 
-Di pengaturan environment variables server/deployment (contohnya Vercel → Project → Settings → Environment Variables), tambahkan:
+Konfigurasi Web Firebase untuk project `saku-sloth` dan email pemilik awal `busan6202@gmail.com` sudah disiapkan sebagai nilai default di server. Biasanya tidak perlu menambahkan environment variables Firebase di Vercel. Jika ingin mengganti project atau email pemilik, atur `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`, atau `FIREBASE_BOOTSTRAP_EMAIL` di environment variables server, lalu deploy ulang.
 
-- `FIREBASE_API_KEY`: nilai `apiKey` dari konfigurasi aplikasi Web.
-- `FIREBASE_AUTH_DOMAIN`: nilai `authDomain`.
-- `FIREBASE_PROJECT_ID`: nilai `projectId`.
-- `FIREBASE_APP_ID`: nilai `appId`.
-- `FIREBASE_BOOTSTRAP_EMAIL`: email akun pemilik data awal. Untuk instalasi ini gunakan `busan6202@gmail.com`.
-
-Nilai konfigurasi Firebase Web bukan kata sandi dan boleh dikirim ke browser. Jangan pernah menaruh token bot Telegram, `GEMINI_API_KEY`, atau kredensial database di frontend. Setelah menyimpan variabel, deploy ulang aplikasi. `GOOGLE_CLIENT_ID` tidak lagi digunakan untuk login.
+Firebase Web API key memang dikirim ke browser dan bukan kata sandi. Jangan pernah menaruh token bot Telegram, `GEMINI_API_KEY`, atau kredensial database di frontend. Batasi API key pada layanan yang diperlukan melalui pengaturan Firebase/Google Cloud dan jangan gunakan key ini sebagai pengganti aturan keamanan. `GOOGLE_CLIENT_ID` tidak lagi digunakan oleh aplikasi untuk login.
 
 Saat akun pemilik masuk pertama kali, data lama akan dipindahkan secara aman ke identitas Firebase yang baru. Pastikan `FIREBASE_BOOTSTRAP_EMAIL` benar dan buat backup database sebelum pergantian provider. Login pertama membutuhkan koneksi ke Firebase untuk menyiapkan sesi serta memigrasikan data pemilik lama.
 

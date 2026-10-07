@@ -70,12 +70,12 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
-const FIREBASE_AUTH_DOMAIN = process.env.FIREBASE_AUTH_DOMAIN;
-const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
-const FIREBASE_APP_ID = process.env.FIREBASE_APP_ID;
+const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || 'AIzaSyAIdRIMZgPHnl2lBHQDCqhH8CRoUK7aMSE';
+const FIREBASE_AUTH_DOMAIN = process.env.FIREBASE_AUTH_DOMAIN || 'saku-sloth.firebaseapp.com';
+const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'saku-sloth';
+const FIREBASE_APP_ID = process.env.FIREBASE_APP_ID || '1:711365669554:web:4f7bdd6a5d3d6e5a864fab';
 const FIREBASE_BOOTSTRAP_EMAIL = (
-    process.env.FIREBASE_BOOTSTRAP_EMAIL || process.env.GOOGLE_BOOTSTRAP_EMAIL || ''
+    process.env.FIREBASE_BOOTSTRAP_EMAIL || process.env.GOOGLE_BOOTSTRAP_EMAIL || 'busan6202@gmail.com'
 ).trim().toLowerCase();
 
 // Fungsi Kirim Pesan Telegram
@@ -296,10 +296,6 @@ function isValidPositiveId(value) {
 }
 
 app.get('/api/auth/config', (req, res) => {
-    if (!FIREBASE_API_KEY || !FIREBASE_AUTH_DOMAIN || !FIREBASE_PROJECT_ID || !FIREBASE_APP_ID
-        || !FIREBASE_BOOTSTRAP_EMAIL) {
-        return res.status(503).json({ error: 'Firebase Authentication belum dikonfigurasi di server.' });
-    }
     res.json({
         firebaseConfig: {
             apiKey: FIREBASE_API_KEY,
