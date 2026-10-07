@@ -131,9 +131,8 @@ async function initializeOwnerDatabase(userId, email) {
 }
 
 async function synchronizeTelegramWebhookSecret(email) {
-    if (!TELEGRAM_WEBHOOK_SECRET) {
-        console.warn('TELEGRAM_WEBHOOK_SECRET belum dikonfigurasi; sinkronisasi Telegram dilewati.');
-        return;
+    if (!databaseSql) {
+        throw new Error('DATABASE_URL belum dikonfigurasi untuk sinkronisasi secret Telegram.');
     }
     await databaseSql`
         SELECT public.set_telegram_webhook_secret(${email}, ${TELEGRAM_WEBHOOK_SECRET})
@@ -770,6 +769,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
     if (message.chat.type !== 'private' || !telegramUserId) return res.sendStatus(200);
 
     try {
+        await synchronizeTelegramWebhookSecret(FIREBASE_BOOTSTRAP_EMAIL);
         const linkCommand = text.match(/^\/link(?:@\w+)?(?:\s+([A-Fa-f0-9]{10}))?$/);
         if (linkCommand) {
             if (!linkCommand[1]) {
