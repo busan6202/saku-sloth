@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const { neon } = require('@neondatabase/serverless');
 const { createHash, randomBytes } = require('node:crypto');
 require('dotenv').config();
 
@@ -21,8 +22,11 @@ const NEON_DATA_API_URL = (
     process.env.NEON_DATA_API_URL
     || 'https://ep-winter-poetry-arl51lwx.apirest.c-4.us-west-2.aws.neon.tech/neondb/rest/v1'
 ).replace(/\/+$/, '');
+const DATABASE_CONNECTION_STRING = process.env.DATABASE_URL || process.env.DATABASE_URI;
+const databaseSql = DATABASE_CONNECTION_STRING ? neon(DATABASE_CONNECTION_STRING) : null;
 
 async function dataApiRequest(resource, { token, method = 'GET', query, body, prefer, range } = {}) {
+    if (!token) throw new Error('Firebase ID token diperlukan untuk mengakses Neon Data API.');
     const url = new URL(`${NEON_DATA_API_URL}/${resource}`);
     if (query) {
         for (const [key, value] of Object.entries(query)) {
@@ -63,6 +67,57 @@ async function dataApiRequest(resource, { token, method = 'GET', query, body, pr
 
 function userDataRequest(req, resource, options = {}) {
     return dataApiRequest(resource, { ...options, token: req.firebaseToken });
+}
+
+async function telegramDatabaseFunction(name, args) {
+    if (!databaseSql) {
+        throw new Error('DATABASE_URL belum dikonfigurasi untuk akses Telegram ke Neon melalui HTTP.');
+    }
+
+    let rows;
+    switch (name) {
+        case 'telegram_link_account':
+            rows = await databaseSql`
+                SELECT public.telegram_link_account(${args[0]}, ${args[1]}, ${args[2]}) AS result
+            `;
+            break;
+        case 'telegram_get_user':
+            rows = await databaseSql`
+                SELECT public.telegram_get_user(${args[0]}, ${args[1]}) AS result
+            `;
+            break;
+        case 'telegram_unlink_user':
+            rows = await databaseSql`
+                SELECT public.telegram_unlink_user(${args[0]}, ${args[1]}) AS result
+            `;
+            break;
+        case 'telegram_save_transaction':
+            rows = await databaseSql`
+                SELECT public.telegram_save_transaction(
+                    ${args[0]}, ${args[1]}, ${args[2]}, ${args[3]},
+                    ${args[4]}, ${args[5]}, ${args[6]}
+                ) AS result
+            `;
+            break;
+        case 'telegram_get_balance':
+            rows = await databaseSql`
+                SELECT public.telegram_get_balance(${args[0]}, ${args[1]}) AS result
+            `;
+            break;
+        case 'telegram_get_history':
+            rows = await databaseSql`
+                SELECT public.telegram_get_history(${args[0]}, ${args[1]}) AS result
+            `;
+            break;
+        case 'telegram_reset_transactions':
+            rows = await databaseSql`
+                SELECT public.telegram_reset_transactions(${args[0]}, ${args[1]}) AS result
+            `;
+            break;
+        default:
+            throw new Error(`Fungsi database Telegram tidak dikenal: ${name}`);
+    }
+    return rows[0].result;
 }
 
 async function userDataRows(req, resource, query) {
@@ -171,18 +226,15 @@ async function saveAndNotify(trxData, chatId, updateId, telegramUserId) {
     }
     if (!telegramUserId) throw new Error('Akun Telegram belum tertaut.');
 
-    const result = await dataApiRequest('rpc/telegram_save_transaction', {
-        method: 'POST',
-        body: {
-            p_telegram_user_id: telegramUserId,
-            p_update_id: updateId,
-            p_desc: trxData.desc,
-            p_amount: trxData.amount,
-            p_type: trxData.type,
-            p_category: trxData.category || 'Umum',
-            p_secret: TELEGRAM_WEBHOOK_SECRET
-        }
-    });
+    const result = await telegramDatabaseFunction('telegram_save_transaction', [
+        telegramUserId,
+        updateId,
+        trxData.desc,
+        trxData.amount,
+        trxData.type,
+        trxData.category || 'Umum',
+        TELEGRAM_WEBHOOK_SECRET
+    ]);
     if (!result?.inserted) {
         console.info(`Update Telegram ${updateId} sudah diproses; transaksi duplikat diabaikan.`);
         return false;
@@ -706,14 +758,11 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
                 return res.sendStatus(200);
             }
             const codeHash = createHash('sha256').update(linkCommand[1].toUpperCase()).digest('hex');
-            const linked = await dataApiRequest('rpc/telegram_link_account', {
-                method: 'POST',
-                body: {
-                    p_telegram_user_id: telegramUserId,
-                    p_code_hash: codeHash,
-                    p_secret: TELEGRAM_WEBHOOK_SECRET
-                }
-            });
+            const linked = await telegramDatabaseFunction('telegram_link_account', [
+                telegramUserId,
+                codeHash,
+                TELEGRAM_WEBHOOK_SECRET
+            ]);
             if (linked !== true) {
                 await sendTelegramMessage(chatId, 'Kode tidak valid atau sudah kedaluwarsa. Buat kode baru dari dashboard.');
                 return res.sendStatus(200);
@@ -722,13 +771,10 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
             return res.sendStatus(200);
         }
 
-        const userId = await dataApiRequest('rpc/telegram_get_user', {
-            method: 'POST',
-            body: {
-                p_telegram_user_id: telegramUserId,
-                p_secret: TELEGRAM_WEBHOOK_SECRET
-            }
-        });
+        const userId = await telegramDatabaseFunction('telegram_get_user', [
+            telegramUserId,
+            TELEGRAM_WEBHOOK_SECRET
+        ]);
 
         // 1. FOTO NOTA
         if (photo && photo.length > 0) {
@@ -786,10 +832,10 @@ ${userId
             }
 
             if (/^\/unlink(?:@\w+)?(?:\s|$)/.test(text)) {
-                await dataApiRequest('rpc/telegram_unlink_user', {
-                    method: 'POST',
-                    body: { p_telegram_user_id: telegramUserId, p_secret: TELEGRAM_WEBHOOK_SECRET }
-                });
+                await telegramDatabaseFunction('telegram_unlink_user', [
+                    telegramUserId,
+                    TELEGRAM_WEBHOOK_SECRET
+                ]);
                 await sendTelegramMessage(chatId, 'Akun Telegram berhasil dilepas dari Saku Harian.');
                 return res.sendStatus(200);
             }
@@ -800,10 +846,10 @@ ${userId
             }
 
             if (text.startsWith('/saldo') || text.startsWith('/rekap')) {
-                const result = await dataApiRequest('rpc/telegram_get_balance', {
-                    method: 'POST',
-                    body: { p_telegram_user_id: telegramUserId, p_secret: TELEGRAM_WEBHOOK_SECRET }
-                });
+                const result = await telegramDatabaseFunction('telegram_get_balance', [
+                    telegramUserId,
+                    TELEGRAM_WEBHOOK_SECRET
+                ]);
                 const totalIncome = Number(result.income);
                 const totalExpense = Number(result.expense);
                 const balance = totalIncome - totalExpense;
@@ -813,10 +859,10 @@ ${userId
             }
 
             if (text.startsWith('/history') || text.startsWith('/riwayat')) {
-                const result = await dataApiRequest('rpc/telegram_get_history', {
-                    method: 'POST',
-                    body: { p_telegram_user_id: telegramUserId, p_secret: TELEGRAM_WEBHOOK_SECRET }
-                });
+                const result = await telegramDatabaseFunction('telegram_get_history', [
+                    telegramUserId,
+                    TELEGRAM_WEBHOOK_SECRET
+                ]);
                 if (result.length === 0) {
                     await sendTelegramMessage(chatId, "📂 Belum ada catatan transaksi.");
                     return res.sendStatus(200);
@@ -830,10 +876,10 @@ ${userId
             }
 
             if (text.startsWith('/reset')) {
-                await dataApiRequest('rpc/telegram_reset_transactions', {
-                    method: 'POST',
-                    body: { p_telegram_user_id: telegramUserId, p_secret: TELEGRAM_WEBHOOK_SECRET }
-                });
+                await telegramDatabaseFunction('telegram_reset_transactions', [
+                    telegramUserId,
+                    TELEGRAM_WEBHOOK_SECRET
+                ]);
                 await sendTelegramMessage(chatId, "🗑️ *Reset Berhasil!* Semua data keuangan dibersihkan.");
                 return res.sendStatus(200);
             }

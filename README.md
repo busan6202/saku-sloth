@@ -1,6 +1,6 @@
 # saku-sloth
 
-Dashboard dan bot Telegram menggunakan Neon Data API (PostgREST), bukan koneksi TCP langsung ke PostgreSQL. Transaksi Telegram menggunakan ID update sebagai kunci idempotensi; RPC database memastikan update yang dikirim ulang tidak membuat transaksi ganda.
+Dashboard menggunakan Neon Data API (PostgREST), sedangkan bot Telegram memakai Neon serverless driver melalui HTTP dengan fungsi database terbatas. Tidak ada koneksi TCP langsung ke PostgreSQL. Transaksi Telegram menggunakan ID update sebagai kunci idempotensi; fungsi database memastikan update yang dikirim ulang tidak membuat transaksi ganda.
 
 ## Perencanaan keuangan
 
@@ -32,7 +32,7 @@ Konfigurasi Web Firebase untuk project `saku-sloth` dan email pemilik awal `busa
 3. Buka **Neon SQL Editor**, pilih database `neondb`, lalu jalankan seluruh isi [`neon-data-api-setup.sql`](./neon-data-api-setup.sql). Buat backup terlebih dahulu. Skrip menyiapkan tabel, mengganti policy yang sudah ada pada tabel aplikasi terkait dengan RLS per pengguna, dan membuat RPC Telegram; migrasi data lama yang masih tanpa `user_id` dilakukan saat pemilik masuk pertama kali.
 4. Tambahkan `NEON_DATA_API_URL` di environment Vercel dengan URL REST base, tanpa menambahkan path resource. Untuk endpoint saat ini:
    `https://ep-winter-poetry-arl51lwx.apirest.c-4.us-west-2.aws.neon.tech/neondb/rest/v1`
-5. Hapus `DATABASE_URL`/`DATABASE_URI` dari deployment bila tidak dibutuhkan bagian lain. Aplikasi tidak lagi membuka koneksi PostgreSQL melalui `pg`.
+5. Atur `DATABASE_URL` di Vercel ke connection string PostgreSQL Neon (simpan hanya sebagai server-side secret). Bot Telegram memanggil fungsi database melalui Neon serverless driver dengan HTTP, bukan koneksi TCP; string koneksi ini diperlukan untuk autentikasi server-to-database. Gunakan connection string role yang menjalankan skrip SQL atau beri role tersebut `USAGE` pada schema `public` dan `EXECUTE` pada fungsi-fungsi Telegram. `DATABASE_URI` juga didukung sebagai nama lama. Jangan pernah menaruh connection string ini di frontend.
 
 Skrip SQL menggunakan `busan6202@gmail.com` sebagai email pemilik awal. Jika `FIREBASE_BOOTSTRAP_EMAIL` diubah, sesuaikan juga nilai di database, setelah menjalankan skrip:
 
@@ -42,7 +42,7 @@ SET value = lower('email-pemilik-anda@example.com')
 WHERE key = 'bootstrap_owner_email';
 ```
 
-Jangan memberi akses Data API `anonymous` langsung ke tabel keuangan. Skrip hanya memberi akses tabel kepada role `authenticated` dengan RLS per UID; role `anonymous` hanya dapat menjalankan RPC Telegram yang memeriksa secret webhook. Pastikan Neon berhasil memuat ulang schema setelah skrip selesai; skrip mengirim `NOTIFY pgrst, 'reload schema'`.
+Jangan memberi akses Data API `anonymous` ke tabel atau RPC Telegram. Skrip hanya memberi akses tabel kepada role `authenticated` dengan RLS per UID. Telegram memakai `DATABASE_URL` di sisi server untuk memanggil fungsi `SECURITY DEFINER`; fungsi tersebut memeriksa secret webhook dan tidak diekspos ke role Data API. Bila versi skrip sebelumnya sudah dijalankan, jalankan ulang blok `REVOKE ALL ON FUNCTION public.telegram_...` di bagian akhir skrip agar RPC tidak dapat dipanggil melalui role Data API `anonymous`. Pastikan Neon berhasil memuat ulang schema setelah skrip selesai; skrip mengirim `NOTIFY pgrst, 'reload schema'`.
 
 Firebase Web API key memang dikirim ke browser dan bukan kata sandi. Jangan pernah menaruh token bot Telegram, `GEMINI_API_KEY`, atau kredensial database di frontend. Batasi API key pada layanan yang diperlukan melalui pengaturan Firebase/Google Cloud dan jangan gunakan key ini sebagai pengganti aturan keamanan. `GOOGLE_CLIENT_ID` tidak lagi digunakan oleh aplikasi untuk login.
 
@@ -50,7 +50,7 @@ Saat akun pemilik masuk pertama kali, data lama akan dipindahkan secara aman ke 
 
 ### Menghubungkan bot Telegram
 
-Atur `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_WEBHOOK_SECRET` di environment variables server, lalu pastikan webhook bot Telegram dikonfigurasi dengan URL `/api/telegram-webhook` dan secret token yang sama. Secret harus hanya memakai huruf, angka, `_`, atau `-`, dan minimal 32 karakter. Setelah mengubah secret, pemilik perlu keluar lalu masuk kembali agar nilainya disinkronkan secara aman ke Neon. `ADMIN_TELEGRAM_ID` tidak lagi digunakan.
+Atur `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, dan `TELEGRAM_WEBHOOK_SECRET` di environment variables server, lalu pastikan webhook bot Telegram dikonfigurasi dengan URL `/api/telegram-webhook` dan secret token yang sama. Secret harus hanya memakai huruf, angka, `_`, atau `-`, dan minimal 32 karakter. Setelah mengubah secret, pemilik perlu keluar lalu masuk kembali agar nilainya disinkronkan secara aman ke Neon. `ADMIN_TELEGRAM_ID` tidak lagi digunakan.
 
 Membuka URL webhook langsung di browser hanya mengirim GET dan tidak mendaftarkan webhook. Telegram harus didaftarkan ke URL tersebut dengan `setWebhook` (POST) dan `secret_token` yang sama persis dengan `TELEGRAM_WEBHOOK_SECRET`; gunakan `getWebhookInfo` untuk memeriksa apakah URL sudah terpasang dan apakah ada `last_error_message`. Jangan membagikan token bot atau secret. Endpoint GET aplikasi hanya menampilkan pesan bahwa endpoint aktif, bukan status koneksi Telegram.
 
@@ -58,4 +58,4 @@ Membuka URL webhook langsung di browser hanya mengirim GET dan tidak mendaftarka
 2. Pilih **Hubungkan Telegram**, lalu buka tautan `@duitandaBOT` yang tersedia dan salin kode sekali pakai.
 3. Kirim `/link KODE` di chat pribadi bot dalam waktu 10 menit.
 
-Setelah berhasil tertaut, bot menyimpan transaksi, membaca saldo/riwayat, dan menjalankan `/reset` hanya untuk akun pemilik Telegram tersebut. Perintah `/unlink` melepas tautan. Setiap pengguna harus menautkan Telegram sendiri; bot tidak menerima pesan grup. Kode tautan disimpan melalui Data API di bawah RLS; Telegram memakai fungsi database terbatas sehingga tidak mendapat akses langsung ke tabel. Analisis AI di bot tetap memerlukan `GEMINI_API_KEY`.
+Setelah berhasil tertaut, bot menyimpan transaksi, membaca saldo/riwayat, dan menjalankan `/reset` hanya untuk akun pemilik Telegram tersebut. Perintah `/unlink` melepas tautan. Setiap pengguna harus menautkan Telegram sendiri; bot tidak menerima pesan grup. Kode tautan disimpan melalui Data API di bawah RLS; operasi Telegram dijalankan server-side melalui fungsi database terbatas. Analisis AI di bot tetap memerlukan `GEMINI_API_KEY`.

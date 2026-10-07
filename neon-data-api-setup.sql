@@ -473,19 +473,12 @@ REVOKE ALL ON FUNCTION public.set_telegram_webhook_secret(TEXT) FROM PUBLIC, ano
 GRANT EXECUTE ON FUNCTION public.claim_legacy_saku_data() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.set_telegram_webhook_secret(TEXT) TO authenticated;
 
-REVOKE ALL ON FUNCTION public.telegram_link_account(TEXT, TEXT, TEXT) FROM PUBLIC, authenticated;
-REVOKE ALL ON FUNCTION public.telegram_get_user(TEXT, TEXT) FROM PUBLIC, authenticated;
-REVOKE ALL ON FUNCTION public.telegram_unlink_user(TEXT, TEXT) FROM PUBLIC, authenticated;
-REVOKE ALL ON FUNCTION public.telegram_save_transaction(TEXT, BIGINT, TEXT, NUMERIC, TEXT, TEXT, TEXT) FROM PUBLIC, authenticated;
-REVOKE ALL ON FUNCTION public.telegram_get_balance(TEXT, TEXT) FROM PUBLIC, authenticated;
-REVOKE ALL ON FUNCTION public.telegram_get_history(TEXT, TEXT) FROM PUBLIC, authenticated;
-REVOKE ALL ON FUNCTION public.telegram_reset_transactions(TEXT, TEXT) FROM PUBLIC, authenticated;
-GRANT EXECUTE ON FUNCTION public.telegram_link_account(TEXT, TEXT, TEXT) TO anonymous;
-GRANT EXECUTE ON FUNCTION public.telegram_get_user(TEXT, TEXT) TO anonymous;
-GRANT EXECUTE ON FUNCTION public.telegram_unlink_user(TEXT, TEXT) TO anonymous;
-GRANT EXECUTE ON FUNCTION public.telegram_save_transaction(TEXT, BIGINT, TEXT, NUMERIC, TEXT, TEXT, TEXT) TO anonymous;
-GRANT EXECUTE ON FUNCTION public.telegram_get_balance(TEXT, TEXT) TO anonymous;
-GRANT EXECUTE ON FUNCTION public.telegram_get_history(TEXT, TEXT) TO anonymous;
-GRANT EXECUTE ON FUNCTION public.telegram_reset_transactions(TEXT, TEXT) TO anonymous;
+REVOKE ALL ON FUNCTION public.telegram_link_account(TEXT, TEXT, TEXT) FROM PUBLIC, anonymous, authenticated;
+REVOKE ALL ON FUNCTION public.telegram_get_user(TEXT, TEXT) FROM PUBLIC, anonymous, authenticated;
+REVOKE ALL ON FUNCTION public.telegram_unlink_user(TEXT, TEXT) FROM PUBLIC, anonymous, authenticated;
+REVOKE ALL ON FUNCTION public.telegram_save_transaction(TEXT, BIGINT, TEXT, NUMERIC, TEXT, TEXT, TEXT) FROM PUBLIC, anonymous, authenticated;
+REVOKE ALL ON FUNCTION public.telegram_get_balance(TEXT, TEXT) FROM PUBLIC, anonymous, authenticated;
+REVOKE ALL ON FUNCTION public.telegram_get_history(TEXT, TEXT) FROM PUBLIC, anonymous, authenticated;
+REVOKE ALL ON FUNCTION public.telegram_reset_transactions(TEXT, TEXT) FROM PUBLIC, anonymous, authenticated;
 
 NOTIFY pgrst, 'reload schema';
