@@ -207,12 +207,14 @@ DECLARE
 BEGIN
     SELECT lower(value) INTO bootstrap_email
     FROM public.app_settings WHERE key = 'bootstrap_owner_email';
-    IF lower(COALESCE(p_email, '')) IS DISTINCT FROM bootstrap_email
-       OR p_secret IS NULL
+    IF lower(COALESCE(p_email, '')) IS DISTINCT FROM bootstrap_email THEN
+        RAISE EXCEPTION 'Bootstrap email does not match configured owner';
+    END IF;
+    IF p_secret IS NULL
        OR length(p_secret) < 32
        OR length(p_secret) > 256
        OR p_secret !~ '^[A-Za-z0-9_-]+$' THEN
-        RAISE EXCEPTION 'Not authorized to configure Telegram';
+        RAISE EXCEPTION 'Telegram webhook secret must be 32-256 ASCII letters, digits, underscores, or hyphens';
     END IF;
 
     INSERT INTO public.telegram_webhook_config (id, secret)

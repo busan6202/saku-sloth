@@ -128,11 +128,16 @@ async function initializeOwnerDatabase(userId, email) {
     await databaseSql`
         SELECT public.claim_legacy_saku_data(${userId}, ${email})
     `;
-    if (TELEGRAM_WEBHOOK_SECRET) {
-        await databaseSql`
-            SELECT public.set_telegram_webhook_secret(${email}, ${TELEGRAM_WEBHOOK_SECRET})
-        `;
+}
+
+async function synchronizeTelegramWebhookSecret(email) {
+    if (!TELEGRAM_WEBHOOK_SECRET) {
+        console.warn('TELEGRAM_WEBHOOK_SECRET belum dikonfigurasi; sinkronisasi Telegram dilewati.');
+        return;
     }
+    await databaseSql`
+        SELECT public.set_telegram_webhook_secret(${email}, ${TELEGRAM_WEBHOOK_SECRET})
+    `;
 }
 
 async function userDataRows(req, resource, query) {
@@ -441,6 +446,11 @@ app.post('/api/auth/session', authenticateFirebaseUser, async (req, res) => {
         } catch (err) {
             console.error('Gagal menyiapkan data pemilik di Neon:', err);
             return res.status(503).json({ error: 'Database Neon belum siap. Pastikan DATABASE_URL, hak akses fungsi pemilik, dan skrip SQL migrasi sudah sesuai.' });
+        }
+        try {
+            await synchronizeTelegramWebhookSecret(req.user.email);
+        } catch (err) {
+            console.error('Gagal menyinkronkan secret Telegram ke Neon; login tetap dilanjutkan:', err);
         }
     }
     res.json({ user: req.user });
