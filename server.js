@@ -20,6 +20,11 @@ const pool = new Pool({
 
 // Inisialisasi tabel transaksi dan penanda update Telegram yang sudah diproses.
 const databaseReady = pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    )
+`).then(() => pool.query(`
     CREATE TABLE IF NOT EXISTS transactions (
         id SERIAL PRIMARY KEY,
         "desc" TEXT NOT NULL,
@@ -28,7 +33,7 @@ const databaseReady = pool.query(`
         category VARCHAR(100) DEFAULT 'Umum',
         date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
-`).then(() => pool.query(`
+`)).then(() => pool.query(`
     CREATE TABLE IF NOT EXISTS telegram_processed_updates (
         update_id BIGINT PRIMARY KEY,
         processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -50,11 +55,6 @@ const databaseReady = pool.query(`
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
 `)).then(() => pool.query(`
-    CREATE TABLE IF NOT EXISTS app_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-    )
-`)).then(() => pool.query(`
     ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id TEXT;
     ALTER TABLE monthly_budgets ADD COLUMN IF NOT EXISTS user_id TEXT;
     ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS user_id TEXT;
@@ -64,7 +64,11 @@ const databaseReady = pool.query(`
     CREATE INDEX IF NOT EXISTS transactions_owner_date_idx ON transactions (user_id, date DESC);
     CREATE INDEX IF NOT EXISTS savings_goals_owner_idx ON savings_goals (user_id, created_at, id);
 `)).then(() => console.log("Berhasil terhubung ke Neon PostgreSQL! 🐘"))
-  .catch(err => console.error("Gagal inisialisasi database Neon:", err));
+  .catch(err => {
+      console.error("Gagal inisialisasi database Neon:", err);
+      throw err;
+  });
+databaseReady.catch(() => {});
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID;
@@ -315,6 +319,13 @@ async function authenticateFirebaseUser(req, res, next) {
     if (!tokenMatch) return res.status(401).json({ error: 'Silakan masuk dengan akun Google terlebih dahulu.' });
 
     try {
+        await databaseReady;
+    } catch (err) {
+        console.error('Database belum siap untuk autentikasi Firebase:', err);
+        return res.status(503).json({ error: 'Database belum siap. Coba login lagi beberapa saat kemudian.' });
+    }
+
+    try {
         let response;
         try {
             response = await fetch(
@@ -344,7 +355,6 @@ async function authenticateFirebaseUser(req, res, next) {
             return res.status(401).json({ error: 'Token Firebase tidak valid atau email belum terverifikasi.' });
         }
 
-        await databaseReady;
         const user = {
             id: firebaseUser.localId,
             email: firebaseUser.email.toLowerCase(),
