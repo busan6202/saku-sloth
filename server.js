@@ -103,15 +103,21 @@ const FIREBASE_BOOTSTRAP_EMAIL = (
 
 // Fungsi Kirim Pesan Telegram
 async function sendTelegramMessage(chatId, text) {
-    try {
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
-            body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' })
-        });
-    } catch (err) {
-        console.error("Gagal kirim pesan Telegram:", err.message);
+    if (!TELEGRAM_BOT_TOKEN) {
+        throw new Error('TELEGRAM_BOT_TOKEN belum dikonfigurasi.');
     }
+    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
+        body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok !== true) {
+        const description = result.description || `Telegram API merespons HTTP ${response.status}.`;
+        console.error('Telegram menolak pengiriman pesan:', description);
+        throw new Error(`Telegram gagal mengirim pesan: ${description}`);
+    }
+    return result;
 }
 
 // Fungsi Panggil Gemini Teks & Gambar (Auto-Retry 503)
@@ -660,17 +666,23 @@ app.get('/api/export-excel', authenticateFirebaseUser, async (req, res) => {
 });
 
 // ================= WEBHOOK TELEGRAM BOT =================
+app.get('/api/telegram-webhook', (req, res) => {
+    res.json({ message: 'Webhook endpoint aktif. Telegram harus mengirim pembaruan menggunakan POST.' });
+});
+
 app.post(`/api/telegram-webhook`, async (req, res) => {
     if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_WEBHOOK_SECRET) {
         console.error('Telegram webhook memerlukan TELEGRAM_BOT_TOKEN dan TELEGRAM_WEBHOOK_SECRET.');
         return res.status(503).json({ error: 'Telegram webhook belum dikonfigurasi dengan aman.' });
     }
     if (req.get('x-telegram-bot-api-secret-token') !== TELEGRAM_WEBHOOK_SECRET) {
+        console.warn('Telegram webhook ditolak karena secret header tidak cocok.');
         return res.sendStatus(401);
     }
 
     const update = req.body;
     if (!update.message) return res.sendStatus(200);
+    console.info('Telegram webhook menerima update:', update.update_id);
 
     const message = update.message;
     const chatId = String(message.chat.id);
@@ -850,7 +862,13 @@ ${userId
         }
     } catch (err) {
         console.error("Error:", err);
-        await sendTelegramMessage(chatId, "⚠️ Saku Harian sedang sibuk atau format pesan kurang jelas. Silakan ulangi.");
+        try {
+            await sendTelegramMessage(chatId, "⚠️ Saku Harian sedang sibuk atau format pesan kurang jelas. Silakan ulangi.");
+            return res.sendStatus(200);
+        } catch (notificationError) {
+            console.error('Gagal mengirim pesan error ke Telegram:', notificationError);
+            return res.sendStatus(500);
+        }
     }
 
     res.sendStatus(200);
