@@ -2,6 +2,8 @@ const API_BASE_URL = 'https://saku-sloth.vercel.app/api';
 const TRANSACTIONS_URL = `${API_BASE_URL}/transactions`;
 const BUDGETS_URL = `${API_BASE_URL}/budgets`;
 const SAVINGS_GOALS_URL = `${API_BASE_URL}/savings-goals`;
+const AUTH_CONFIG_URL = `${API_BASE_URL}/auth/config`;
+const AUTH_SESSION_URL = `${API_BASE_URL}/auth/session`;
 const VISIBLE_TRANSACTION_LIMIT = 5;
 const CATEGORY_COLORS = ['#a9df71', '#f0a096', '#91a8d0', '#e6c46b', '#ba9dd4', '#78c9b7', '#e79a5a'];
 
@@ -43,6 +45,13 @@ const elements = {
     goalList: document.getElementById('goalList'),
     analysisButton: document.getElementById('runFinancialAnalysis'),
     analysisResult: document.getElementById('analysisResult'),
+    appShell: document.querySelector('.app-shell'),
+    authScreen: document.getElementById('authScreen'),
+    authStatus: document.getElementById('authStatus'),
+    googleSignInButton: document.getElementById('googleSignInButton'),
+    accountActions: document.getElementById('accountActions'),
+    accountName: document.getElementById('accountName'),
+    accountAvatar: document.getElementById('accountAvatar'),
     notice: document.getElementById('notice'),
     dialog: document.getElementById('transactionDialog'),
     form: document.getElementById('transactionForm'),
@@ -53,8 +62,26 @@ const elements = {
 let transactions = [];
 let monthlyBudgets = [];
 let savingsGoals = [];
+let googleIdToken = null;
+let signedInUser = null;
+let authGeneration = 0;
 let showAllTransactions = false;
 let noticeTimeout;
+
+async function apiFetch(url, options = {}) {
+    if (!googleIdToken) throw new Error('Silakan masuk dengan akun Google terlebih dahulu.');
+    const requestGeneration = authGeneration;
+    const headers = new Headers(options.headers || {});
+    headers.set('Authorization', `Bearer ${googleIdToken}`);
+    const response = await fetch(url, { ...options, headers });
+    if (requestGeneration !== authGeneration) {
+        const error = new Error('Sesi login sudah berubah.');
+        error.name = 'AbortError';
+        throw error;
+    }
+    if (response.status === 401) signOut(false);
+    return response;
+}
 
 const currencyFormatter = new Intl.NumberFormat('id-ID', {
     style: 'currency',
@@ -376,20 +403,21 @@ function renderSavingsGoals() {
 
 async function loadBudgets() {
     const month = elements.monthFilter.value;
+    const requestGeneration = authGeneration;
     monthlyBudgets = [];
     renderBudgets();
     try {
-        const response = await fetch(`${BUDGETS_URL}?month=${encodeURIComponent(month)}`, {
+        const response = await apiFetch(`${BUDGETS_URL}?month=${encodeURIComponent(month)}`, {
             headers: { Accept: 'application/json' }
         });
         if (!response.ok) throw new Error(`Server merespons ${response.status}`);
         const data = await response.json();
         if (!Array.isArray(data)) throw new Error('Format budget tidak sesuai.');
-        if (month !== elements.monthFilter.value) return;
+        if (month !== elements.monthFilter.value || requestGeneration !== authGeneration) return;
         monthlyBudgets = data;
         renderBudgets();
     } catch (error) {
-        if (month !== elements.monthFilter.value) return;
+        if (month !== elements.monthFilter.value || requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal memuat budget:', error);
         elements.budgetList.replaceChildren();
         const errorMessage = document.createElement('p');
@@ -401,16 +429,19 @@ async function loadBudgets() {
 }
 
 async function loadSavingsGoals() {
+    const requestGeneration = authGeneration;
     try {
-        const response = await fetch(SAVINGS_GOALS_URL, {
+        const response = await apiFetch(SAVINGS_GOALS_URL, {
             headers: { Accept: 'application/json' }
         });
         if (!response.ok) throw new Error(`Server merespons ${response.status}`);
         const data = await response.json();
         if (!Array.isArray(data)) throw new Error('Format target tabungan tidak sesuai.');
+        if (requestGeneration !== authGeneration) return;
         savingsGoals = data;
         renderSavingsGoals();
     } catch (error) {
+        if (requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal memuat target tabungan:', error);
         elements.goalList.replaceChildren();
         const errorMessage = document.createElement('p');
@@ -425,22 +456,25 @@ async function saveBudget(category, limitAmount) {
     const normalizedCategory = String(category || '').trim();
     const amount = Number(limitAmount);
     const month = elements.monthFilter.value;
+    const requestGeneration = authGeneration;
     if (!normalizedCategory || !Number.isFinite(amount) || amount <= 0) {
         setNotice('Masukkan kategori dan batas budget yang valid.', 'error');
         return;
     }
 
     try {
-        const response = await fetch(BUDGETS_URL, {
+        const response = await apiFetch(BUDGETS_URL, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify({ month, category: normalizedCategory, limitAmount: amount })
         });
+        if (requestGeneration !== authGeneration) return;
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
             throw new Error(errorBody.error || `Server merespons ${response.status}`);
         }
         const savedBudget = await response.json();
+        if (requestGeneration !== authGeneration) return;
         if (month !== elements.monthFilter.value) {
             setNotice(`Budget untuk ${month} berhasil disimpan.`);
             return;
@@ -451,6 +485,7 @@ async function saveBudget(category, limitAmount) {
         renderBudgets();
         setNotice('Budget berhasil disimpan.');
     } catch (error) {
+        if (requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal menyimpan budget:', error);
         setNotice(error.message || 'Budget gagal disimpan. Silakan coba lagi.', 'error');
     }
@@ -459,8 +494,10 @@ async function saveBudget(category, limitAmount) {
 async function deleteBudget(budgetId) {
     const budget = monthlyBudgets.find((item) => String(item.id) === String(budgetId));
     if (!budget || !window.confirm(`Hapus budget kategori "${budget.category}" untuk ${budget.month}?`)) return;
+    const requestGeneration = authGeneration;
     try {
-        const response = await fetch(`${BUDGETS_URL}/${encodeURIComponent(budgetId)}`, { method: 'DELETE' });
+        const response = await apiFetch(`${BUDGETS_URL}/${encodeURIComponent(budgetId)}`, { method: 'DELETE' });
+        if (requestGeneration !== authGeneration) return;
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
             throw new Error(errorBody.error || `Server merespons ${response.status}`);
@@ -469,6 +506,7 @@ async function deleteBudget(budgetId) {
         renderBudgets();
         setNotice('Budget berhasil dihapus.');
     } catch (error) {
+        if (requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal menghapus budget:', error);
         setNotice(error.message || 'Budget gagal dihapus. Silakan coba lagi.', 'error');
     }
@@ -489,27 +527,32 @@ async function createSavingsGoal(event) {
     }
 
     const button = document.getElementById('saveGoal');
+    const requestGeneration = authGeneration;
     button.disabled = true;
     try {
-        const response = await fetch(SAVINGS_GOALS_URL, {
+        const response = await apiFetch(SAVINGS_GOALS_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify(goal)
         });
+        if (requestGeneration !== authGeneration) return;
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
             throw new Error(errorBody.error || `Server merespons ${response.status}`);
         }
-        savingsGoals.push(await response.json());
+        const savedGoal = await response.json();
+        if (requestGeneration !== authGeneration) return;
+        savingsGoals.push(savedGoal);
         elements.goalForm.reset();
         document.getElementById('goalCurrent').value = '0';
         renderSavingsGoals();
         setNotice('Target tabungan berhasil ditambahkan.');
     } catch (error) {
+        if (requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal membuat target tabungan:', error);
         setNotice(error.message || 'Target tabungan gagal dibuat. Silakan coba lagi.', 'error');
     } finally {
-        button.disabled = false;
+        if (requestGeneration === authGeneration) button.disabled = false;
     }
 }
 
@@ -519,21 +562,25 @@ async function updateSavingsGoal(goalId, currentAmount) {
         setNotice('Masukkan saldo terkumpul yang valid.', 'error');
         return;
     }
+    const requestGeneration = authGeneration;
     try {
-        const response = await fetch(`${SAVINGS_GOALS_URL}/${encodeURIComponent(goalId)}`, {
+        const response = await apiFetch(`${SAVINGS_GOALS_URL}/${encodeURIComponent(goalId)}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify({ currentAmount: amount })
         });
+        if (requestGeneration !== authGeneration) return;
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
             throw new Error(errorBody.error || `Server merespons ${response.status}`);
         }
         const updatedGoal = await response.json();
+        if (requestGeneration !== authGeneration) return;
         savingsGoals = savingsGoals.map((goal) => String(goal.id) === String(goalId) ? updatedGoal : goal);
         renderSavingsGoals();
         setNotice('Saldo target tabungan berhasil diperbarui.');
     } catch (error) {
+        if (requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal memperbarui target tabungan:', error);
         setNotice(error.message || 'Saldo target tabungan gagal diperbarui.', 'error');
     }
@@ -542,8 +589,10 @@ async function updateSavingsGoal(goalId, currentAmount) {
 async function deleteSavingsGoal(goalId) {
     const goal = savingsGoals.find((item) => String(item.id) === String(goalId));
     if (!goal || !window.confirm(`Hapus target tabungan "${goal.name}"?`)) return;
+    const requestGeneration = authGeneration;
     try {
-        const response = await fetch(`${SAVINGS_GOALS_URL}/${encodeURIComponent(goalId)}`, { method: 'DELETE' });
+        const response = await apiFetch(`${SAVINGS_GOALS_URL}/${encodeURIComponent(goalId)}`, { method: 'DELETE' });
+        if (requestGeneration !== authGeneration) return;
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
             throw new Error(errorBody.error || `Server merespons ${response.status}`);
@@ -552,41 +601,179 @@ async function deleteSavingsGoal(goalId) {
         renderSavingsGoals();
         setNotice('Target tabungan berhasil dihapus.');
     } catch (error) {
+        if (requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal menghapus target tabungan:', error);
         setNotice(error.message || 'Target tabungan gagal dihapus.', 'error');
     }
 }
 
+async function handleGoogleCredential(credentialResponse) {
+    const credential = credentialResponse?.credential;
+    if (!credential) {
+        elements.authStatus.textContent = 'Google tidak mengembalikan kredensial. Silakan coba lagi.';
+        return;
+    }
+
+    const loginAttempt = ++authGeneration;
+    elements.authStatus.textContent = 'Memverifikasi akun Google...';
+    try {
+        const response = await fetch(AUTH_SESSION_URL, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${credential}`,
+                Accept: 'application/json'
+            }
+        });
+        const result = await response.json().catch(() => ({}));
+        if (loginAttempt !== authGeneration) return;
+        if (!response.ok) throw new Error(result.error || `Server merespons ${response.status}`);
+        if (!result.user?.id || !result.user?.email) throw new Error('Identitas Google dari server tidak valid.');
+
+        googleIdToken = credential;
+        signedInUser = result.user;
+        elements.appShell.classList.add('is-authenticated');
+        elements.authScreen.hidden = true;
+        elements.accountActions.hidden = false;
+        elements.accountName.textContent = signedInUser.name || signedInUser.email;
+        elements.accountAvatar.hidden = !signedInUser.picture;
+        if (signedInUser.picture) elements.accountAvatar.src = signedInUser.picture;
+        await Promise.all([loadTransactions(), loadBudgets(), loadSavingsGoals()]);
+    } catch (error) {
+        if (loginAttempt !== authGeneration) return;
+        console.error('Gagal masuk dengan Google:', error);
+        googleIdToken = null;
+        signedInUser = null;
+        elements.authStatus.textContent = error.message || 'Login Google gagal. Silakan coba lagi.';
+    }
+}
+
+async function initializeGoogleSignIn() {
+    elements.authStatus.textContent = 'Menghubungkan ke layanan Google...';
+    try {
+        const response = await fetch(AUTH_CONFIG_URL, { headers: { Accept: 'application/json' } });
+        const config = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(config.error || `Server merespons ${response.status}`);
+        if (!config.clientId) throw new Error('Client ID Google belum tersedia.');
+        if (!window.google?.accounts?.id) throw new Error('Layanan Google Sign-In gagal dimuat. Periksa koneksi lalu muat ulang.');
+
+        window.google.accounts.id.initialize({
+            client_id: config.clientId,
+            callback: handleGoogleCredential,
+            auto_select: false,
+            cancel_on_tap_outside: false
+        });
+        window.google.accounts.id.renderButton(elements.googleSignInButton, {
+            type: 'standard',
+            theme: 'outline',
+            size: 'large',
+            text: 'signin_with',
+            shape: 'rectangular',
+            width: 300,
+            logo_alignment: 'left'
+        });
+        elements.authStatus.textContent = 'Pilih akun Google untuk masuk.';
+    } catch (error) {
+        console.error('Gagal menyiapkan Google Sign-In:', error);
+        elements.authStatus.textContent = error.message || 'Google Sign-In belum bisa disiapkan. Coba muat ulang.';
+    }
+}
+
+function signOut(showStatus = true) {
+    authGeneration += 1;
+    googleIdToken = null;
+    signedInUser = null;
+    transactions = [];
+    monthlyBudgets = [];
+    savingsGoals = [];
+    elements.accountActions.hidden = true;
+    elements.accountName.textContent = '';
+    elements.accountAvatar.removeAttribute('src');
+    elements.appShell.classList.remove('is-authenticated');
+    elements.authScreen.hidden = false;
+    elements.transactionList.replaceChildren();
+    elements.emptyState.hidden = true;
+    elements.listStatus.textContent = '';
+    elements.categoryLegend.replaceChildren();
+    elements.categoryDonut.style.background = 'conic-gradient(var(--line) 0deg 360deg)';
+    elements.categoryTotal.textContent = formatCurrency(0);
+    elements.budgetList.replaceChildren();
+    elements.goalList.replaceChildren();
+    elements.trendChart.replaceChildren();
+    elements.trendCaption.textContent = '';
+    elements.analysisResult.replaceChildren();
+    elements.analysisResult.hidden = true;
+    elements.form.reset();
+    elements.saveButton.disabled = false;
+    elements.saveButton.textContent = 'Simpan transaksi';
+    elements.goalForm.reset();
+    document.getElementById('saveGoal').disabled = false;
+    document.getElementById('saveGoal').textContent = 'Tambah target';
+    elements.budgetForm.reset();
+    elements.analysisButton.disabled = false;
+    const analysisIcon = document.createElement('i');
+    analysisIcon.dataset.lucide = 'sparkles';
+    analysisIcon.setAttribute('aria-hidden', 'true');
+    elements.analysisButton.replaceChildren(analysisIcon, document.createTextNode(' Analisis bulan ini'));
+    renderIcons();
+    elements.search.value = '';
+    elements.typeFilter.value = 'all';
+    elements.categoryFilter.replaceChildren(new Option('Semua kategori', 'all'));
+    elements.categoryOptions.replaceChildren();
+    elements.sort.value = 'newest';
+    if (elements.dialog.open) elements.dialog.close();
+    elements.balance.textContent = formatCurrency(0);
+    elements.balanceCaption.textContent = 'Pemasukan dikurangi pengeluaran';
+    elements.income.textContent = formatCurrency(0);
+    elements.expense.textContent = formatCurrency(0);
+    const flowCaption = document.createElement('span');
+    flowCaption.textContent = 'total pergerakan';
+    elements.flowTotal.replaceChildren(document.createTextNode(formatCurrency(0)), flowCaption);
+    elements.incomeCount.textContent = '0 transaksi';
+    elements.expenseCount.textContent = '0 transaksi';
+    elements.incomePercent.textContent = '0%';
+    elements.expensePercent.textContent = '0%';
+    elements.incomeBar.style.width = '0%';
+    elements.expenseBar.style.width = '0%';
+    if (showStatus) elements.authStatus.textContent = 'Anda telah keluar. Pilih akun Google untuk masuk kembali.';
+    window.google?.accounts?.id?.disableAutoSelect();
+}
+
 async function requestFinancialAnalysis() {
     const button = elements.analysisButton;
+    const requestGeneration = authGeneration;
     button.disabled = true;
     button.textContent = 'Menganalisis...';
     elements.analysisResult.hidden = false;
     elements.analysisResult.textContent = 'Mengirim ringkasan keuangan agregat ke Google Gemini...';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/financial-analysis`, {
+        const response = await apiFetch(`${API_BASE_URL}/financial-analysis`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
             body: JSON.stringify({ month: elements.monthFilter.value })
         });
+        if (requestGeneration !== authGeneration) return;
         const result = await response.json();
+        if (requestGeneration !== authGeneration) return;
         if (!response.ok) throw new Error(result.error || `Server merespons ${response.status}`);
         if (typeof result.analysis !== 'string' || !result.analysis.trim()) {
             throw new Error('Hasil analisis dari server tidak valid.');
         }
         elements.analysisResult.textContent = result.analysis;
     } catch (error) {
+        if (requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal meminta analisis AI:', error);
         elements.analysisResult.textContent = error.message || 'Analisis AI gagal dibuat. Coba lagi beberapa saat.';
         setNotice('Analisis AI gagal dibuat. Coba lagi beberapa saat.', 'error');
     } finally {
-        button.disabled = false;
-        const icon = document.createElement('i');
-        icon.dataset.lucide = 'sparkles';
-        icon.setAttribute('aria-hidden', 'true');
-        button.replaceChildren(icon, document.createTextNode(' Analisis bulan ini'));
-        renderIcons();
+        if (requestGeneration === authGeneration) {
+            button.disabled = false;
+            const icon = document.createElement('i');
+            icon.dataset.lucide = 'sparkles';
+            icon.setAttribute('aria-hidden', 'true');
+            button.replaceChildren(icon, document.createTextNode(' Analisis bulan ini'));
+            renderIcons();
+        }
     }
 }
 
@@ -784,6 +971,7 @@ function renderDashboard() {
 }
 
 async function loadTransactions() {
+    const requestGeneration = authGeneration;
     elements.transactionList.hidden = false;
     elements.emptyState.hidden = true;
     const loadingState = document.createElement('div');
@@ -795,12 +983,13 @@ async function loadTransactions() {
     elements.transactionList.replaceChildren(loadingState);
 
     try {
-        const response = await fetch(TRANSACTIONS_URL, {
+        const response = await apiFetch(TRANSACTIONS_URL, {
             headers: { Accept: 'application/json' }
         });
         if (!response.ok) throw new Error(`Server merespons ${response.status}`);
 
         const data = await response.json();
+        if (requestGeneration !== authGeneration) return;
         if (!Array.isArray(data)) throw new Error('Format data transaksi tidak sesuai.');
         transactions = data;
         elements.emptyState.querySelector('strong').textContent = 'Belum ada transaksi';
@@ -808,6 +997,7 @@ async function loadTransactions() {
         elements.emptyState.querySelector('[data-open-form]').hidden = false;
         renderDashboard();
     } catch (error) {
+        if (requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal memuat transaksi:', error);
         elements.transactionList.replaceChildren();
         elements.transactionList.hidden = true;
@@ -930,9 +1120,10 @@ async function submitTransaction(event) {
 
     elements.saveButton.disabled = true;
     elements.saveButton.textContent = 'Menyimpan...';
+    const requestGeneration = authGeneration;
 
     try {
-        const response = await fetch(TRANSACTIONS_URL, {
+        const response = await apiFetch(TRANSACTIONS_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -940,6 +1131,7 @@ async function submitTransaction(event) {
             },
             body: JSON.stringify(transaction)
         });
+        if (requestGeneration !== authGeneration) return;
 
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
@@ -947,6 +1139,7 @@ async function submitTransaction(event) {
         }
 
         const savedTransaction = await response.json();
+        if (requestGeneration !== authGeneration) return;
         transactions.unshift(savedTransaction);
         elements.form.reset();
         document.querySelector('input[name="type"][value="expense"]').checked = true;
@@ -960,12 +1153,15 @@ async function submitTransaction(event) {
         closeTransactionDialog();
         setNotice('Transaksi berhasil dicatat.');
     } catch (error) {
+        if (requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal menyimpan transaksi:', error);
         elements.formError.textContent = error.message || 'Transaksi gagal disimpan. Silakan coba lagi.';
         elements.formError.hidden = false;
     } finally {
-        elements.saveButton.disabled = false;
-        elements.saveButton.textContent = 'Simpan transaksi';
+        if (requestGeneration === authGeneration) {
+            elements.saveButton.disabled = false;
+            elements.saveButton.textContent = 'Simpan transaksi';
+        }
     }
 }
 
@@ -981,11 +1177,13 @@ async function deleteTransaction(button) {
     if (!window.confirm(`Hapus transaksi "${description}"? Tindakan ini tidak dapat dibatalkan.`)) return;
 
     button.disabled = true;
+    const requestGeneration = authGeneration;
     try {
-        const response = await fetch(`${TRANSACTIONS_URL}/${encodeURIComponent(transaction.id)}`, {
+        const response = await apiFetch(`${TRANSACTIONS_URL}/${encodeURIComponent(transaction.id)}`, {
             method: 'DELETE',
             headers: { Accept: 'application/json' }
         });
+        if (requestGeneration !== authGeneration) return;
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
             throw new Error(errorBody.error || `Server merespons ${response.status}`);
@@ -995,6 +1193,7 @@ async function deleteTransaction(button) {
         renderDashboard();
         setNotice('Transaksi berhasil dihapus.');
     } catch (error) {
+        if (requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal menghapus transaksi:', error);
         setNotice(error.message || 'Transaksi gagal dihapus. Silakan coba lagi.', 'error');
         button.disabled = false;
@@ -1125,6 +1324,5 @@ elements.form.addEventListener('submit', submitTransaction);
 initializeTheme();
 initializeNavigation();
 renderIcons();
-loadBudgets();
-loadSavingsGoals();
-loadTransactions();
+document.getElementById('signOutButton').addEventListener('click', () => signOut());
+initializeGoogleSignIn();

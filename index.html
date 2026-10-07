@@ -12,10 +12,25 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
+    <script src="https://accounts.google.com/gsi/client" defer></script>
     <script src="script.js" defer></script>
 </head>
 <body>
     <div class="app-shell">
+        <section class="auth-screen" id="authScreen" aria-labelledby="authTitle">
+            <div class="auth-card">
+                <a class="brand auth-brand" href="#" aria-label="Saku Harian">
+                    <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+                    <span class="brand-copy">saku<span>harian</span></span>
+                </a>
+                <p class="eyebrow">RUANG FINANSIAL PRIBADI</p>
+                <h1 id="authTitle">Masuk ke <span>Saku Harian.</span></h1>
+                <p class="welcome-copy">Masuk dengan Google untuk melihat dan mengelola data keuangan milik akunmu.</p>
+                <div class="google-signin" id="googleSignInButton"></div>
+                <p class="auth-status" id="authStatus" role="status" aria-live="polite">Menghubungkan ke layanan Google...</p>
+                <p class="auth-data-note">Setiap akun hanya dapat mengakses transaksi, budget, dan target tabungannya sendiri.</p>
+            </div>
+        </section>
         <aside class="sidebar" aria-label="Navigasi utama">
             <a class="brand" href="#overview" aria-label="Saku Harian, ke beranda">
                 <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -58,6 +73,11 @@
                     </button>
                     <button class="icon-button" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
                     <button class="icon-button theme-button" id="themeToggle" type="button" aria-label="Ganti tema" title="Ganti tema"><i data-lucide="moon" aria-hidden="true"></i></button>
+                    <div class="account-actions" id="accountActions" hidden>
+                        <img class="account-avatar" id="accountAvatar" alt="" hidden>
+                        <span class="account-name" id="accountName"></span>
+                        <button class="text-button" id="signOutButton" type="button">Keluar</button>
+                    </div>
                 </div>
             </header>
 

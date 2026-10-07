@@ -1,6 +1,7 @@
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
+const { OAuth2Client } = require('google-auth-library');
 require('dotenv').config();
 
 const app = express();
@@ -49,12 +50,30 @@ const databaseReady = pool.query(`
         current_amount NUMERIC NOT NULL DEFAULT 0 CHECK (current_amount >= 0),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
+`)).then(() => pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    )
+`)).then(() => pool.query(`
+    ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id TEXT;
+    ALTER TABLE monthly_budgets ADD COLUMN IF NOT EXISTS user_id TEXT;
+    ALTER TABLE savings_goals ADD COLUMN IF NOT EXISTS user_id TEXT;
+    ALTER TABLE monthly_budgets DROP CONSTRAINT IF EXISTS monthly_budgets_month_category_key;
+    CREATE UNIQUE INDEX IF NOT EXISTS monthly_budgets_owner_month_category_idx
+        ON monthly_budgets (user_id, month, category);
+    CREATE INDEX IF NOT EXISTS transactions_owner_date_idx ON transactions (user_id, date DESC);
+    CREATE INDEX IF NOT EXISTS savings_goals_owner_idx ON savings_goals (user_id, created_at, id);
 `)).then(() => console.log("Berhasil terhubung ke Neon PostgreSQL! 🐘"))
   .catch(err => console.error("Gagal inisialisasi database Neon:", err));
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8584715332:AAEF5F54-ipvf8vQGH-Eh7bqrYZYCIuLHjQ';
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID;
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_BOOTSTRAP_EMAIL = (process.env.GOOGLE_BOOTSTRAP_EMAIL || '').trim().toLowerCase();
+const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
 
 // Fungsi Kirim Pesan Telegram
 async function sendTelegramMessage(chatId, text) {
@@ -67,6 +86,12 @@ async function sendTelegramMessage(chatId, text) {
     } catch (err) {
         console.error("Gagal kirim pesan Telegram:", err.message);
     }
+}
+
+async function getTelegramOwnerId() {
+    await databaseReady;
+    const result = await pool.query("SELECT value FROM app_settings WHERE key = 'bootstrap_google_sub'");
+    return result.rows[0]?.value || null;
 }
 
 // Fungsi Panggil Gemini Teks & Gambar (Auto-Retry 503)
@@ -149,8 +174,10 @@ async function saveAndNotify(trxData, chatId, updateId) {
             ON CONFLICT (update_id) DO NOTHING
             RETURNING update_id
         )
-        INSERT INTO transactions ("desc", amount, type, category)
-        SELECT $2, $3, $4, $5
+        INSERT INTO transactions ("desc", amount, type, category, user_id)
+        SELECT $2, $3, $4, $5, (
+            SELECT value FROM app_settings WHERE key = 'bootstrap_google_sub'
+        )
         FROM claimed_update
         RETURNING *
     `;
@@ -163,10 +190,15 @@ async function saveAndNotify(trxData, chatId, updateId) {
 
     const savedTrx = result.rows[0];
 
-    const resIncome = await pool.query("SELECT SUM(amount) as total FROM transactions WHERE type = 'income'");
-    const resExpense = await pool.query("SELECT SUM(amount) as total FROM transactions WHERE type = 'expense'");
-    const totalIncome = Number(resIncome.rows[0].total || 0);
-    const totalExpense = Number(resExpense.rows[0].total || 0);
+    const totals = await pool.query(`
+        SELECT
+            COALESCE(SUM(amount) FILTER (WHERE type = 'income'), 0) AS income,
+            COALESCE(SUM(amount) FILTER (WHERE type = 'expense'), 0) AS expense
+        FROM transactions
+            WHERE user_id = $1
+    `, [savedTrx.user_id]);
+    const totalIncome = Number(totals.rows[0].income);
+    const totalExpense = Number(totals.rows[0].expense);
     const balance = totalIncome - totalExpense;
 
     let financialAdvice = "";
@@ -199,9 +231,12 @@ ${financialAdvice}
 }
 
 // API: Ambil Semua Transaksi (Untuk Web)
-app.get('/api/transactions', async (req, res) => {
+app.get('/api/transactions', authenticateGoogleUser, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM transactions ORDER BY date DESC');
+        const result = await pool.query(
+            'SELECT id, "desc", amount, type, category, date FROM transactions WHERE user_id = $1 ORDER BY date DESC',
+            [req.user.id]
+        );
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -209,11 +244,11 @@ app.get('/api/transactions', async (req, res) => {
 });
 
 // API: Tambah Transaksi (Untuk Web)
-app.post('/api/transactions', async (req, res) => {
+app.post('/api/transactions', authenticateGoogleUser, async (req, res) => {
     try {
         const { desc, amount, type, category } = req.body;
-        const query = `INSERT INTO transactions ("desc", amount, type, category) VALUES ($1, $2, $3, $4) RETURNING *`;
-        const values = [desc, amount, type, category || 'Umum'];
+        const query = `INSERT INTO transactions ("desc", amount, type, category, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING id, "desc", amount, type, category, date`;
+        const values = [desc, amount, type, category || 'Umum', req.user.id];
         const result = await pool.query(query, values);
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -222,14 +257,14 @@ app.post('/api/transactions', async (req, res) => {
 });
 
 // API: Hapus transaksi dari web
-app.delete('/api/transactions/:id', async (req, res) => {
+app.delete('/api/transactions/:id', authenticateGoogleUser, async (req, res) => {
     const { id } = req.params;
     if (!/^[1-9]\d*$/.test(id)) {
         return res.status(400).json({ error: 'ID transaksi tidak valid.' });
     }
 
     try {
-        const result = await pool.query('DELETE FROM transactions WHERE id = $1 RETURNING id', [id]);
+        const result = await pool.query('DELETE FROM transactions WHERE id = $1 AND user_id = $2 RETURNING id', [id, req.user.id]);
         if (result.rowCount === 0) {
             return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
         }
@@ -257,14 +292,82 @@ function isValidPositiveId(value) {
     return /^[1-9]\d*$/.test(value);
 }
 
-app.get('/api/budgets', async (req, res) => {
+app.get('/api/auth/config', (req, res) => {
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_BOOTSTRAP_EMAIL) {
+        return res.status(503).json({ error: 'Login Google belum dikonfigurasi di server.' });
+    }
+    res.json({ clientId: GOOGLE_CLIENT_ID });
+});
+
+async function authenticateGoogleUser(req, res, next) {
+    if (!googleClient || !GOOGLE_BOOTSTRAP_EMAIL) {
+        return res.status(503).json({ error: 'Login Google belum dikonfigurasi di server.' });
+    }
+    const authorization = req.get('authorization') || '';
+    const tokenMatch = authorization.match(/^Bearer ([^\s]+)$/i);
+    if (!tokenMatch) return res.status(401).json({ error: 'Silakan masuk dengan akun Google.' });
+
+    let payload;
+    try {
+        const ticket = await googleClient.verifyIdToken({
+            idToken: tokenMatch[1],
+            audience: GOOGLE_CLIENT_ID
+        });
+        payload = ticket.getPayload();
+    } catch (err) {
+        console.warn('Verifikasi token Google gagal:', err.message);
+        return res.status(401).json({ error: 'Sesi Google tidak valid atau sudah kedaluwarsa. Silakan masuk kembali.' });
+    }
+    if (!payload?.sub || !payload.email || payload.email_verified !== true) {
+        return res.status(401).json({ error: 'Token Google tidak valid atau email belum terverifikasi.' });
+    }
+
+    try {
+        await databaseReady;
+        const user = {
+            id: payload.sub,
+            email: payload.email.toLowerCase(),
+            name: payload.name || payload.email,
+            picture: payload.picture || ''
+        };
+        if (GOOGLE_BOOTSTRAP_EMAIL && user.email === GOOGLE_BOOTSTRAP_EMAIL) {
+            await pool.query(`
+                INSERT INTO app_settings (key, value)
+                VALUES ('bootstrap_google_sub', $1)
+                ON CONFLICT (key) DO NOTHING
+            `, [user.id]);
+            const owner = await pool.query(
+                "SELECT value FROM app_settings WHERE key = 'bootstrap_google_sub'"
+            );
+            if (owner.rows[0]?.value !== user.id) {
+                return res.status(403).json({ error: 'Akun Google ini tidak cocok dengan pemilik data awal.' });
+            }
+            await Promise.all([
+                pool.query('UPDATE transactions SET user_id = $1 WHERE user_id IS NULL', [user.id]),
+                pool.query('UPDATE monthly_budgets SET user_id = $1 WHERE user_id IS NULL', [user.id]),
+                pool.query('UPDATE savings_goals SET user_id = $1 WHERE user_id IS NULL', [user.id])
+            ]);
+        }
+        req.user = user;
+        next();
+    } catch (err) {
+        console.error('Gagal menyiapkan data pengguna Google:', err);
+        res.status(500).json({ error: 'Data akun tidak dapat dimuat.' });
+    }
+}
+
+app.post('/api/auth/session', authenticateGoogleUser, (req, res) => {
+    res.json({ user: req.user });
+});
+
+app.get('/api/budgets', authenticateGoogleUser, async (req, res) => {
     const { month } = req.query;
     if (!isValidMonth(month)) return res.status(400).json({ error: 'Bulan budget tidak valid.' });
     try {
         await databaseReady;
         const result = await pool.query(
-            'SELECT id, month, category, limit_amount FROM monthly_budgets WHERE month = $1 ORDER BY category',
-            [month]
+            'SELECT id, month, category, limit_amount FROM monthly_budgets WHERE month = $1 AND user_id = $2 ORDER BY category',
+            [month, req.user.id]
         );
         res.json(result.rows);
     } catch (err) {
@@ -273,7 +376,7 @@ app.get('/api/budgets', async (req, res) => {
     }
 });
 
-app.put('/api/budgets', async (req, res) => {
+app.put('/api/budgets', authenticateGoogleUser, async (req, res) => {
     const { month, category, limitAmount } = req.body;
     const normalizedCategory = typeof category === 'string' ? category.trim() : '';
     if (!isValidMonth(month) || !normalizedCategory || normalizedCategory.length > 100 || !isValidPositiveAmount(limitAmount)) {
@@ -282,11 +385,11 @@ app.put('/api/budgets', async (req, res) => {
     try {
         await databaseReady;
         const result = await pool.query(`
-            INSERT INTO monthly_budgets (month, category, limit_amount)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (month, category) DO UPDATE SET limit_amount = EXCLUDED.limit_amount
+            INSERT INTO monthly_budgets (month, category, limit_amount, user_id)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (user_id, month, category) DO UPDATE SET limit_amount = EXCLUDED.limit_amount
             RETURNING id, month, category, limit_amount
-        `, [month, normalizedCategory, Number(limitAmount)]);
+        `, [month, normalizedCategory, Number(limitAmount), req.user.id]);
         res.json(result.rows[0]);
     } catch (err) {
         console.error('Gagal menyimpan budget:', err);
@@ -294,11 +397,11 @@ app.put('/api/budgets', async (req, res) => {
     }
 });
 
-app.delete('/api/budgets/:id', async (req, res) => {
+app.delete('/api/budgets/:id', authenticateGoogleUser, async (req, res) => {
     if (!isValidPositiveId(req.params.id)) return res.status(400).json({ error: 'ID budget tidak valid.' });
     try {
         await databaseReady;
-        const result = await pool.query('DELETE FROM monthly_budgets WHERE id = $1 RETURNING id', [req.params.id]);
+        const result = await pool.query('DELETE FROM monthly_budgets WHERE id = $1 AND user_id = $2 RETURNING id', [req.params.id, req.user.id]);
         if (result.rowCount === 0) return res.status(404).json({ error: 'Budget tidak ditemukan.' });
         res.sendStatus(204);
     } catch (err) {
@@ -307,10 +410,10 @@ app.delete('/api/budgets/:id', async (req, res) => {
     }
 });
 
-app.get('/api/savings-goals', async (req, res) => {
+app.get('/api/savings-goals', authenticateGoogleUser, async (req, res) => {
     try {
         await databaseReady;
-        const result = await pool.query('SELECT id, name, target_amount, current_amount FROM savings_goals ORDER BY created_at, id');
+        const result = await pool.query('SELECT id, name, target_amount, current_amount FROM savings_goals WHERE user_id = $1 ORDER BY created_at, id', [req.user.id]);
         res.json(result.rows);
     } catch (err) {
         console.error('Gagal mengambil target tabungan:', err);
@@ -318,7 +421,7 @@ app.get('/api/savings-goals', async (req, res) => {
     }
 });
 
-app.post('/api/savings-goals', async (req, res) => {
+app.post('/api/savings-goals', authenticateGoogleUser, async (req, res) => {
     const { name, targetAmount, currentAmount = 0 } = req.body;
     const normalizedName = typeof name === 'string' ? name.trim() : '';
     const validCurrentAmount = isValidNonnegativeAmount(currentAmount);
@@ -328,10 +431,10 @@ app.post('/api/savings-goals', async (req, res) => {
     try {
         await databaseReady;
         const result = await pool.query(`
-            INSERT INTO savings_goals (name, target_amount, current_amount)
-            VALUES ($1, $2, $3)
+            INSERT INTO savings_goals (name, target_amount, current_amount, user_id)
+            VALUES ($1, $2, $3, $4)
             RETURNING id, name, target_amount, current_amount
-        `, [normalizedName, Number(targetAmount), Number(currentAmount)]);
+        `, [normalizedName, Number(targetAmount), Number(currentAmount), req.user.id]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error('Gagal membuat target tabungan:', err);
@@ -339,7 +442,7 @@ app.post('/api/savings-goals', async (req, res) => {
     }
 });
 
-app.patch('/api/savings-goals/:id', async (req, res) => {
+app.patch('/api/savings-goals/:id', authenticateGoogleUser, async (req, res) => {
     const { currentAmount } = req.body;
     if (!isValidPositiveId(req.params.id) || !isValidNonnegativeAmount(currentAmount)) {
         return res.status(400).json({ error: 'ID atau saldo target tabungan tidak valid.' });
@@ -348,9 +451,9 @@ app.patch('/api/savings-goals/:id', async (req, res) => {
         await databaseReady;
         const result = await pool.query(`
             UPDATE savings_goals SET current_amount = $1
-            WHERE id = $2
+            WHERE id = $2 AND user_id = $3
             RETURNING id, name, target_amount, current_amount
-        `, [Number(currentAmount), req.params.id]);
+        `, [Number(currentAmount), req.params.id, req.user.id]);
         if (result.rowCount === 0) return res.status(404).json({ error: 'Target tabungan tidak ditemukan.' });
         res.json(result.rows[0]);
     } catch (err) {
@@ -359,11 +462,11 @@ app.patch('/api/savings-goals/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/savings-goals/:id', async (req, res) => {
+app.delete('/api/savings-goals/:id', authenticateGoogleUser, async (req, res) => {
     if (!isValidPositiveId(req.params.id)) return res.status(400).json({ error: 'ID target tabungan tidak valid.' });
     try {
         await databaseReady;
-        const result = await pool.query('DELETE FROM savings_goals WHERE id = $1 RETURNING id', [req.params.id]);
+        const result = await pool.query('DELETE FROM savings_goals WHERE id = $1 AND user_id = $2 RETURNING id', [req.params.id, req.user.id]);
         if (result.rowCount === 0) return res.status(404).json({ error: 'Target tabungan tidak ditemukan.' });
         res.sendStatus(204);
     } catch (err) {
@@ -372,7 +475,7 @@ app.delete('/api/savings-goals/:id', async (req, res) => {
     }
 });
 
-app.post('/api/financial-analysis', async (req, res) => {
+app.post('/api/financial-analysis', authenticateGoogleUser, async (req, res) => {
     const { month } = req.body;
     if (!isValidMonth(month)) return res.status(400).json({ error: 'Bulan analisis tidak valid.' });
     if (!GEMINI_API_KEY) return res.status(503).json({ error: 'Analisis AI belum dikonfigurasi di server.' });
@@ -384,34 +487,38 @@ app.post('/api/financial-analysis', async (req, res) => {
                 SELECT type, COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count
                 FROM transactions
                 WHERE date >= $1::date AND date < ($1::date + INTERVAL '1 month')
+                    AND user_id = $2
                 GROUP BY type
-            `, [`${month}-01`]),
+            `, [`${month}-01`, req.user.id]),
             pool.query(`
                 SELECT category, SUM(amount) AS total, COUNT(*) AS count
                 FROM transactions
                 WHERE type = 'expense'
                     AND date >= $1::date AND date < ($1::date + INTERVAL '1 month')
+                    AND user_id = $2
                 GROUP BY category ORDER BY total DESC LIMIT 10
-            `, [`${month}-01`]),
+            `, [`${month}-01`, req.user.id]),
             pool.query(`
                 SELECT TO_CHAR(date, 'YYYY-MM') AS month, type, SUM(amount) AS total
                 FROM transactions
                 WHERE date >= ($1::date - INTERVAL '5 months')
                     AND date < ($1::date + INTERVAL '1 month')
+                    AND user_id = $2
                 GROUP BY TO_CHAR(date, 'YYYY-MM'), type
                 ORDER BY month
-            `, [`${month}-01`]),
+            `, [`${month}-01`, req.user.id]),
             pool.query(`
                 SELECT b.category, b.limit_amount, COALESCE(SUM(t.amount), 0) AS spent
                 FROM monthly_budgets b
                 LEFT JOIN transactions t
                     ON t.category = b.category AND t.type = 'expense'
                     AND t.date >= $1::date AND t.date < ($1::date + INTERVAL '1 month')
-                WHERE b.month = $2
+                    AND t.user_id = $3
+                WHERE b.month = $2 AND b.user_id = $3
                 GROUP BY b.id, b.category, b.limit_amount
                 ORDER BY b.category
-            `, [`${month}-01`, month]),
-            pool.query('SELECT name, target_amount, current_amount FROM savings_goals ORDER BY created_at, id')
+            `, [`${month}-01`, month, req.user.id]),
+            pool.query('SELECT name, target_amount, current_amount FROM savings_goals WHERE user_id = $1 ORDER BY created_at, id', [req.user.id])
         ]);
 
         const totals = { income: 0, expense: 0 };
@@ -451,9 +558,9 @@ app.post('/api/financial-analysis', async (req, res) => {
 });
 
 // API: Export Excel (CSV)
-app.get('/api/export-excel', async (req, res) => {
+app.get('/api/export-excel', authenticateGoogleUser, async (req, res) => {
     try {
-        const result = await pool.query('SELECT id, "desc", amount, type, category, date FROM transactions ORDER BY date DESC');
+        const result = await pool.query('SELECT id, "desc", amount, type, category, date FROM transactions WHERE user_id = $1 ORDER BY date DESC', [req.user.id]);
         let csvContent = "ID,Keterangan,Nominal,Tipe,Kategori,Tanggal\n";
         result.rows.forEach(row => {
             const desc = `"${row.desc.replace(/"/g, '""')}"`;
@@ -469,6 +576,14 @@ app.get('/api/export-excel', async (req, res) => {
 
 // ================= WEBHOOK TELEGRAM BOT =================
 app.post(`/api/telegram-webhook`, async (req, res) => {
+    if (!TELEGRAM_BOT_TOKEN || !ADMIN_TELEGRAM_ID || !TELEGRAM_WEBHOOK_SECRET) {
+        console.error('Telegram webhook memerlukan TELEGRAM_BOT_TOKEN, ADMIN_TELEGRAM_ID, dan TELEGRAM_WEBHOOK_SECRET.');
+        return res.status(503).json({ error: 'Telegram webhook belum dikonfigurasi dengan aman.' });
+    }
+    if (req.get('x-telegram-bot-api-secret-token') !== TELEGRAM_WEBHOOK_SECRET) {
+        return res.sendStatus(401);
+    }
+
     const update = req.body;
     if (!update.message) return res.sendStatus(200);
 
@@ -477,7 +592,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
     const photo = update.message.photo;
     const voice = update.message.voice;
 
-    if (ADMIN_TELEGRAM_ID && chatId !== String(ADMIN_TELEGRAM_ID)) {
+    if (chatId !== String(ADMIN_TELEGRAM_ID)) {
         await sendTelegramMessage(chatId, "⚠️ Maaf, bot finansial ini terkunci.");
         return res.sendStatus(200);
     }
@@ -530,10 +645,16 @@ Anda juga bisa bertanya apa saja tentang kondisi keuangan Anda!
             }
 
             if (text.startsWith('/saldo') || text.startsWith('/rekap')) {
-                const resIncome = await pool.query("SELECT SUM(amount) as total FROM transactions WHERE type = 'income'");
-                const resExpense = await pool.query("SELECT SUM(amount) as total FROM transactions WHERE type = 'expense'");
-                const totalIncome = Number(resIncome.rows[0].total || 0);
-                const totalExpense = Number(resExpense.rows[0].total || 0);
+                const ownerId = await getTelegramOwnerId();
+                const result = await pool.query(`
+                    SELECT
+                        COALESCE(SUM(amount) FILTER (WHERE type = 'income'), 0) AS income,
+                        COALESCE(SUM(amount) FILTER (WHERE type = 'expense'), 0) AS expense
+                    FROM transactions
+                    WHERE user_id = $1
+                `, [ownerId]);
+                const totalIncome = Number(result.rows[0].income);
+                const totalExpense = Number(result.rows[0].expense);
                 const balance = totalIncome - totalExpense;
 
                 await sendTelegramMessage(chatId, `📊 *REKAP KEUANGAN SAKU HARIAN*\n🟢 Pemasukan: Rp ${totalIncome.toLocaleString('id-ID')}\n🔴 Pengeluaran: Rp ${totalExpense.toLocaleString('id-ID')}\n💰 *Saldo:* Rp ${balance.toLocaleString('id-ID')}`);
@@ -541,7 +662,11 @@ Anda juga bisa bertanya apa saja tentang kondisi keuangan Anda!
             }
 
             if (text.startsWith('/history') || text.startsWith('/riwayat')) {
-                const result = await pool.query("SELECT * FROM transactions ORDER BY date DESC LIMIT 5");
+                const ownerId = await getTelegramOwnerId();
+                const result = await pool.query(
+                    'SELECT * FROM transactions WHERE user_id = $1 ORDER BY date DESC LIMIT 5',
+                    [ownerId]
+                );
                 if (result.rows.length === 0) {
                     await sendTelegramMessage(chatId, "📂 Belum ada catatan transaksi.");
                     return res.sendStatus(200);
@@ -555,7 +680,8 @@ Anda juga bisa bertanya apa saja tentang kondisi keuangan Anda!
             }
 
             if (text.startsWith('/reset')) {
-                await pool.query("DELETE FROM transactions");
+                const ownerId = await getTelegramOwnerId();
+                await pool.query('DELETE FROM transactions WHERE user_id = $1', [ownerId]);
                 await sendTelegramMessage(chatId, "🗑️ *Reset Berhasil!* Semua data keuangan dibersihkan.");
                 return res.sendStatus(200);
             }
