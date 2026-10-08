@@ -101,7 +101,6 @@ REVOKE ALL ON public.transactions, public.monthly_budgets, public.savings_goals,
     public.telegram_link_codes FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, DELETE ON public.transactions TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.monthly_budgets, public.savings_goals TO authenticated;
-GRANT INSERT, DELETE ON public.telegram_link_codes TO authenticated;
 GRANT USAGE, SELECT ON SEQUENCE public.transactions_id_seq,
     public.monthly_budgets_id_seq, public.savings_goals_id_seq TO authenticated;
 REVOKE ALL ON public.telegram_processed_updates, public.telegram_user_links,
@@ -162,6 +161,30 @@ BEGIN
     INSERT INTO public.telegram_webhook_config (id, secret)
     VALUES (TRUE, p_secret)
     ON CONFLICT (id) DO UPDATE SET secret = EXCLUDED.secret;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.create_telegram_link_code(
+    p_user_id TEXT, p_code_hash TEXT, p_expires_at TIMESTAMPTZ
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+    IF p_user_id IS NULL OR p_user_id = ''
+       OR p_code_hash IS NULL OR p_code_hash !~ '^[a-f0-9]{64}$'
+       OR p_expires_at IS NULL OR p_expires_at <= NOW()
+       OR p_expires_at > NOW() + INTERVAL '10 minutes' THEN
+        RAISE EXCEPTION 'Invalid Telegram link code data';
+    END IF;
+
+    DELETE FROM public.telegram_link_codes
+    WHERE user_id = p_user_id OR expires_at <= NOW();
+
+    INSERT INTO public.telegram_link_codes (code_hash, user_id, expires_at)
+    VALUES (p_code_hash, p_user_id, p_expires_at);
 END;
 $$;
 
@@ -341,6 +364,8 @@ REVOKE ALL ON FUNCTION public.claim_legacy_saku_data(TEXT, TEXT) FROM PUBLIC, an
 GRANT EXECUTE ON FUNCTION public.claim_legacy_saku_data(TEXT, TEXT) TO service_role;
 REVOKE ALL ON FUNCTION public.set_telegram_webhook_secret(TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.set_telegram_webhook_secret(TEXT) TO service_role;
+REVOKE ALL ON FUNCTION public.create_telegram_link_code(TEXT, TEXT, TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.create_telegram_link_code(TEXT, TEXT, TIMESTAMPTZ) TO service_role;
 REVOKE ALL ON FUNCTION public.telegram_link_account(TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.telegram_link_account(TEXT, TEXT, TEXT) TO service_role;
 REVOKE ALL ON FUNCTION public.telegram_get_user(TEXT, TEXT) FROM PUBLIC, anon, authenticated;

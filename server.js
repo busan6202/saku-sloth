@@ -408,13 +408,13 @@ app.post('/api/telegram/link-code', authenticateSupabaseUser, async (req, res) =
         const code = randomBytes(5).toString('hex').toUpperCase();
         const codeHash = createHash('sha256').update(code).digest('hex');
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
-        await userDataRequest(req, 'telegram_link_codes', {
-            method: 'DELETE',
-            query: { user_id: `eq.${req.user.id}` }
-        });
-        await userDataRequest(req, 'telegram_link_codes', {
+        await serviceRoleRequest('rpc/create_telegram_link_code', {
             method: 'POST',
-            body: { code_hash: codeHash, user_id: req.user.id, expires_at: expiresAt.toISOString() }
+            body: {
+                p_user_id: req.user.id,
+                p_code_hash: codeHash,
+                p_expires_at: expiresAt.toISOString()
+            }
         });
         res.json({ code, expiresAt: expiresAt.toISOString() });
     } catch (err) {

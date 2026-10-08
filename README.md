@@ -25,7 +25,7 @@ Dashboard keuangan pribadi dengan Supabase Auth, Supabase Database, backend Expr
 
 Pengguna baru memilih **Buat akun**, lalu mendaftarkan email dan password masing-masing. Jika konfirmasi email diaktifkan di Supabase, pengguna harus mengonfirmasi email sebelum masuk. Gunakan alamat email unik dan password yang tidak dibagikan.
 
-Semua tabel data pengguna memiliki policy RLS yang membandingkan `user_id` dengan `auth.uid()`. Backend juga memverifikasi access token Supabase untuk setiap permintaan. Fungsi Telegram dan migrasi data lama hanya bisa dipanggil server-side menggunakan `SUPABASE_SERVICE_ROLE_KEY`; key tersebut tidak boleh dikirim ke browser. Setiap pengguna harus masuk ke akunnya sendiri dan menautkan Telegram dari dashboard melalui kode sekali pakai.
+Semua tabel data pengguna memiliki policy RLS yang membandingkan `user_id` dengan `auth.uid()`. Backend juga memverifikasi access token Supabase untuk setiap permintaan. Kode tautan Telegram dibuat melalui RPC server-only setelah backend memverifikasi sesi pengguna. Fungsi bot dan migrasi data lama juga hanya bisa dipanggil server-side menggunakan `SUPABASE_SERVICE_ROLE_KEY`; key tersebut tidak boleh dikirim ke browser. Setiap pengguna harus masuk ke akunnya sendiri dan menautkan Telegram dari dashboard melalui kode sekali pakai.
 
 ## Memindahkan data lama dari Neon
 
