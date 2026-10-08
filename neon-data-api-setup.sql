@@ -1,3 +1,5 @@
+-- LEGACY NEON SETUP ONLY. Do not run this on Supabase; use supabase-setup.sql.
+
 CREATE TABLE IF NOT EXISTS public.app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

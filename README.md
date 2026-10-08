@@ -1,61 +1,88 @@
-# saku-sloth
+# Saku Sloth
 
-Dashboard menggunakan Neon Data API (PostgREST), sedangkan bot Telegram memakai Neon serverless driver melalui HTTP dengan fungsi database terbatas. Tidak ada koneksi TCP langsung ke PostgreSQL. Transaksi Telegram menggunakan ID update sebagai kunci idempotensi; fungsi database memastikan update yang dikirim ulang tidak membuat transaksi ganda.
+Dashboard keuangan pribadi dengan Supabase Auth, Supabase Database, dan backend Express di Vercel. Google OAuth digunakan untuk login. Row Level Security (RLS) membatasi data ke pemilik akun; Telegram menggunakan fungsi database server-side yang hanya dapat dipanggil dengan service role key.
 
-## Perencanaan keuangan
+## Menyiapkan Supabase
 
-Dashboard mendukung budget bulanan per kategori dan beberapa target tabungan. Tabel serta kebijakan akses disiapkan melalui skrip SQL yang harus dijalankan satu kali di Neon.
+1. Buat project di [Supabase](https://supabase.com/dashboard) dan simpan password database di tempat aman.
+2. Di **Project Settings → API**, catat Project URL, publishable/anon key, dan service_role key.
+3. Buka **SQL Editor**, pilih project yang benar, lalu jalankan seluruh [`supabase-setup.sql`](./supabase-setup.sql).
+4. Di **Authentication → Providers → Google**, aktifkan Google OAuth dan masukkan OAuth Client ID/Secret dari Google Cloud. Tambahkan callback Supabase yang ditampilkan di halaman provider sebagai authorized redirect URI di Google Cloud, biasanya `https://<project-ref>.supabase.co/auth/v1/callback`.
+5. Di **Authentication → URL Configuration**, set Site URL ke domain dashboard, misalnya `https://saku-sloth.vercel.app`, dan tambahkan domain deployment/preview yang diperlukan ke Redirect URLs.
+6. Di Vercel, atur environment variables berikut untuk semua environment yang dipakai, lalu redeploy:
 
-Analisis keuangan AI menggunakan `GEMINI_API_KEY` di server. Analisis hanya berjalan setelah diminta pengguna. Ringkasan pemasukan/pengeluaran per kategori, tren enam bulan, budget, dan target tabungan dikirim ke Google Gemini; deskripsi transaksi tidak dikirim. Pastikan pengguna mengetahui dan menyetujui pemrosesan ini.
+   | Variable | Nilai |
+   | --- | --- |
+   | `SUPABASE_URL` | Project URL Supabase |
+   | `SUPABASE_ANON_KEY` | Publishable/anon key dari Supabase |
+   | `SUPABASE_SERVICE_ROLE_KEY` | `service_role` key; rahasia server-side, jangan pernah taruh di frontend |
+   | `TELEGRAM_BOT_TOKEN` | Token bot Telegram, jika memakai bot |
+   | `TELEGRAM_WEBHOOK_SECRET` | Secret webhook 32-256 karakter: huruf, angka, `_`, atau `-` |
+   | `GEMINI_API_KEY` | API key Gemini, jika memakai analisis AI atau input nota/voice |
 
-## Login Google melalui Firebase
+   `SUPABASE_ANON_KEY` memang digunakan di browser untuk memulai login. Keamanan data berasal dari RLS, bukan dari menyembunyikan anon key. Jangan menambahkan `service_role` key ke file frontend, `index.html`, atau variabel Vercel yang terekspos ke browser.
 
-Login menggunakan Firebase Authentication dengan penyedia Google. Firebase menyediakan paket Spark gratis untuk kebutuhan awal; aplikasi ini memakai Firebase untuk login dan Neon Data API untuk menyimpan data. Server memeriksa token melalui Firebase Authentication, lalu meneruskan Firebase ID token ke Neon. Row Level Security (RLS) membatasi setiap operasi ke UID Firebase pemilik data. Tidak perlu membuat OAuth Client ID sendiri atau membuka Google Cloud Console.
+## Memindahkan data dari Neon
 
-### Persiapan Firebase
+Jangan hapus project Neon atau menonaktifkan Firebase sebelum data di Supabase berhasil diverifikasi. Login Google di Supabase menghasilkan user ID baru, jadi ID Firebase lama perlu dipetakan ke email pemilik yang sama.
 
-1. Buka [Firebase Console](https://console.firebase.google.com/), buat project, lalu tambahkan aplikasi Web dari **Project settings → General → Your apps**.
-2. Di **Authentication → Sign-in method**, aktifkan **Google** dan pilih alamat email dukungan.
-3. Di **Authentication → Settings → Authorized domains**, tambahkan domain tempat dashboard berjalan (misalnya `saku-sloth.vercel.app`, tanpa `https://` atau path).
-4. Dari konfigurasi aplikasi Web, salin nilai `apiKey`, `authDomain`, `projectId`, dan `appId`.
+1. Ekspor dan simpan backup CSV tabel `transactions`, `monthly_budgets`, `savings_goals`, serta `telegram_user_links` dari Neon. Jangan bagikan file CSV atau data transaksi ke pihak lain.
+2. Impor CSV ke tabel dengan nama yang sama di Supabase. Pertahankan nilai `id` dan `user_id` lama dari Firebase. Untuk `telegram_user_links`, impor hanya jika ingin mempertahankan tautan bot; jika tidak, pengguna dapat menautkan bot kembali dari dashboard.
+3. Dari daftar pengguna Firebase, catat pasangan UID lama dan email Google masing-masing. Di SQL Editor Supabase, masukkan pemetaan yang sesuai:
 
-### Pengaturan deployment
+   ```sql
+   INSERT INTO public.legacy_user_migrations (legacy_user_id, email)
+   VALUES
+       ('UID_FIREBASE_LAMA', 'email-google@example.com')
+   ON CONFLICT (legacy_user_id) DO UPDATE
+   SET email = EXCLUDED.email, claimed_at = NULL;
+   ```
 
-Konfigurasi Web Firebase untuk project `saku-sloth` dan email pemilik awal `busan6202@gmail.com` sudah disiapkan sebagai nilai default di server. Biasanya tidak perlu menambahkan environment variables Firebase di Vercel. Jika ingin mengganti project atau email pemilik, atur `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`, atau `FIREBASE_BOOTSTRAP_EMAIL` di environment variables server, lalu deploy ulang.
+   Ulangi baris `VALUES` untuk setiap akun yang datanya diimpor. Jangan memasukkan password, token, atau secret ke tabel pemetaan.
+4. Setelah impor selesai, setel sequence ID agar transaksi baru tidak bentrok dengan ID hasil impor:
 
-### Menyiapkan Neon Data API
+   ```sql
+   SELECT setval(pg_get_serial_sequence('public.transactions', 'id'),
+                 COALESCE((SELECT MAX(id) FROM public.transactions), 1),
+                 EXISTS (SELECT 1 FROM public.transactions));
+   SELECT setval(pg_get_serial_sequence('public.monthly_budgets', 'id'),
+                 COALESCE((SELECT MAX(id) FROM public.monthly_budgets), 1),
+                 EXISTS (SELECT 1 FROM public.monthly_budgets));
+   SELECT setval(pg_get_serial_sequence('public.savings_goals', 'id'),
+                 COALESCE((SELECT MAX(id) FROM public.savings_goals), 1),
+                 EXISTS (SELECT 1 FROM public.savings_goals));
+   ```
 
-1. Aktifkan Neon Data API pada database `neondb` dan pastikan Data API dapat diakses dari deployment Vercel (tanpa IP Allow atau private networking yang memblokirnya).
-2. Di pengaturan autentikasi Data API Neon, tambahkan Firebase sebagai custom JWT provider. JWKS URL:
-   `https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com`
-   Audience harus `saku-sloth` (nilai `FIREBASE_PROJECT_ID`).
-3. Buka **Neon SQL Editor**, pilih database `neondb`, lalu jalankan seluruh isi [`neon-data-api-setup.sql`](./neon-data-api-setup.sql). Buat backup terlebih dahulu. Skrip menyiapkan tabel, mengganti policy yang sudah ada pada tabel aplikasi terkait dengan RLS per pengguna, dan membuat RPC Telegram; migrasi data lama yang masih tanpa `user_id` dilakukan saat pemilik masuk pertama kali.
-4. Tambahkan `NEON_DATA_API_URL` di environment Vercel dengan URL REST base, tanpa menambahkan path resource. Untuk endpoint saat ini:
-   `https://ep-winter-poetry-arl51lwx.apirest.c-4.us-west-2.aws.neon.tech/neondb/rest/v1`
-5. Atur `DATABASE_URL` di Vercel ke connection string PostgreSQL Neon (simpan hanya sebagai server-side secret), dari project, branch, dan database yang sama. Server memakai URL ini untuk fungsi Telegram dan bootstrap data pemilik melalui HTTP. Gunakan role database yang memiliki hak menjalankan fungsi yang dibuat skrip (umumnya owner yang digunakan di SQL Editor). `DATABASE_URI` juga didukung sebagai nama lama. Jangan pernah menaruh connection string ini di frontend.
+5. Deploy versi aplikasi dengan environment Supabase, lalu login menggunakan email Google yang sama. Saat login, backend mencocokkan pemetaan email dan secara atomik memindahkan `user_id` transaksi, budget, target, dan tautan Telegram ke Supabase Auth UID. Login pertama akun tersebut akan menjalankan pemetaan sekali.
+6. Periksa semua transaksi, budget, target tabungan, dan fitur Telegram untuk akun yang dimigrasikan. Setelah semua benar, Firebase/Neon lama dapat dihentikan secara terpisah.
 
-Skrip SQL menggunakan `busan6202@gmail.com` sebagai email pemilik awal. Jika `FIREBASE_BOOTSTRAP_EMAIL` diubah, sesuaikan juga nilai di database, setelah menjalankan skrip:
+Jika transaksi lama memiliki `user_id` kosong atau tidak punya pasangan UID/email, jangan login dan mengklaim semua baris secara massal. Identifikasi pemilik data tersebut di SQL Editor dan buat pemetaan yang tepat terlebih dahulu agar data tidak masuk ke akun yang salah.
 
-```sql
-UPDATE public.app_settings
-SET value = lower('email-pemilik-anda@example.com')
-WHERE key = 'bootstrap_owner_email';
+## Login dan data
+
+Supabase Google provider menangani login dan sesi di browser. Backend memvalidasi access token melalui Supabase Auth sebelum melayani API. Operasi transaksi, budget, target tabungan, dan kode Telegram menggunakan token pengguna dengan RLS; fungsi bot dan pemetaan data lama menggunakan `SUPABASE_SERVICE_ROLE_KEY` hanya di server.
+
+## Bot Telegram
+
+Setel `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_WEBHOOK_SECRET` di Vercel, lalu pasang webhook Telegram ke `https://saku-sloth.vercel.app/api/telegram-webhook` dengan `secret_token` yang sama. Webhook perlu dikirim sebagai POST oleh Telegram; membuka URL di browser hanya menguji endpoint GET.
+
+Pengguna login ke dashboard, pilih **Hubungkan Telegram**, lalu kirim `/link KODE` dalam chat pribadi bot sebelum kode kedaluwarsa (10 menit). Bot mendukung input transaksi, `/saldo`, `/history`, `/reset`, dan `/unlink`. Operasi database bot memakai fungsi terbatas di [`supabase-setup.sql`](./supabase-setup.sql); fungsi tersebut tidak tersedia untuk role `anon` atau `authenticated`.
+
+## Analisis AI
+
+Analisis hanya dikirim ke Google Gemini setelah diminta pengguna. Ringkasan angka agregat per kategori, tren, budget, dan target tabungan dikirim; keterangan transaksi tidak dikirim. Fitur ini memerlukan `GEMINI_API_KEY`. Bot dapat memakai Gemini untuk memproses nota dan voice note; pastikan pengguna memahami pemrosesan eksternal tersebut.
+
+## Menjalankan lokal
+
+Gunakan Node.js 20 atau lebih baru, atur environment variable Supabase/opsional di `.env`, lalu jalankan:
+
+```sh
+npm install
+npm start
 ```
 
-Jangan memberi akses Data API `anonymous` ke tabel atau RPC Telegram/bootstrap. Skrip hanya memberi akses tabel kepada role `authenticated` dengan RLS per UID. Telegram dan bootstrap pemilik memakai `DATABASE_URL` di server untuk memanggil fungsi `SECURITY DEFINER`; fungsi tersebut tidak diekspos ke role Data API. Jalankan ulang seluruh skrip terbaru setelah update. Pastikan Neon berhasil memuat ulang schema setelah skrip selesai; skrip mengirim `NOTIFY pgrst, 'reload schema'`.
+Mulai dari `.env.example` dan isi kredensial project sendiri di `.env` (file tersebut tidak masuk Git):
 
-Firebase Web API key memang dikirim ke browser dan bukan kata sandi. Jangan pernah menaruh token bot Telegram, `GEMINI_API_KEY`, atau kredensial database di frontend. Batasi API key pada layanan yang diperlukan melalui pengaturan Firebase/Google Cloud dan jangan gunakan key ini sebagai pengganti aturan keamanan. `GOOGLE_CLIENT_ID` tidak lagi digunakan oleh aplikasi untuk login.
-
-Saat akun pemilik masuk pertama kali, data lama akan dipindahkan secara aman ke identitas Firebase yang baru. Pastikan `FIREBASE_BOOTSTRAP_EMAIL` benar dan buat backup database sebelum pergantian provider. Login pertama membutuhkan koneksi ke Firebase untuk menyiapkan sesi serta memigrasikan data pemilik lama.
-
-### Menghubungkan bot Telegram
-
-Atur `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`, dan `TELEGRAM_WEBHOOK_SECRET` di environment variables server, lalu pastikan webhook bot Telegram dikonfigurasi dengan URL `/api/telegram-webhook` dan secret token yang sama. Secret harus hanya memakai huruf, angka, `_`, atau `-`, dan minimal 32 karakter. Setelah mengubah secret, pemilik perlu keluar lalu masuk kembali agar nilainya disinkronkan secara aman ke Neon. `ADMIN_TELEGRAM_ID` tidak lagi digunakan.
-
-Membuka URL webhook langsung di browser hanya mengirim GET dan tidak mendaftarkan webhook. Telegram harus didaftarkan ke URL tersebut dengan `setWebhook` (POST) dan `secret_token` yang sama persis dengan `TELEGRAM_WEBHOOK_SECRET`; gunakan `getWebhookInfo` untuk memeriksa apakah URL sudah terpasang dan apakah ada `last_error_message`. Jangan membagikan token bot atau secret. Endpoint GET aplikasi hanya menampilkan pesan bahwa endpoint aktif, bukan status koneksi Telegram.
-
-1. Login ke dashboard menggunakan akun Google.
-2. Pilih **Hubungkan Telegram**, lalu buka tautan `@duitandaBOT` yang tersedia dan salin kode sekali pakai.
-3. Kirim `/link KODE` di chat pribadi bot dalam waktu 10 menit.
-
-Setelah berhasil tertaut, bot menyimpan transaksi, membaca saldo/riwayat, dan menjalankan `/reset` hanya untuk akun pemilik Telegram tersebut. Perintah `/unlink` melepas tautan. Setiap pengguna harus menautkan Telegram sendiri; bot tidak menerima pesan grup. Kode tautan disimpan melalui Data API di bawah RLS; operasi Telegram dijalankan server-side melalui fungsi database terbatas. Analisis AI di bot tetap memerlukan `GEMINI_API_KEY`.
+```sh
+Copy-Item .env.example .env
+```

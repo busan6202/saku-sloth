@@ -67,27 +67,28 @@ const elements = {
 let transactions = [];
 let monthlyBudgets = [];
 let savingsGoals = [];
-let googleIdToken = null;
+let supabaseAccessToken = null;
 let signedInUser = null;
-let firebaseAuth = null;
+let supabaseAuth = null;
 let authGeneration = 0;
 let showAllTransactions = false;
 let noticeTimeout;
 
 async function apiFetch(url, options = {}) {
-    if (!googleIdToken) throw new Error('Silakan masuk dengan akun Google terlebih dahulu.');
+    if (!supabaseAccessToken || !supabaseAuth) throw new Error('Silakan masuk dengan akun Google terlebih dahulu.');
     const requestGeneration = authGeneration;
-    const firebaseUser = firebaseAuth?.currentUser;
-    if (!firebaseUser) throw new Error('Sesi Firebase sudah berakhir. Silakan masuk kembali.');
-    const freshToken = await firebaseUser.getIdToken();
-    if (requestGeneration !== authGeneration || firebaseAuth?.currentUser !== firebaseUser) {
+    const { data, error } = await supabaseAuth.auth.getSession();
+    if (error) throw error;
+    const freshToken = data.session?.access_token;
+    if (!freshToken) throw new Error('Sesi Supabase sudah berakhir. Silakan masuk kembali.');
+    if (requestGeneration !== authGeneration || !supabaseAuth) {
         const error = new Error('Sesi login sudah berubah.');
         error.name = 'AbortError';
         throw error;
     }
-    googleIdToken = freshToken;
+    supabaseAccessToken = freshToken;
     const headers = new Headers(options.headers || {});
-    headers.set('Authorization', `Bearer ${googleIdToken}`);
+    headers.set('Authorization', `Bearer ${supabaseAccessToken}`);
     const response = await fetch(url, { ...options, headers });
     if (requestGeneration !== authGeneration) {
         const error = new Error('Sesi login sudah berubah.');
@@ -622,28 +623,18 @@ async function deleteSavingsGoal(goalId) {
     }
 }
 
-async function handleFirebaseUser(firebaseUser) {
-    let credential;
-    try {
-        credential = await firebaseUser?.getIdToken();
-    } catch (error) {
-        console.error('Gagal memperoleh token Firebase:', error);
-        elements.authStatus.textContent = 'Sesi Google tidak dapat dibaca. Silakan coba masuk kembali.';
-        return;
-    }
-    if (firebaseAuth?.currentUser !== firebaseUser) return;
-    if (!credential) {
-        elements.authStatus.textContent = 'Firebase tidak memberikan sesi login yang valid. Silakan coba lagi.';
-        return;
-    }
-
+async function handleSupabaseSession(session) {
     const loginAttempt = ++authGeneration;
+    const accessToken = session?.access_token;
+    const authUser = session?.user;
+    if (!accessToken || !authUser?.id) return;
+
     elements.authStatus.textContent = 'Memverifikasi akun Google...';
     try {
         const response = await fetch(AUTH_SESSION_URL, {
             method: 'POST',
             headers: {
-                Authorization: `Bearer ${credential}`,
+                Authorization: `Bearer ${accessToken}`,
                 Accept: 'application/json'
             }
         });
@@ -652,7 +643,7 @@ async function handleFirebaseUser(firebaseUser) {
         if (!response.ok) throw new Error(result.error || `Server merespons ${response.status}`);
         if (!result.user?.id || !result.user?.email) throw new Error('Identitas Google dari server tidak valid.');
 
-        googleIdToken = credential;
+        supabaseAccessToken = accessToken;
         signedInUser = result.user;
         elements.appShell.classList.add('is-authenticated');
         elements.authScreen.hidden = true;
@@ -663,57 +654,58 @@ async function handleFirebaseUser(firebaseUser) {
         await Promise.all([loadTransactions(), loadBudgets(), loadSavingsGoals()]);
     } catch (error) {
         if (loginAttempt !== authGeneration) return;
-        console.error('Gagal masuk dengan Google:', error);
-        googleIdToken = null;
+        console.error('Gagal masuk dengan Supabase Auth:', error);
+        supabaseAccessToken = null;
         signedInUser = null;
         elements.authStatus.textContent = error.message || 'Login Google gagal. Silakan coba lagi.';
-        if (firebaseAuth?.currentUser === firebaseUser) {
-            firebaseAuth.signOut().catch((signOutError) => console.error('Gagal membersihkan sesi Firebase:', signOutError));
-        }
+        const { error: signOutError } = await supabaseAuth.auth.signOut();
+        if (signOutError) console.error('Gagal membersihkan sesi Supabase:', signOutError);
     }
 }
 
-async function initializeFirebaseAuthentication() {
-    elements.authStatus.textContent = 'Menghubungkan ke Firebase...';
+async function initializeSupabaseAuthentication() {
+    elements.authStatus.textContent = 'Menghubungkan ke Supabase...';
     try {
         const response = await fetch(AUTH_CONFIG_URL, { headers: { Accept: 'application/json' } });
         const config = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(config.error || `Server merespons ${response.status}`);
-        if (!config.firebaseConfig) throw new Error('Konfigurasi Firebase belum tersedia.');
-        if (!window.firebase?.auth) throw new Error('Firebase gagal dimuat. Periksa koneksi lalu muat ulang.');
+        if (!config.supabaseUrl || !config.supabaseAnonKey) {
+            throw new Error('Konfigurasi Supabase belum tersedia di server.');
+        }
+        if (!window.supabase?.createClient) {
+            throw new Error('Library Supabase gagal dimuat. Periksa koneksi lalu muat ulang.');
+        }
 
-        const firebaseApp = window.firebase.apps.length
-            ? window.firebase.app()
-            : window.firebase.initializeApp(config.firebaseConfig);
-        firebaseAuth = window.firebase.auth(firebaseApp);
+        supabaseAuth = window.supabase.createClient(config.supabaseUrl, config.supabaseAnonKey);
+        supabaseAuth.auth.onAuthStateChange((event, session) => {
+            if (session?.access_token) {
+                supabaseAccessToken = session.access_token;
+                if (signedInUser?.id === session.user.id && elements.appShell.classList.contains('is-authenticated')) return;
+                window.setTimeout(() => handleSupabaseSession(session), 0);
+            } else if (event === 'SIGNED_OUT') {
+                signOut(false, false);
+            }
+        });
         elements.googleSignInButton.addEventListener('click', async () => {
             elements.googleSignInButton.disabled = true;
-            elements.authStatus.textContent = 'Membuka pilihan akun Google...';
+            elements.authStatus.textContent = 'Membuka login Google...';
             try {
-                const provider = new window.firebase.auth.GoogleAuthProvider();
-                await firebaseAuth.signInWithPopup(provider);
+                const { error } = await supabaseAuth.auth.signInWithOAuth({
+                    provider: 'google',
+                    options: { redirectTo: window.location.origin }
+                });
+                if (error) throw error;
             } catch (error) {
-                if (error.code !== 'auth/popup-closed-by-user') {
-                    console.error('Gagal masuk dengan Firebase:', error);
-                    elements.authStatus.textContent = error.message || 'Login Google gagal. Silakan coba lagi.';
-                } else {
-                    elements.authStatus.textContent = 'Pilih akun Google untuk masuk.';
-                }
+                console.error('Gagal masuk dengan Supabase Auth:', error);
+                elements.authStatus.textContent = error.message || 'Login Google gagal. Silakan coba lagi.';
             } finally {
                 elements.googleSignInButton.disabled = false;
             }
         });
-        firebaseAuth.onAuthStateChanged((user) => {
-            if (user) {
-                handleFirebaseUser(user);
-            } else if (googleIdToken) {
-                signOut(false);
-            }
-        });
         elements.authStatus.textContent = 'Pilih akun Google untuk masuk.';
     } catch (error) {
-        console.error('Gagal menyiapkan Firebase Authentication:', error);
-        elements.authStatus.textContent = error.message || 'Firebase Authentication belum bisa disiapkan. Coba muat ulang.';
+        console.error('Gagal menyiapkan Supabase Authentication:', error);
+        elements.authStatus.textContent = error.message || 'Supabase Auth belum bisa disiapkan. Coba muat ulang.';
     }
 }
 
@@ -740,12 +732,14 @@ async function createTelegramLinkCode() {
     }
 }
 
-function signOut(showStatus = true) {
-    if (firebaseAuth?.currentUser) {
-        firebaseAuth.signOut().catch((error) => console.error('Gagal keluar dari Firebase:', error));
+function signOut(showStatus = true, revokeSession = true) {
+    if (revokeSession && supabaseAuth) {
+        supabaseAuth.auth.signOut().then(({ error }) => {
+            if (error) console.error('Gagal keluar dari Supabase:', error);
+        });
     }
     authGeneration += 1;
-    googleIdToken = null;
+    supabaseAccessToken = null;
     signedInUser = null;
     transactions = [];
     monthlyBudgets = [];
@@ -1409,4 +1403,4 @@ elements.copyTelegramLinkCode.addEventListener('click', async () => {
         elements.telegramLinkStatus.textContent = 'Tidak dapat menyalin otomatis. Silakan pilih dan salin kode secara manual.';
     }
 });
-initializeFirebaseAuthentication();
+initializeSupabaseAuthentication();

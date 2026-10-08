@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const { neon } = require('@neondatabase/serverless');
 const { createHash, randomBytes } = require('node:crypto');
 require('dotenv').config();
 
@@ -11,29 +10,19 @@ app.use(cors());
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || 'AIzaSyAIdRIMZgPHnl2lBHQDCqhH8CRoUK7aMSE';
-const FIREBASE_AUTH_DOMAIN = process.env.FIREBASE_AUTH_DOMAIN || 'saku-sloth.firebaseapp.com';
-const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID || 'saku-sloth';
-const FIREBASE_APP_ID = process.env.FIREBASE_APP_ID || '1:711365669554:web:4f7bdd6a5d3d6e5a864fab';
-const FIREBASE_BOOTSTRAP_EMAIL = (
-    process.env.FIREBASE_BOOTSTRAP_EMAIL || process.env.GOOGLE_BOOTSTRAP_EMAIL || 'busan6202@gmail.com'
-).trim().toLowerCase();
-const NEON_DATA_API_URL = (
-    process.env.NEON_DATA_API_URL
-    || 'https://ep-winter-poetry-arl51lwx.apirest.c-4.us-west-2.aws.neon.tech/neondb/rest/v1'
-).replace(/\/+$/, '');
-const DATABASE_CONNECTION_STRING = process.env.DATABASE_URL || process.env.DATABASE_URI;
-const databaseSql = DATABASE_CONNECTION_STRING ? neon(DATABASE_CONNECTION_STRING) : null;
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-async function dataApiRequest(resource, { token, method = 'GET', query, body, prefer, range } = {}) {
-    if (!token) throw new Error('Firebase ID token diperlukan untuk mengakses Neon Data API.');
-    const url = new URL(`${NEON_DATA_API_URL}/${resource}`);
+async function dataApiRequest(resource, { token, apiKey = SUPABASE_ANON_KEY, method = 'GET', query, body, prefer, range } = {}) {
+    if (!token || !apiKey || !SUPABASE_URL) throw new Error('Konfigurasi Supabase belum lengkap.');
+    const url = new URL(`${SUPABASE_URL}/rest/v1/${resource}`);
     if (query) {
         for (const [key, value] of Object.entries(query)) {
             url.searchParams.set(key, value);
         }
     }
-    const headers = { Accept: 'application/json' };
+    const headers = { Accept: 'application/json', apikey: apiKey };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (token) headers.Authorization = `Bearer ${token}`;
     if (prefer) headers.Prefer = prefer;
@@ -58,7 +47,7 @@ async function dataApiRequest(resource, { token, method = 'GET', query, body, pr
         const message = typeof result === 'object' && result
             ? result.message || result.details || result.hint || result.code
             : null;
-        const error = new Error(message || `Neon Data API merespons HTTP ${response.status}.`);
+        const error = new Error(message || `Supabase merespons HTTP ${response.status}.`);
         error.status = response.status;
         throw error;
     }
@@ -66,77 +55,62 @@ async function dataApiRequest(resource, { token, method = 'GET', query, body, pr
 }
 
 function userDataRequest(req, resource, options = {}) {
-    return dataApiRequest(resource, { ...options, token: req.firebaseToken });
+    return dataApiRequest(resource, { ...options, token: req.supabaseToken });
+}
+
+function serviceRoleRequest(resource, options = {}) {
+    if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error('SUPABASE_SERVICE_ROLE_KEY belum dikonfigurasi di server.');
+    return dataApiRequest(resource, {
+        ...options,
+        token: SUPABASE_SERVICE_ROLE_KEY,
+        apiKey: SUPABASE_SERVICE_ROLE_KEY
+    });
 }
 
 async function telegramDatabaseFunction(name, args) {
-    if (!databaseSql) {
-        throw new Error('DATABASE_URL belum dikonfigurasi untuk akses Telegram ke Neon melalui HTTP.');
-    }
-
-    let rows;
+    let parameters;
     switch (name) {
         case 'telegram_link_account':
-            rows = await databaseSql`
-                SELECT public.telegram_link_account(${args[0]}, ${args[1]}, ${args[2]}) AS result
-            `;
+            parameters = { p_telegram_user_id: args[0], p_code_hash: args[1], p_secret: args[2] };
             break;
         case 'telegram_get_user':
-            rows = await databaseSql`
-                SELECT public.telegram_get_user(${args[0]}, ${args[1]}) AS result
-            `;
+            parameters = { p_telegram_user_id: args[0], p_secret: args[1] };
             break;
         case 'telegram_unlink_user':
-            rows = await databaseSql`
-                SELECT public.telegram_unlink_user(${args[0]}, ${args[1]}) AS result
-            `;
+            parameters = { p_telegram_user_id: args[0], p_secret: args[1] };
             break;
         case 'telegram_save_transaction':
-            rows = await databaseSql`
-                SELECT public.telegram_save_transaction(
-                    ${args[0]}, ${args[1]}, ${args[2]}, ${args[3]},
-                    ${args[4]}, ${args[5]}, ${args[6]}
-                ) AS result
-            `;
+            parameters = {
+                p_telegram_user_id: args[0],
+                p_update_id: args[1],
+                p_desc: args[2],
+                p_amount: args[3],
+                p_type: args[4],
+                p_category: args[5],
+                p_secret: args[6]
+            };
             break;
         case 'telegram_get_balance':
-            rows = await databaseSql`
-                SELECT public.telegram_get_balance(${args[0]}, ${args[1]}) AS result
-            `;
+            parameters = { p_telegram_user_id: args[0], p_secret: args[1] };
             break;
         case 'telegram_get_history':
-            rows = await databaseSql`
-                SELECT public.telegram_get_history(${args[0]}, ${args[1]}) AS result
-            `;
+            parameters = { p_telegram_user_id: args[0], p_secret: args[1] };
             break;
         case 'telegram_reset_transactions':
-            rows = await databaseSql`
-                SELECT public.telegram_reset_transactions(${args[0]}, ${args[1]}) AS result
-            `;
+            parameters = { p_telegram_user_id: args[0], p_secret: args[1] };
             break;
         default:
             throw new Error(`Fungsi database Telegram tidak dikenal: ${name}`);
     }
-    return rows[0].result;
+    return serviceRoleRequest(`rpc/${name}`, { method: 'POST', body: parameters });
 }
 
-async function initializeOwnerDatabase(userId, email) {
-    if (!databaseSql) {
-        throw new Error('DATABASE_URL belum dikonfigurasi untuk menyiapkan database Neon.');
-    }
-
-    await databaseSql`
-        SELECT public.claim_legacy_saku_data(${userId}, ${email})
-    `;
-}
-
-async function synchronizeTelegramWebhookSecret(email) {
-    if (!databaseSql) {
-        throw new Error('DATABASE_URL belum dikonfigurasi untuk sinkronisasi secret Telegram.');
-    }
-    await databaseSql`
-        SELECT public.set_telegram_webhook_secret(${email}, ${TELEGRAM_WEBHOOK_SECRET})
-    `;
+async function synchronizeTelegramWebhookSecret() {
+    if (!TELEGRAM_WEBHOOK_SECRET) throw new Error('TELEGRAM_WEBHOOK_SECRET belum dikonfigurasi.');
+    await serviceRoleRequest('rpc/set_telegram_webhook_secret', {
+        method: 'POST',
+        body: { p_secret: TELEGRAM_WEBHOOK_SECRET }
+    });
 }
 
 async function userDataRows(req, resource, query) {
@@ -147,7 +121,7 @@ async function userDataRows(req, resource, query) {
             query,
             range: { start, end: start + pageSize - 1 }
         });
-        if (!Array.isArray(page)) throw new Error(`Neon Data API mengembalikan format data yang tidak valid untuk ${resource}.`);
+        if (!Array.isArray(page)) throw new Error(`Supabase mengembalikan format data yang tidak valid untuk ${resource}.`);
         rows.push(...page);
         if (page.length < pageSize) return rows;
     }
@@ -294,7 +268,7 @@ ${financialAdvice}
 }
 
 // API: Ambil Semua Transaksi (Untuk Web)
-app.get('/api/transactions', authenticateFirebaseUser, async (req, res) => {
+app.get('/api/transactions', authenticateSupabaseUser, async (req, res) => {
     try {
         const result = await userDataRows(req, 'transactions', {
             select: 'id,desc,amount,type,category,date',
@@ -303,13 +277,13 @@ app.get('/api/transactions', authenticateFirebaseUser, async (req, res) => {
         });
         res.json(result);
     } catch (err) {
-        console.error('Gagal memuat transaksi dari Neon Data API:', err);
+        console.error('Gagal memuat transaksi dari Supabase:', err);
         res.status(500).json({ error: err.message });
     }
 });
 
 // API: Tambah Transaksi (Untuk Web)
-app.post('/api/transactions', authenticateFirebaseUser, async (req, res) => {
+app.post('/api/transactions', authenticateSupabaseUser, async (req, res) => {
     try {
         const { desc, amount, type, category } = req.body;
         if (typeof desc !== 'string' || !desc.trim() || desc.length > 500
@@ -335,7 +309,7 @@ app.post('/api/transactions', authenticateFirebaseUser, async (req, res) => {
 });
 
 // API: Hapus transaksi dari web
-app.delete('/api/transactions/:id', authenticateFirebaseUser, async (req, res) => {
+app.delete('/api/transactions/:id', authenticateSupabaseUser, async (req, res) => {
     const { id } = req.params;
     if (!/^[1-9]\d*$/.test(id)) {
         return res.status(400).json({ error: 'ID transaksi tidak valid.' });
@@ -375,87 +349,61 @@ function isValidPositiveId(value) {
 }
 
 app.get('/api/auth/config', (req, res) => {
-    res.json({
-        firebaseConfig: {
-            apiKey: FIREBASE_API_KEY,
-            authDomain: FIREBASE_AUTH_DOMAIN,
-            projectId: FIREBASE_PROJECT_ID,
-            appId: FIREBASE_APP_ID
-        }
-    });
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        return res.status(503).json({ error: 'SUPABASE_URL dan SUPABASE_ANON_KEY belum dikonfigurasi.' });
+    }
+    res.json({ supabaseUrl: SUPABASE_URL, supabaseAnonKey: SUPABASE_ANON_KEY });
 });
 
-async function authenticateFirebaseUser(req, res, next) {
-    if (!FIREBASE_API_KEY || !FIREBASE_PROJECT_ID || !FIREBASE_BOOTSTRAP_EMAIL) {
-        return res.status(503).json({ error: 'Firebase Authentication belum dikonfigurasi di server.' });
+async function authenticateSupabaseUser(req, res, next) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        return res.status(503).json({ error: 'Supabase Auth belum dikonfigurasi di server.' });
     }
     const authorization = req.get('authorization') || '';
-    const tokenMatch = authorization.match(/^Bearer ([^\s]+)$/i);
+    const tokenMatch = authorization.match(/^Bearer\s+(.+)$/i);
     if (!tokenMatch) return res.status(401).json({ error: 'Silakan masuk dengan akun Google terlebih dahulu.' });
 
     try {
-        let response;
-        try {
-            response = await fetch(
-                `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(FIREBASE_API_KEY)}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-                    body: JSON.stringify({ idToken: tokenMatch[1] })
-                }
-            );
-        } catch (err) {
-            console.error('Tidak dapat menghubungi Firebase untuk memverifikasi token:', err);
-            return res.status(502).json({ error: 'Firebase tidak dapat dihubungi untuk memverifikasi login. Coba lagi nanti.' });
-        }
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            const firebaseError = result.error?.message || 'Firebase token verification failed.';
-            if (/INVALID_ID_TOKEN|TOKEN_EXPIRED|USER_DISABLED|MISSING_ID_TOKEN/i.test(firebaseError)) {
-                return res.status(401).json({ error: 'Sesi Firebase tidak valid atau sudah kedaluwarsa. Silakan masuk kembali.' });
+        const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+            headers: {
+                apikey: SUPABASE_ANON_KEY,
+                Authorization: `Bearer ${tokenMatch[1]}`,
+                Accept: 'application/json'
             }
-            console.error('Firebase menolak verifikasi token:', firebaseError);
-            return res.status(502).json({ error: 'Token tidak dapat diverifikasi oleh Firebase. Coba lagi nanti.' });
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.id) {
+            return res.status(401).json({ error: 'Sesi Supabase tidak valid atau sudah kedaluwarsa. Silakan masuk kembali.' });
         }
 
-        const firebaseUser = result.users?.[0];
-        if (!firebaseUser?.localId || !firebaseUser.email || firebaseUser.emailVerified !== true) {
-            return res.status(401).json({ error: 'Token Firebase tidak valid atau email belum terverifikasi.' });
-        }
-
-        const user = {
-            id: firebaseUser.localId,
-            email: firebaseUser.email.toLowerCase(),
-            name: firebaseUser.displayName || firebaseUser.email,
-            picture: firebaseUser.photoUrl || ''
+        req.user = {
+            id: result.id,
+            email: String(result.email || '').toLowerCase(),
+            name: result.user_metadata?.full_name || result.user_metadata?.name || result.email || '',
+            picture: result.user_metadata?.avatar_url || result.user_metadata?.picture || ''
         };
-        req.user = user;
-        req.firebaseToken = tokenMatch[1];
+        req.supabaseToken = tokenMatch[1];
         next();
     } catch (err) {
-        console.error('Gagal memverifikasi sesi Firebase:', err);
-        res.status(500).json({ error: 'Sesi akun tidak dapat diverifikasi.' });
+        console.error('Gagal memverifikasi sesi Supabase:', err);
+        res.status(502).json({ error: 'Supabase Auth tidak dapat dihubungi untuk memverifikasi sesi.' });
     }
 }
 
-app.post('/api/auth/session', authenticateFirebaseUser, async (req, res) => {
-    if (req.user.email === FIREBASE_BOOTSTRAP_EMAIL) {
-        try {
-            await initializeOwnerDatabase(req.user.id, req.user.email);
-        } catch (err) {
-            console.error('Gagal menyiapkan data pemilik di Neon:', err);
-            return res.status(503).json({ error: 'Database Neon belum siap. Pastikan DATABASE_URL, hak akses fungsi pemilik, dan skrip SQL migrasi sudah sesuai.' });
-        }
-        try {
-            await synchronizeTelegramWebhookSecret(req.user.email);
-        } catch (err) {
-            console.error('Gagal menyinkronkan secret Telegram ke Neon; login tetap dilanjutkan:', err);
-        }
+app.post('/api/auth/session', authenticateSupabaseUser, async (req, res) => {
+    try {
+        await serviceRoleRequest('rpc/claim_legacy_saku_data', {
+            method: 'POST',
+            body: { p_user_id: req.user.id, p_email: req.user.email }
+        });
+    } catch (err) {
+        console.error('Gagal memetakan data lama ke akun Supabase:', err);
+        return res.status(503).json({ error: 'Database Supabase belum siap. Pastikan SUPABASE_SERVICE_ROLE_KEY dan skrip supabase-setup.sql sudah disiapkan.' });
     }
     res.json({ user: req.user });
 });
 
-app.post('/api/telegram/link-code', authenticateFirebaseUser, async (req, res) => {
+app.post('/api/telegram/link-code', authenticateSupabaseUser, async (req, res) => {
     try {
         const code = randomBytes(5).toString('hex').toUpperCase();
         const codeHash = createHash('sha256').update(code).digest('hex');
@@ -475,7 +423,7 @@ app.post('/api/telegram/link-code', authenticateFirebaseUser, async (req, res) =
     }
 });
 
-app.get('/api/budgets', authenticateFirebaseUser, async (req, res) => {
+app.get('/api/budgets', authenticateSupabaseUser, async (req, res) => {
     const { month } = req.query;
     if (!isValidMonth(month)) return res.status(400).json({ error: 'Bulan budget tidak valid.' });
     try {
@@ -494,7 +442,7 @@ app.get('/api/budgets', authenticateFirebaseUser, async (req, res) => {
     }
 });
 
-app.put('/api/budgets', authenticateFirebaseUser, async (req, res) => {
+app.put('/api/budgets', authenticateSupabaseUser, async (req, res) => {
     const { month, category, limitAmount } = req.body;
     const normalizedCategory = typeof category === 'string' ? category.trim() : '';
     if (!isValidMonth(month) || !normalizedCategory || normalizedCategory.length > 100 || !isValidPositiveAmount(limitAmount)) {
@@ -519,7 +467,7 @@ app.put('/api/budgets', authenticateFirebaseUser, async (req, res) => {
     }
 });
 
-app.delete('/api/budgets/:id', authenticateFirebaseUser, async (req, res) => {
+app.delete('/api/budgets/:id', authenticateSupabaseUser, async (req, res) => {
     if (!isValidPositiveId(req.params.id)) return res.status(400).json({ error: 'ID budget tidak valid.' });
     try {
         const result = await userDataRequest(req, 'monthly_budgets', {
@@ -535,7 +483,7 @@ app.delete('/api/budgets/:id', authenticateFirebaseUser, async (req, res) => {
     }
 });
 
-app.get('/api/savings-goals', authenticateFirebaseUser, async (req, res) => {
+app.get('/api/savings-goals', authenticateSupabaseUser, async (req, res) => {
     try {
         const result = await userDataRequest(req, 'savings_goals', {
             query: {
@@ -551,7 +499,7 @@ app.get('/api/savings-goals', authenticateFirebaseUser, async (req, res) => {
     }
 });
 
-app.post('/api/savings-goals', authenticateFirebaseUser, async (req, res) => {
+app.post('/api/savings-goals', authenticateSupabaseUser, async (req, res) => {
     const { name, targetAmount, currentAmount = 0 } = req.body;
     const normalizedName = typeof name === 'string' ? name.trim() : '';
     const validCurrentAmount = isValidNonnegativeAmount(currentAmount);
@@ -576,7 +524,7 @@ app.post('/api/savings-goals', authenticateFirebaseUser, async (req, res) => {
     }
 });
 
-app.patch('/api/savings-goals/:id', authenticateFirebaseUser, async (req, res) => {
+app.patch('/api/savings-goals/:id', authenticateSupabaseUser, async (req, res) => {
     const { currentAmount } = req.body;
     if (!isValidPositiveId(req.params.id) || !isValidNonnegativeAmount(currentAmount)) {
         return res.status(400).json({ error: 'ID atau saldo target tabungan tidak valid.' });
@@ -596,7 +544,7 @@ app.patch('/api/savings-goals/:id', authenticateFirebaseUser, async (req, res) =
     }
 });
 
-app.delete('/api/savings-goals/:id', authenticateFirebaseUser, async (req, res) => {
+app.delete('/api/savings-goals/:id', authenticateSupabaseUser, async (req, res) => {
     if (!isValidPositiveId(req.params.id)) return res.status(400).json({ error: 'ID target tabungan tidak valid.' });
     try {
         const result = await userDataRequest(req, 'savings_goals', {
@@ -612,7 +560,7 @@ app.delete('/api/savings-goals/:id', authenticateFirebaseUser, async (req, res) 
     }
 });
 
-app.post('/api/financial-analysis', authenticateFirebaseUser, async (req, res) => {
+app.post('/api/financial-analysis', authenticateSupabaseUser, async (req, res) => {
     const { month } = req.body;
     if (!isValidMonth(month)) return res.status(400).json({ error: 'Bulan analisis tidak valid.' });
     if (!GEMINI_API_KEY) return res.status(503).json({ error: 'Analisis AI belum dikonfigurasi di server.' });
@@ -719,7 +667,7 @@ app.post('/api/financial-analysis', authenticateFirebaseUser, async (req, res) =
 });
 
 // API: Export Excel (CSV)
-app.get('/api/export-excel', authenticateFirebaseUser, async (req, res) => {
+app.get('/api/export-excel', authenticateSupabaseUser, async (req, res) => {
     try {
         const result = await userDataRows(req, 'transactions', {
             select: 'id,desc,amount,type,category,date',
@@ -769,7 +717,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
     if (message.chat.type !== 'private' || !telegramUserId) return res.sendStatus(200);
 
     try {
-        await synchronizeTelegramWebhookSecret(FIREBASE_BOOTSTRAP_EMAIL);
+        await synchronizeTelegramWebhookSecret();
         const linkCommand = text.match(/^\/link(?:@\w+)?(?:\s+([A-Fa-f0-9]{10}))?$/);
         if (linkCommand) {
             if (!linkCommand[1]) {
