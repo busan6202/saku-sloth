@@ -703,7 +703,11 @@ async function initializeSupabaseAuthentication() {
             elements.authStatus.textContent = authMode === 'signup' ? 'Membuat akun...' : 'Memeriksa akun...';
             try {
                 if (authMode === 'signup') {
-                    const { data, error } = await supabaseAuth.auth.signUp({ email, password });
+                    const { data, error } = await supabaseAuth.auth.signUp({
+                        email,
+                        password,
+                        options: { emailRedirectTo: window.location.origin }
+                    });
                     if (error) throw error;
                     if (!data.session) {
                         elements.authStatus.textContent = 'Akun dibuat. Periksa email untuk mengonfirmasi pendaftaran sebelum masuk.';

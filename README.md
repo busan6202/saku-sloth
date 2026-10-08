@@ -6,7 +6,7 @@ Dashboard keuangan pribadi dengan Supabase Auth, Supabase Database, backend Expr
 
 1. Buat project di [Supabase](https://supabase.com/dashboard).
 2. Di **Project Settings → API**, catat Project URL, publishable/anon key, dan service role key.
-3. Di **Authentication → Providers → Email**, aktifkan pendaftaran email/password. Pilih apakah email harus dikonfirmasi. Jika konfirmasi aktif, atur **Authentication → URL Configuration → Site URL** ke domain dashboard dan pastikan email konfirmasi diarahkan ke domain tersebut.
+3. Di **Authentication → Providers → Email**, aktifkan pendaftaran email/password. Pilih apakah email harus dikonfirmasi. Jika konfirmasi aktif, atur **Authentication → URL Configuration → Site URL** ke domain dashboard dan masukkan semua origin yang digunakan ke **Redirect URLs**, misalnya `https://saku-sloth.vercel.app` dan `http://localhost:3000` untuk development. Form pendaftaran meminta link konfirmasi kembali ke origin halaman yang sedang digunakan; origin tersebut harus terdaftar di Redirect URLs.
 4. Buka **SQL Editor**, lalu jalankan seluruh [`supabase-setup.sql`](./supabase-setup.sql). Skrip membuat tabel, RLS per pengguna, dan fungsi server-only untuk Telegram serta pemindahan data lama.
 5. Di Vercel, atur environment variables untuk semua environment yang digunakan, lalu redeploy:
 
