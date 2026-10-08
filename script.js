@@ -1050,7 +1050,10 @@ async function loadTransactions() {
         const response = await apiFetch(TRANSACTIONS_URL, {
             headers: { Accept: 'application/json' }
         });
-        if (!response.ok) throw new Error(`Server merespons ${response.status}`);
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => null);
+            throw new Error(errorBody?.error || `Server merespons ${response.status}`);
+        }
 
         const data = await response.json();
         if (requestGeneration !== authGeneration) return;
@@ -1063,13 +1066,17 @@ async function loadTransactions() {
     } catch (error) {
         if (requestGeneration !== authGeneration || error.name === 'AbortError') return;
         console.error('Gagal memuat transaksi:', error);
-        elements.transactionList.replaceChildren();
-        elements.transactionList.hidden = true;
-        elements.emptyState.hidden = false;
-        elements.emptyState.querySelector('strong').textContent = 'Data belum bisa dimuat';
-        elements.emptyState.querySelector('span:not(.empty-illustration)').textContent = 'Periksa koneksi internetmu lalu coba muat ulang.';
-        elements.emptyState.querySelector('[data-open-form]').hidden = true;
-        setNotice('Gagal mengambil transaksi dari server. Coba lagi beberapa saat.', 'error');
+        if (transactions.length) {
+            renderDashboard();
+        } else {
+            elements.transactionList.replaceChildren();
+            elements.transactionList.hidden = true;
+            elements.emptyState.hidden = false;
+            elements.emptyState.querySelector('strong').textContent = 'Data belum bisa dimuat';
+            elements.emptyState.querySelector('span:not(.empty-illustration)').textContent = error.message || 'Periksa koneksi internetmu lalu coba muat ulang.';
+            elements.emptyState.querySelector('[data-open-form]').hidden = true;
+        }
+        setNotice(`Gagal mengambil transaksi dari server: ${error.message || 'Coba lagi beberapa saat.'}`, 'error');
     }
 }
 
