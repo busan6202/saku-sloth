@@ -10,6 +10,7 @@ app.use(cors());
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_MODEL = 'gemini-2.5-flash-lite';
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/+$/, '');
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -148,7 +149,7 @@ async function sendTelegramMessage(chatId, text) {
 
 // Fungsi Panggil Gemini Teks & Gambar (Auto-Retry 503)
 async function callGeminiAPI(prompt, base64Image = null, retries = 3, delay = 2000) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
     let parts = [{ text: prompt }];
     if (base64Image) {
         parts.push({ inline_data: { mime_type: "image/jpeg", data: base64Image } });
@@ -181,7 +182,7 @@ async function callGeminiAPI(prompt, base64Image = null, retries = 3, delay = 20
 
 // Fungsi Panggil Gemini Voice Note (Audio)
 async function callGeminiAudioAPI(prompt, base64Audio, retries = 3, delay = 2000) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
     let parts = [
         { text: prompt },
         { inline_data: { mime_type: "audio/ogg", data: base64Audio } }

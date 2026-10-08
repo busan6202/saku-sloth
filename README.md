@@ -70,7 +70,7 @@ Pengguna masuk ke akun dashboard masing-masing, pilih **Hubungkan Telegram**, la
 
 ## Analisis AI
 
-Analisis keuangan hanya dikirim ke Google Gemini setelah diminta pengguna. Ringkasan angka agregat per kategori, tren, budget, dan target tabungan dikirim; keterangan transaksi tidak dikirim. Bot dapat memakai Gemini untuk memproses nota dan voice note. Fitur tersebut memerlukan `GEMINI_API_KEY`; pastikan pengguna memahami pemrosesan eksternal.
+Analisis keuangan hanya dikirim ke Google Gemini setelah diminta pengguna. Ringkasan angka agregat per kategori, tren, budget, dan target tabungan dikirim; keterangan transaksi tidak dikirim. Bot menggunakan model `gemini-2.5-flash-lite` untuk memproses nota dan voice note. Fitur tersebut memerlukan `GEMINI_API_KEY`; pastikan pengguna memahami pemrosesan eksternal.
 
 ## Menjalankan lokal
 
