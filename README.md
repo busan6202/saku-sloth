@@ -1,45 +1,49 @@
 # Saku Sloth
 
-Dashboard keuangan pribadi dengan Supabase Auth, Supabase Database, dan backend Express di Vercel. Google OAuth digunakan untuk login. Row Level Security (RLS) membatasi data ke pemilik akun; Telegram menggunakan fungsi database server-side yang hanya dapat dipanggil dengan service role key.
+Dashboard keuangan pribadi dengan Supabase Auth, Supabase Database, backend Express di Vercel, dan bot Telegram. Pengguna membuat akun sendiri dengan email dan password; Row Level Security (RLS) membatasi transaksi, budget, target, dan kode Telegram ke UID akun tersebut. Setiap pengguna menautkan Telegram pribadinya dari dashboard, sehingga bot hanya bekerja pada data akun yang ditautkan.
 
 ## Menyiapkan Supabase
 
-1. Buat project di [Supabase](https://supabase.com/dashboard) dan simpan password database di tempat aman.
-2. Di **Project Settings → API**, catat Project URL, publishable/anon key, dan service_role key.
-3. Buka **SQL Editor**, pilih project yang benar, lalu jalankan seluruh [`supabase-setup.sql`](./supabase-setup.sql).
-4. Di **Authentication → Providers → Google**, aktifkan Google OAuth dan masukkan OAuth Client ID/Secret dari Google Cloud. Tambahkan callback Supabase yang ditampilkan di halaman provider sebagai authorized redirect URI di Google Cloud, biasanya `https://<project-ref>.supabase.co/auth/v1/callback`.
-5. Di **Authentication → URL Configuration**, set Site URL ke domain dashboard, misalnya `https://saku-sloth.vercel.app`, dan tambahkan domain deployment/preview yang diperlukan ke Redirect URLs.
-6. Di Vercel, atur environment variables berikut untuk semua environment yang dipakai, lalu redeploy:
+1. Buat project di [Supabase](https://supabase.com/dashboard).
+2. Di **Project Settings → API**, catat Project URL, publishable/anon key, dan service role key.
+3. Di **Authentication → Providers → Email**, aktifkan pendaftaran email/password. Pilih apakah email harus dikonfirmasi. Jika konfirmasi aktif, atur **Authentication → URL Configuration → Site URL** ke domain dashboard dan pastikan email konfirmasi diarahkan ke domain tersebut.
+4. Buka **SQL Editor**, lalu jalankan seluruh [`supabase-setup.sql`](./supabase-setup.sql). Skrip membuat tabel, RLS per pengguna, dan fungsi server-only untuk Telegram serta pemindahan data lama.
+5. Di Vercel, atur environment variables untuk semua environment yang digunakan, lalu redeploy:
 
    | Variable | Nilai |
    | --- | --- |
    | `SUPABASE_URL` | Project URL Supabase |
-   | `SUPABASE_ANON_KEY` | Publishable/anon key dari Supabase |
-   | `SUPABASE_SERVICE_ROLE_KEY` | `service_role` key; rahasia server-side, jangan pernah taruh di frontend |
+   | `SUPABASE_ANON_KEY` | Publishable/anon key Supabase |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Service role key; rahasia server-side, jangan taruh di frontend |
    | `TELEGRAM_BOT_TOKEN` | Token bot Telegram, jika memakai bot |
    | `TELEGRAM_WEBHOOK_SECRET` | Secret webhook 32-256 karakter: huruf, angka, `_`, atau `-` |
    | `GEMINI_API_KEY` | API key Gemini, jika memakai analisis AI atau input nota/voice |
 
-   `SUPABASE_ANON_KEY` memang digunakan di browser untuk memulai login. Keamanan data berasal dari RLS, bukan dari menyembunyikan anon key. Jangan menambahkan `service_role` key ke file frontend, `index.html`, atau variabel Vercel yang terekspos ke browser.
+   Anon key boleh dikirim ke browser; keamanan data bergantung pada RLS. Jangan pernah menaruh service role key di frontend, `index.html`, atau variabel Vercel yang terekspos ke browser.
 
-## Memindahkan data dari Neon
+## Akun pengguna dan privasi data
 
-Jangan hapus project Neon atau menonaktifkan Firebase sebelum data di Supabase berhasil diverifikasi. Login Google di Supabase menghasilkan user ID baru, jadi ID Firebase lama perlu dipetakan ke email pemilik yang sama.
+Pengguna baru memilih **Buat akun**, lalu mendaftarkan email dan password masing-masing. Jika konfirmasi email diaktifkan di Supabase, pengguna harus mengonfirmasi email sebelum masuk. Gunakan alamat email unik dan password yang tidak dibagikan.
 
-1. Ekspor dan simpan backup CSV tabel `transactions`, `monthly_budgets`, `savings_goals`, serta `telegram_user_links` dari Neon. Jangan bagikan file CSV atau data transaksi ke pihak lain.
-2. Impor CSV ke tabel dengan nama yang sama di Supabase. Pertahankan nilai `id` dan `user_id` lama dari Firebase. Untuk `telegram_user_links`, impor hanya jika ingin mempertahankan tautan bot; jika tidak, pengguna dapat menautkan bot kembali dari dashboard.
-3. Dari daftar pengguna Firebase, catat pasangan UID lama dan email Google masing-masing. Di SQL Editor Supabase, masukkan pemetaan yang sesuai:
+Semua tabel data pengguna memiliki policy RLS yang membandingkan `user_id` dengan `auth.uid()`. Backend juga memverifikasi access token Supabase untuk setiap permintaan. Fungsi Telegram dan migrasi data lama hanya bisa dipanggil server-side menggunakan `SUPABASE_SERVICE_ROLE_KEY`; key tersebut tidak boleh dikirim ke browser. Setiap pengguna harus masuk ke akunnya sendiri dan menautkan Telegram dari dashboard melalui kode sekali pakai.
+
+## Memindahkan data lama dari Neon
+
+Jangan hapus database Neon sebelum data hasil impor diverifikasi.
+
+1. Ekspor dan simpan backup tabel `transactions`, `monthly_budgets`, `savings_goals`, serta `telegram_user_links` dari Neon.
+2. Impor CSV ke tabel bernama sama di Supabase. Pertahankan nilai `id` dan `user_id` Firebase lama. Impor `telegram_user_links` hanya jika ingin mempertahankan tautan bot.
+3. Masukkan setiap pasangan UID Firebase lama dan alamat email pemilik di SQL Editor Supabase:
 
    ```sql
    INSERT INTO public.legacy_user_migrations (legacy_user_id, email)
-   VALUES
-       ('UID_FIREBASE_LAMA', 'email-google@example.com')
+   VALUES ('UID_FIREBASE_LAMA', 'email-pemilik@example.com')
    ON CONFLICT (legacy_user_id) DO UPDATE
    SET email = EXCLUDED.email, claimed_at = NULL;
    ```
 
-   Ulangi baris `VALUES` untuk setiap akun yang datanya diimpor. Jangan memasukkan password, token, atau secret ke tabel pemetaan.
-4. Setelah impor selesai, setel sequence ID agar transaksi baru tidak bentrok dengan ID hasil impor:
+   Ulangi satu pasangan per akun yang datanya diimpor. Jangan petakan UID yang pemiliknya belum dipastikan.
+4. Sesudah impor ID numerik, setel sequence agar tidak bentrok dengan baris berikutnya:
 
    ```sql
    SELECT setval(pg_get_serial_sequence('public.transactions', 'id'),
@@ -53,36 +57,26 @@ Jangan hapus project Neon atau menonaktifkan Firebase sebelum data di Supabase b
                  EXISTS (SELECT 1 FROM public.savings_goals));
    ```
 
-5. Deploy versi aplikasi dengan environment Supabase, lalu login menggunakan email Google yang sama. Saat login, backend mencocokkan pemetaan email dan secara atomik memindahkan `user_id` transaksi, budget, target, dan tautan Telegram ke Supabase Auth UID. Login pertama akun tersebut akan menjalankan pemetaan sekali.
-6. Periksa semua transaksi, budget, target tabungan, dan fitur Telegram untuk akun yang dimigrasikan. Setelah semua benar, Firebase/Neon lama dapat dihentikan secara terpisah.
+5. Deploy aplikasi, lalu pengguna mendaftar atau masuk di Supabase Auth menggunakan email yang dipetakan. Saat sesi disiapkan, backend memindahkan baris data UID lama milik email tersebut ke UID Supabase yang baru, satu kali.
+6. Verifikasi transaksi, budget, target, dan tautan Telegram setiap akun sebelum menghentikan Neon.
 
-Jika transaksi lama memiliki `user_id` kosong atau tidak punya pasangan UID/email, jangan login dan mengklaim semua baris secara massal. Identifikasi pemilik data tersebut di SQL Editor dan buat pemetaan yang tepat terlebih dahulu agar data tidak masuk ke akun yang salah.
-
-## Login dan data
-
-Supabase Google provider menangani login dan sesi di browser. Backend memvalidasi access token melalui Supabase Auth sebelum melayani API. Operasi transaksi, budget, target tabungan, dan kode Telegram menggunakan token pengguna dengan RLS; fungsi bot dan pemetaan data lama menggunakan `SUPABASE_SERVICE_ROLE_KEY` hanya di server.
+Baris tanpa `user_id` atau tanpa pemilik terverifikasi tidak otomatis diklaim. Identifikasi dan petakan pemiliknya dengan benar sebelum migrasi agar data tidak masuk ke akun yang salah.
 
 ## Bot Telegram
 
-Setel `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_WEBHOOK_SECRET` di Vercel, lalu pasang webhook Telegram ke `https://saku-sloth.vercel.app/api/telegram-webhook` dengan `secret_token` yang sama. Webhook perlu dikirim sebagai POST oleh Telegram; membuka URL di browser hanya menguji endpoint GET.
+Atur `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_WEBHOOK_SECRET` di Vercel. Daftarkan webhook Telegram ke `https://saku-sloth.vercel.app/api/telegram-webhook` dengan `secret_token` yang sama.
 
-Pengguna login ke dashboard, pilih **Hubungkan Telegram**, lalu kirim `/link KODE` dalam chat pribadi bot sebelum kode kedaluwarsa (10 menit). Bot mendukung input transaksi, `/saldo`, `/history`, `/reset`, dan `/unlink`. Operasi database bot memakai fungsi terbatas di [`supabase-setup.sql`](./supabase-setup.sql); fungsi tersebut tidak tersedia untuk role `anon` atau `authenticated`.
+Pengguna masuk ke akun dashboard masing-masing, pilih **Hubungkan Telegram**, lalu kirim `/link KODE` di chat pribadi bot sebelum kode kedaluwarsa dalam 10 menit. Bot mendukung input transaksi, `/saldo`, `/history`, `/reset`, dan `/unlink`. Fungsi database bot hanya tersedia untuk service role server dan mengambil UID pemilik dari tautan Telegram; pengguna Telegram yang berbeda tidak dapat membaca transaksi satu sama lain.
 
 ## Analisis AI
 
-Analisis hanya dikirim ke Google Gemini setelah diminta pengguna. Ringkasan angka agregat per kategori, tren, budget, dan target tabungan dikirim; keterangan transaksi tidak dikirim. Fitur ini memerlukan `GEMINI_API_KEY`. Bot dapat memakai Gemini untuk memproses nota dan voice note; pastikan pengguna memahami pemrosesan eksternal tersebut.
+Analisis keuangan hanya dikirim ke Google Gemini setelah diminta pengguna. Ringkasan angka agregat per kategori, tren, budget, dan target tabungan dikirim; keterangan transaksi tidak dikirim. Bot dapat memakai Gemini untuk memproses nota dan voice note. Fitur tersebut memerlukan `GEMINI_API_KEY`; pastikan pengguna memahami pemrosesan eksternal.
 
 ## Menjalankan lokal
 
-Gunakan Node.js 20 atau lebih baru, atur environment variable Supabase/opsional di `.env`, lalu jalankan:
+Gunakan Node.js 20 atau lebih baru. Salin `.env.example` menjadi `.env`, isi konfigurasi sendiri, lalu jalankan:
 
 ```sh
 npm install
 npm start
-```
-
-Mulai dari `.env.example` dan isi kredensial project sendiri di `.env` (file tersebut tidak masuk Git):
-
-```sh
-Copy-Item .env.example .env
 ```

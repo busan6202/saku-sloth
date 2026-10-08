@@ -361,7 +361,7 @@ async function authenticateSupabaseUser(req, res, next) {
     }
     const authorization = req.get('authorization') || '';
     const tokenMatch = authorization.match(/^Bearer\s+(.+)$/i);
-    if (!tokenMatch) return res.status(401).json({ error: 'Silakan masuk dengan akun Google terlebih dahulu.' });
+    if (!tokenMatch) return res.status(401).json({ error: 'Silakan masuk dengan email dan password terlebih dahulu.' });
 
     try {
         const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {

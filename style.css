@@ -54,10 +54,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .auth-card h1 span { color: #71964f; }
 [data-theme="dark"] .auth-card h1 span { color: var(--green); }
 .auth-card .welcome-copy { margin: 12px 0 22px; line-height: 1.6; }
-.google-signin { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; min-height: 48px; padding: 0 16px; border: 1px solid #dadce0; border-radius: 8px; background: #fff; color: #3c4043; font-size: 14px; font-weight: 600; cursor: pointer; transition: background .18s ease, box-shadow .18s ease; }
-.google-signin:hover { background: #f8faff; box-shadow: 0 1px 3px rgba(60, 64, 67, .25); }
-.google-signin:disabled { opacity: .65; cursor: progress; }
-.google-signin svg { width: 20px; height: 20px; flex: 0 0 auto; }
+.auth-form { display: grid; gap: 15px; }
+.auth-form .form-label { font-size: 12px; }
+.auth-form .form-label > input { height: 44px; font-size: 14px; }
+.auth-form .button { width: 100%; min-height: 46px; margin-top: 3px; }
+.auth-form .button:disabled, .auth-mode-switch button:disabled { opacity: .65; cursor: progress; }
+.auth-mode-switch { margin: 16px 0 0; text-align: center; color: var(--muted); font-size: 12px; }
 .auth-status { min-height: 18px; margin: 12px 0 0; color: var(--muted); font-size: 11px; }
 .auth-data-note { margin: 18px 0 0; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.55; }
 .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 5; display: flex; flex-direction: column; width: 246px; padding: 30px 20px 18px; background: var(--surface); border-right: 1px solid var(--line); }

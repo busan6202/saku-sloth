@@ -48,7 +48,14 @@ const elements = {
     appShell: document.querySelector('.app-shell'),
     authScreen: document.getElementById('authScreen'),
     authStatus: document.getElementById('authStatus'),
-    googleSignInButton: document.getElementById('googleSignInButton'),
+    authForm: document.getElementById('authForm'),
+    authEmail: document.getElementById('authEmail'),
+    authPassword: document.getElementById('authPassword'),
+    authTitle: document.getElementById('authTitle'),
+    authSubmitButton: document.getElementById('authSubmitButton'),
+    authDescription: document.getElementById('authDescription'),
+    authModePrompt: document.getElementById('authModePrompt'),
+    authModeToggle: document.getElementById('authModeToggle'),
     accountActions: document.getElementById('accountActions'),
     telegramLinkButton: document.getElementById('telegramLinkButton'),
     telegramLinkDialog: document.getElementById('telegramLinkDialog'),
@@ -70,6 +77,7 @@ let savingsGoals = [];
 let supabaseAccessToken = null;
 let signedInUser = null;
 let supabaseAuth = null;
+let authMode = 'signin';
 let authGeneration = 0;
 let showAllTransactions = false;
 let noticeTimeout;
@@ -629,7 +637,7 @@ async function handleSupabaseSession(session) {
     const authUser = session?.user;
     if (!accessToken || !authUser?.id) return;
 
-    elements.authStatus.textContent = 'Memverifikasi akun Google...';
+    elements.authStatus.textContent = 'Menyiapkan akun...';
     try {
         const response = await fetch(AUTH_SESSION_URL, {
             method: 'POST',
@@ -641,7 +649,7 @@ async function handleSupabaseSession(session) {
         const result = await response.json().catch(() => ({}));
         if (loginAttempt !== authGeneration) return;
         if (!response.ok) throw new Error(result.error || `Server merespons ${response.status}`);
-        if (!result.user?.id || !result.user?.email) throw new Error('Identitas Google dari server tidak valid.');
+        if (!result.user?.id || !result.user?.email) throw new Error('Identitas akun dari server tidak valid.');
 
         supabaseAccessToken = accessToken;
         signedInUser = result.user;
@@ -654,10 +662,10 @@ async function handleSupabaseSession(session) {
         await Promise.all([loadTransactions(), loadBudgets(), loadSavingsGoals()]);
     } catch (error) {
         if (loginAttempt !== authGeneration) return;
-        console.error('Gagal masuk dengan Supabase Auth:', error);
+        console.error('Gagal menyiapkan sesi Supabase:', error);
         supabaseAccessToken = null;
         signedInUser = null;
-        elements.authStatus.textContent = error.message || 'Login Google gagal. Silakan coba lagi.';
+        elements.authStatus.textContent = error.message || 'Sesi akun gagal disiapkan. Silakan coba lagi.';
         const { error: signOutError } = await supabaseAuth.auth.signOut();
         if (signOutError) console.error('Gagal membersihkan sesi Supabase:', signOutError);
     }
@@ -686,23 +694,52 @@ async function initializeSupabaseAuthentication() {
                 signOut(false, false);
             }
         });
-        elements.googleSignInButton.addEventListener('click', async () => {
-            elements.googleSignInButton.disabled = true;
-            elements.authStatus.textContent = 'Membuka login Google...';
+        elements.authForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const email = elements.authEmail.value.trim().toLowerCase();
+            const password = elements.authPassword.value;
+            elements.authSubmitButton.disabled = true;
+            elements.authModeToggle.disabled = true;
+            elements.authStatus.textContent = authMode === 'signup' ? 'Membuat akun...' : 'Memeriksa akun...';
             try {
-                const { error } = await supabaseAuth.auth.signInWithOAuth({
-                    provider: 'google',
-                    options: { redirectTo: window.location.origin }
-                });
-                if (error) throw error;
+                if (authMode === 'signup') {
+                    const { data, error } = await supabaseAuth.auth.signUp({ email, password });
+                    if (error) throw error;
+                    if (!data.session) {
+                        elements.authStatus.textContent = 'Akun dibuat. Periksa email untuk mengonfirmasi pendaftaran sebelum masuk.';
+                    }
+                } else {
+                    const { error } = await supabaseAuth.auth.signInWithPassword({ email, password });
+                    if (error) throw error;
+                }
             } catch (error) {
-                console.error('Gagal masuk dengan Supabase Auth:', error);
-                elements.authStatus.textContent = error.message || 'Login Google gagal. Silakan coba lagi.';
+                console.error(authMode === 'signup' ? 'Gagal membuat akun Supabase:' : 'Gagal masuk ke Supabase:', error);
+                elements.authStatus.textContent = error.message || (authMode === 'signup'
+                    ? 'Akun gagal dibuat. Silakan coba lagi.'
+                    : 'Login gagal. Periksa email dan password.');
             } finally {
-                elements.googleSignInButton.disabled = false;
+                elements.authSubmitButton.disabled = false;
+                elements.authModeToggle.disabled = false;
             }
         });
-        elements.authStatus.textContent = 'Pilih akun Google untuk masuk.';
+        elements.authModeToggle.addEventListener('click', () => {
+            authMode = authMode === 'signin' ? 'signup' : 'signin';
+            elements.authPassword.autocomplete = authMode === 'signup' ? 'new-password' : 'current-password';
+            const title = document.createElement('span');
+            title.textContent = ' Saku Harian.';
+            elements.authTitle.replaceChildren(
+                document.createTextNode(authMode === 'signup' ? 'Buat akun di' : 'Masuk ke'),
+                title
+            );
+            elements.authSubmitButton.textContent = authMode === 'signup' ? 'Buat akun' : 'Masuk';
+            elements.authDescription.textContent = authMode === 'signup'
+                ? 'Buat akun untuk menyimpan transaksi dan menautkan bot Telegram milikmu.'
+                : 'Masuk dengan email dan password untuk melihat data keuangan milik akunmu.';
+            elements.authModePrompt.textContent = authMode === 'signup' ? 'Sudah punya akun?' : 'Belum punya akun?';
+            elements.authModeToggle.textContent = authMode === 'signup' ? 'Masuk' : 'Buat akun';
+            elements.authStatus.textContent = '';
+        });
+        elements.authStatus.textContent = 'Masuk atau buat akun untuk melanjutkan.';
     } catch (error) {
         console.error('Gagal menyiapkan Supabase Authentication:', error);
         elements.authStatus.textContent = error.message || 'Supabase Auth belum bisa disiapkan. Coba muat ulang.';
@@ -793,7 +830,7 @@ function signOut(showStatus = true, revokeSession = true) {
     elements.expensePercent.textContent = '0%';
     elements.incomeBar.style.width = '0%';
     elements.expenseBar.style.width = '0%';
-    if (showStatus) elements.authStatus.textContent = 'Anda telah keluar. Pilih akun Google untuk masuk kembali.';
+    if (showStatus) elements.authStatus.textContent = 'Anda telah keluar. Masuk kembali untuk melanjutkan.';
 }
 
 async function requestFinancialAnalysis() {
