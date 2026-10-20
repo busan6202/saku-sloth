@@ -5,7 +5,7 @@ const SAVINGS_GOALS_URL = `${API_BASE_URL}/savings-goals`;
 const AUTH_CONFIG_URL = `${API_BASE_URL}/auth/config`;
 const AUTH_SESSION_URL = `${API_BASE_URL}/auth/session`;
 const VISIBLE_TRANSACTION_LIMIT = 5;
-const CATEGORY_COLORS = ['#a9df71', '#f0a096', '#91a8d0', '#e6c46b', '#ba9dd4', '#78c9b7', '#e79a5a'];
+const CATEGORY_COLORS = ['#4a9d72', '#d16a5c', '#6f92c4', '#d6a83c', '#a17ba8', '#3fa8a0', '#e8733f'];
 
 const elements = {
     balance: document.getElementById('balanceValue'),
@@ -637,7 +637,7 @@ async function handleSupabaseSession(session) {
     const authUser = session?.user;
     if (!accessToken || !authUser?.id) return;
 
-    elements.authStatus.textContent = 'Menyiapkan akun...';
+    elements.authStatus.textContent = 'Menyiapkan akun…';
     try {
         const response = await fetch(AUTH_SESSION_URL, {
             method: 'POST',
@@ -672,7 +672,7 @@ async function handleSupabaseSession(session) {
 }
 
 async function initializeSupabaseAuthentication() {
-    elements.authStatus.textContent = 'Menghubungkan ke Supabase...';
+    elements.authStatus.textContent = 'Menghubungkan ke Supabase…';
     try {
         const response = await fetch(AUTH_CONFIG_URL, { headers: { Accept: 'application/json' } });
         const config = await response.json().catch(() => ({}));
@@ -700,7 +700,7 @@ async function initializeSupabaseAuthentication() {
             const password = elements.authPassword.value;
             elements.authSubmitButton.disabled = true;
             elements.authModeToggle.disabled = true;
-            elements.authStatus.textContent = authMode === 'signup' ? 'Membuat akun...' : 'Memeriksa akun...';
+            elements.authStatus.textContent = authMode === 'signup' ? 'Membuat akun…' : 'Memeriksa akun…';
             try {
                 if (authMode === 'signup') {
                     const { data, error } = await supabaseAuth.auth.signUp({
@@ -752,7 +752,7 @@ async function initializeSupabaseAuthentication() {
 
 async function createTelegramLinkCode() {
     elements.telegramLinkDialog.showModal();
-    elements.telegramLinkCode.textContent = 'Meminta kode...';
+    elements.telegramLinkCode.textContent = 'Meminta kode…';
     elements.telegramLinkStatus.textContent = '';
     elements.copyTelegramLinkCode.disabled = true;
     try {
@@ -841,9 +841,9 @@ async function requestFinancialAnalysis() {
     const button = elements.analysisButton;
     const requestGeneration = authGeneration;
     button.disabled = true;
-    button.textContent = 'Menganalisis...';
+    button.textContent = 'Menganalisis…';
     elements.analysisResult.hidden = false;
-    elements.analysisResult.textContent = 'Mengirim ringkasan keuangan agregat ke Google Gemini...';
+    elements.analysisResult.textContent = 'Mengirim ringkasan keuangan agregat ke Google Gemini…';
 
     try {
         const response = await apiFetch(`${API_BASE_URL}/financial-analysis`, {
@@ -1078,7 +1078,7 @@ async function loadTransactions() {
     const spinner = document.createElement('span');
     spinner.className = 'spinner';
     spinner.setAttribute('aria-hidden', 'true');
-    loadingState.append(spinner, document.createTextNode('Memuat transaksi...'));
+    loadingState.append(spinner, document.createTextNode('Memuat transaksi…'));
     elements.transactionList.replaceChildren(loadingState);
 
     try {
@@ -1225,7 +1225,7 @@ async function submitTransaction(event) {
     }
 
     elements.saveButton.disabled = true;
-    elements.saveButton.textContent = 'Menyimpan...';
+    elements.saveButton.textContent = 'Menyimpan…';
     const requestGeneration = authGeneration;
 
     try {

@@ -3,12 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f5f6f2">
+    <meta name="theme-color" content="#f3f1ec">
     <meta name="description" content="Dashboard keuangan pribadi Saku Harian. Pantau pemasukan, pengeluaran, dan transaksi dalam satu tempat.">
     <title>Saku Harian — Ruang finansialmu</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
@@ -36,7 +33,7 @@
                     <button class="button button-primary" id="authSubmitButton" type="submit">Masuk</button>
                 </form>
                 <p class="auth-mode-switch"><span id="authModePrompt">Belum punya akun?</span> <button class="text-button" id="authModeToggle" type="button">Buat akun</button></p>
-                <p class="auth-status" id="authStatus" role="status" aria-live="polite">Menghubungkan ke Supabase...</p>
+                <p class="auth-status" id="authStatus" role="status" aria-live="polite">Menghubungkan ke Supabase…</p>
                 <p class="auth-data-note">Setiap akun hanya dapat mengakses transaksi, budget, dan target tabungannya sendiri.</p>
             </div>
         </section>
@@ -185,7 +182,7 @@
                         </label>
                         <button class="button button-primary" id="saveBudget" type="submit">Simpan budget</button>
                     </form>
-                    <div class="budget-list" id="budgetList" aria-live="polite"><p class="empty-copy">Memuat budget...</p></div>
+                    <div class="budget-list" id="budgetList" aria-live="polite"><p class="empty-copy">Memuat budget…</p></div>
                 </article>
 
                 <article class="panel savings-panel">
@@ -205,7 +202,7 @@
                         </label>
                         <button class="button button-primary" id="saveGoal" type="submit">Tambah target</button>
                     </form>
-                    <div class="goal-list" id="goalList" aria-live="polite"><p class="empty-copy">Memuat target tabungan...</p></div>
+                    <div class="goal-list" id="goalList" aria-live="polite"><p class="empty-copy">Memuat target tabungan…</p></div>
                 </article>
 
                 <article class="panel ai-analysis-panel">
@@ -244,7 +241,7 @@
                     </div>
                 </div>
                 <div class="transaction-list" id="transactionList" aria-live="polite">
-                    <div class="loading-state"><span class="spinner" aria-hidden="true"></span>Memuat transaksi...</div>
+                    <div class="loading-state"><span class="spinner" aria-hidden="true"></span>Memuat transaksi…</div>
                 </div>
                 <div class="empty-state" id="emptyState" hidden>
                     <span class="empty-illustration" aria-hidden="true">↗</span>
@@ -300,7 +297,7 @@
             <button class="dialog-close" id="closeTelegramLink" type="button" aria-label="Tutup">×</button>
         </div>
         <p class="telegram-link-copy">Buka <a href="https://t.me/duitandaBOT" target="_blank" rel="noopener noreferrer">@duitandaBOT</a>, lalu kirim pesan berikut sebelum 10 menit:</p>
-        <code class="telegram-link-code" id="telegramLinkCode" aria-live="polite">Meminta kode...</code>
+        <code class="telegram-link-code" id="telegramLinkCode" aria-live="polite">Meminta kode…</code>
         <div class="dialog-actions telegram-link-actions">
             <button class="button button-secondary" id="copyTelegramLinkCode" type="button">Salin kode</button>
         </div>
