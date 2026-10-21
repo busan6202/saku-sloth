@@ -217,6 +217,302 @@ h1 span { color: var(--accent); }
 .category-item .category-name { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
 .category-item strong { font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .empty-copy { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+/* ── Daily Cash & Line Panels ────────────────────────── */
+.daily-cash-panel { grid-column: 1 / -1; padding: 22px; position: relative; }
+.daily-line-panel { padding: 22px; position: relative; display: flex; flex-direction: column; min-height: 290px; }
+
+.daily-cash-metrics,
+.daily-line-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+}
+
+.daily-metric-item { display: flex; flex-direction: column; gap: 4px; }
+.daily-metric-label { font-size: 9px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.daily-metric-value { font-family: var(--font-mono); font-size: 14px; font-weight: 700; letter-spacing: -0.4px; font-variant-numeric: tabular-nums; }
+
+.text-income { color: var(--green); }
+.text-expense { color: var(--red); }
+
+.chart-legend-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    margin-bottom: 6px;
+    font-size: 10px;
+    color: var(--muted);
+}
+.chart-legend-items { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.chart-legend-items > span { display: inline-flex; align-items: center; gap: 5px; }
+.legend-pip { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+.surplus-pip { background: var(--green); }
+.defisit-pip { background: var(--red); }
+.chart-hint { font-size: 9px; color: var(--muted); opacity: 0.8; display: none; }
+
+/* Stacked Column Chart */
+.daily-stacked-scroller {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+.daily-stacked-chart {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 3px;
+    min-width: 580px;
+    height: 180px;
+    padding: 24px 4px 0;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+    user-select: none;
+}
+.daily-col {
+    flex: 1 1 0;
+    min-width: 13px;
+    max-width: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    position: relative;
+    cursor: pointer;
+    border-radius: 4px 4px 0 0;
+    transition: background 0.15s ease-out;
+}
+.daily-col:hover,
+.daily-col.is-active {
+    background: var(--surface-soft);
+}
+.daily-bar-wrap {
+    width: 100%;
+    height: 132px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    position: relative;
+}
+.daily-stacked-bar {
+    width: 68%;
+    max-width: 18px;
+    min-width: 6px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    border-radius: 4px 4px 0 0;
+    overflow: hidden;
+    transition: height 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.segment-expense {
+    background: var(--red);
+    width: 100%;
+    transition: height 0.3s ease;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+.segment-income {
+    background: var(--green);
+    width: 100%;
+    transition: height 0.3s ease;
+}
+.daily-bar-empty {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--line);
+    margin-bottom: 2px;
+}
+.daily-net-pip {
+    position: absolute;
+    top: -16px;
+    font-size: 8px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    line-height: 1;
+    pointer-events: none;
+}
+.daily-net-pip.is-surplus { color: var(--green); background: var(--green-soft); }
+.daily-net-pip.is-defisit { color: var(--red); background: var(--red-soft); }
+.daily-col-label {
+    margin-top: 8px;
+    font-size: 9px;
+    font-family: var(--font-mono);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    transition: color 0.15s ease;
+}
+.daily-col.is-today .daily-col-label {
+    color: var(--ink);
+    font-weight: 700;
+    border-bottom: 1.5px solid var(--accent);
+}
+.daily-col:hover .daily-col-label,
+.daily-col.is-active .daily-col-label {
+    color: var(--ink);
+    font-weight: 700;
+}
+.daily-col.is-weekend .daily-col-label { opacity: 0.65; }
+
+/* Line Charts */
+.daily-line-chart-wrap {
+    position: relative;
+    width: 100%;
+    margin-top: 14px;
+    flex: 1;
+}
+.daily-line-chart-container {
+    width: 100%;
+    height: 170px;
+    position: relative;
+}
+.daily-line-chart-container svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    display: block;
+}
+.line-grid-line {
+    stroke: var(--line);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+}
+.line-axis-label {
+    fill: var(--muted);
+    font-size: 9px;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+}
+.line-path-income {
+    stroke: var(--green);
+    stroke-width: 2.2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.line-path-expense {
+    stroke: var(--red);
+    stroke-width: 2.2;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.line-point-income {
+    fill: var(--surface);
+    stroke: var(--green);
+    stroke-width: 2;
+    cursor: pointer;
+    transition: r 0.2s ease, stroke-width 0.2s ease;
+}
+.line-point-expense {
+    fill: var(--surface);
+    stroke: var(--red);
+    stroke-width: 2;
+    cursor: pointer;
+    transition: r 0.2s ease, stroke-width 0.2s ease;
+}
+.line-point-income:hover,
+.line-point-expense:hover,
+.line-point-income.is-hovered,
+.line-point-expense.is-hovered {
+    r: 5px;
+    stroke-width: 2.5;
+}
+.line-crosshair {
+    stroke: var(--ink);
+    stroke-width: 1;
+    stroke-dasharray: 2 2;
+    opacity: 0.35;
+    pointer-events: none;
+}
+.line-active-dot {
+    r: 4.5px;
+    stroke-width: 2.5;
+    fill: var(--surface);
+    pointer-events: none;
+}
+.line-active-dot.income { stroke: var(--green); }
+.line-active-dot.expense { stroke: var(--red); }
+
+/* Tooltips */
+.chart-tooltip {
+    position: absolute;
+    z-index: 25;
+    pointer-events: none;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 8px 11px;
+    box-shadow: var(--shadow);
+    font-size: 11px;
+    transform: translate(-50%, -105%);
+    transition: opacity 0.15s ease;
+    min-width: 140px;
+    max-width: 220px;
+    white-space: normal;
+}
+.chart-tooltip-date {
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 5px;
+    font-size: 11px;
+}
+.chart-tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-top: 3px;
+    font-size: 10px;
+    color: var(--muted);
+}
+.chart-tooltip-row strong {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+}
+.chart-tooltip-txs {
+    margin-top: 6px;
+    padding-top: 5px;
+    border-top: 1px solid var(--line);
+    font-size: 9px;
+    color: var(--muted);
+    max-height: 80px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.chart-tooltip-tx-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+}
+.chart-tooltip-tx-item span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.chart-caption {
+    margin: 12px 0 0;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
 .trend-panel { grid-column: 1 / -1; padding: 22px; }
 .trend-legend { display: flex; gap: 16px; margin-top: 20px; color: var(--muted); font-size: 10px; }
 .trend-legend > span { display: inline-flex; align-items: center; gap: 6px; }
@@ -391,6 +687,11 @@ h1 span { color: var(--accent); }
     .category-content { min-height: 170px; justify-content: center; gap: 26px; }
     .donut-wrap { flex-basis: 132px; width: 132px; height: 132px; }
     .trend-panel { grid-column: auto; padding: 18px; }
+    .daily-cash-panel, .daily-line-panel { grid-column: auto; padding: 18px; }
+    .chart-hint { display: inline; }
+    .daily-stacked-chart { height: 165px; min-width: 540px; }
+    .daily-bar-wrap { height: 120px; }
+    .daily-line-chart-container { height: 155px; }
     .trend-chart { gap: 6px; padding: 0; }
     .trend-month { height: 135px; }
     .trend-bar { width: 30%; }

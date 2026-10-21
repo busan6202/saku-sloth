@@ -151,6 +151,97 @@
                     </div>
                 </article>
 
+                <article class="panel daily-cash-panel" id="dailyCashPanel">
+                    <div class="panel-heading">
+                        <div><p class="eyebrow">PERKEMBANGAN KAS PER HARI</p><h2>Arus kas harian</h2></div>
+                        <span class="period-chip" id="dailyCashPeriod">Bulan ini</span>
+                    </div>
+                    <div class="daily-cash-metrics" id="dailyCashMetrics">
+                        <div class="daily-metric-item">
+                            <span class="daily-metric-label">Kas masuk</span>
+                            <strong class="daily-metric-value text-income" id="dailyCashIncome">Rp 0</strong>
+                        </div>
+                        <div class="daily-metric-item">
+                            <span class="daily-metric-label">Kas keluar</span>
+                            <strong class="daily-metric-value text-expense" id="dailyCashExpense">Rp 0</strong>
+                        </div>
+                        <div class="daily-metric-item">
+                            <span class="daily-metric-label">Net arus kas</span>
+                            <strong class="daily-metric-value" id="dailyCashNet">Rp 0</strong>
+                        </div>
+                        <div class="daily-metric-item">
+                            <span class="daily-metric-label">Hari teraktif</span>
+                            <strong class="daily-metric-value" id="dailyCashPeak">-</strong>
+                        </div>
+                    </div>
+                    <div class="chart-legend-row">
+                        <div class="chart-legend-items">
+                            <span><i class="legend-dot income-dot"></i>Kas Masuk</span>
+                            <span><i class="legend-dot expense-dot"></i>Kas Keluar</span>
+                            <span><i class="legend-pip surplus-pip"></i>Surplus</span>
+                            <span><i class="legend-pip defisit-pip"></i>Defisit</span>
+                        </div>
+                        <span class="chart-hint">Geser untuk tanggal lengkap →</span>
+                    </div>
+                    <div class="daily-stacked-scroller" id="dailyStackedScroller">
+                        <div class="daily-stacked-chart" id="dailyStackedChart" role="region" aria-label="Grafik kolom bertumpuk perkembangan kas per hari"></div>
+                    </div>
+                    <div class="chart-tooltip" id="stackedChartTooltip" hidden></div>
+                    <p class="chart-caption" id="dailyCashCaption" aria-live="polite"></p>
+                </article>
+
+                <article class="panel daily-line-panel income-line-panel" id="dailyIncomePanel">
+                    <div class="panel-heading">
+                        <div><p class="eyebrow">TREN HARIAN · LINE CHART</p><h2>Pemasukan per tanggal</h2></div>
+                        <span class="period-chip" id="incomeLinePeriod">Bulan ini</span>
+                    </div>
+                    <div class="daily-line-metrics">
+                        <div class="daily-metric-item">
+                            <span class="daily-metric-label">Total masuk</span>
+                            <strong class="daily-metric-value text-income" id="incomeLineTotal">Rp 0</strong>
+                        </div>
+                        <div class="daily-metric-item">
+                            <span class="daily-metric-label">Rata-rata/hari</span>
+                            <strong class="daily-metric-value" id="incomeLineAvg">Rp 0</strong>
+                        </div>
+                        <div class="daily-metric-item">
+                            <span class="daily-metric-label">Puncak tertinggi</span>
+                            <strong class="daily-metric-value" id="incomeLinePeak">-</strong>
+                        </div>
+                    </div>
+                    <div class="daily-line-chart-wrap" id="incomeLineWrap">
+                        <div class="daily-line-chart-container" id="incomeLineChart" role="img" aria-label="Grafik garis pemasukan per tanggal"></div>
+                        <div class="chart-tooltip" id="incomeLineTooltip" hidden></div>
+                    </div>
+                    <p class="chart-caption" id="incomeLineCaption" aria-live="polite"></p>
+                </article>
+
+                <article class="panel daily-line-panel expense-line-panel" id="dailyExpensePanel">
+                    <div class="panel-heading">
+                        <div><p class="eyebrow">TREN HARIAN · LINE CHART</p><h2>Pengeluaran per tanggal</h2></div>
+                        <span class="period-chip" id="expenseLinePeriod">Bulan ini</span>
+                    </div>
+                    <div class="daily-line-metrics">
+                        <div class="daily-metric-item">
+                            <span class="daily-metric-label">Total keluar</span>
+                            <strong class="daily-metric-value text-expense" id="expenseLineTotal">Rp 0</strong>
+                        </div>
+                        <div class="daily-metric-item">
+                            <span class="daily-metric-label">Rata-rata/hari</span>
+                            <strong class="daily-metric-value" id="expenseLineAvg">Rp 0</strong>
+                        </div>
+                        <div class="daily-metric-item">
+                            <span class="daily-metric-label">Pengeluaran tertinggi</span>
+                            <strong class="daily-metric-value" id="expenseLinePeak">-</strong>
+                        </div>
+                    </div>
+                    <div class="daily-line-chart-wrap" id="expenseLineWrap">
+                        <div class="daily-line-chart-container" id="expenseLineChart" role="img" aria-label="Grafik garis pengeluaran per tanggal"></div>
+                        <div class="chart-tooltip" id="expenseLineTooltip" hidden></div>
+                    </div>
+                    <p class="chart-caption" id="expenseLineCaption" aria-live="polite"></p>
+                </article>
+
                 <article class="panel trend-panel">
                     <div class="panel-heading">
                         <div><p class="eyebrow">PERJALANAN UANG</p><h2>Tren arus kas 6 bulan</h2></div>

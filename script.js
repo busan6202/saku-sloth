@@ -35,6 +35,29 @@ const elements = {
     trendChart: document.getElementById('trendChart'),
     trendPeriod: document.getElementById('trendPeriod'),
     trendCaption: document.getElementById('trendCaption'),
+    dailyCashPanel: document.getElementById('dailyCashPanel'),
+    dailyCashPeriod: document.getElementById('dailyCashPeriod'),
+    dailyCashIncome: document.getElementById('dailyCashIncome'),
+    dailyCashExpense: document.getElementById('dailyCashExpense'),
+    dailyCashNet: document.getElementById('dailyCashNet'),
+    dailyCashPeak: document.getElementById('dailyCashPeak'),
+    dailyStackedChart: document.getElementById('dailyStackedChart'),
+    stackedChartTooltip: document.getElementById('stackedChartTooltip'),
+    dailyCashCaption: document.getElementById('dailyCashCaption'),
+    incomeLinePeriod: document.getElementById('incomeLinePeriod'),
+    incomeLineTotal: document.getElementById('incomeLineTotal'),
+    incomeLineAvg: document.getElementById('incomeLineAvg'),
+    incomeLinePeak: document.getElementById('incomeLinePeak'),
+    incomeLineChart: document.getElementById('incomeLineChart'),
+    incomeLineTooltip: document.getElementById('incomeLineTooltip'),
+    incomeLineCaption: document.getElementById('incomeLineCaption'),
+    expenseLinePeriod: document.getElementById('expenseLinePeriod'),
+    expenseLineTotal: document.getElementById('expenseLineTotal'),
+    expenseLineAvg: document.getElementById('expenseLineAvg'),
+    expenseLinePeak: document.getElementById('expenseLinePeak'),
+    expenseLineChart: document.getElementById('expenseLineChart'),
+    expenseLineTooltip: document.getElementById('expenseLineTooltip'),
+    expenseLineCaption: document.getElementById('expenseLineCaption'),
     budgetForm: document.getElementById('budgetForm'),
     budgetCategory: document.getElementById('budgetCategory'),
     budgetLimit: document.getElementById('budgetLimit'),
@@ -125,6 +148,45 @@ function localMonthValue(date = new Date()) {
 
 function formatCurrency(amount) {
     return currencyFormatter.format(Number.isFinite(amount) ? amount : 0);
+}
+
+const fullDateFormatter = new Intl.DateTimeFormat('id-ID', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+});
+
+function formatCompactCurrency(amount) {
+    const val = Number(amount) || 0;
+    if (val === 0) return 'Rp 0';
+    if (val >= 1_000_000_000) {
+        const b = (val / 1_000_000_000).toFixed(1).replace('.0', '');
+        return `${b} M`;
+    }
+    if (val >= 1_000_000) {
+        const m = (val / 1_000_000).toFixed(1).replace('.0', '');
+        return `${m} jt`;
+    }
+    if (val >= 1_000) {
+        const k = (val / 1_000).toFixed(0);
+        return `${k} rb`;
+    }
+    return `Rp ${val}`;
+}
+
+function getNiceCeiling(num) {
+    if (num <= 0) return 100000;
+    const exp = Math.floor(Math.log10(num));
+    const frac = num / Math.pow(10, exp);
+    let niceFrac;
+    if (frac <= 1) niceFrac = 1;
+    else if (frac <= 1.5) niceFrac = 1.5;
+    else if (frac <= 2) niceFrac = 2;
+    else if (frac <= 3) niceFrac = 3;
+    else if (frac <= 5) niceFrac = 5;
+    else niceFrac = 10;
+    return niceFrac * Math.pow(10, exp);
 }
 
 function formatTransactionDate(value) {
@@ -227,6 +289,7 @@ function updateSummary(monthTransactions) {
 
     renderCategories(categoryTotals, expense);
     renderMonthlyTrend();
+    renderDailyCharts(monthTransactions);
 }
 
 function renderMonthlyTrend() {
@@ -288,6 +351,480 @@ function renderMonthlyTrend() {
         column.append(bars, label);
         return column;
     }));
+}
+
+function buildSmoothPath(pts) {
+    if (!pts || !pts.length) return '';
+    if (pts.length === 1) return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[i === 0 ? i : i - 1];
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const p3 = pts[i + 2 < pts.length ? i + 2 : i + 1];
+        const cp1x = p1.x + (p2.x - p0.x) / 6;
+        const cp1y = p1.y + (p2.y - p0.y) / 6;
+        const cp2x = p2.x - (p3.x - p1.x) / 6;
+        const cp2y = p2.y - (p3.y - p1.y) / 6;
+        d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+    }
+    return d;
+}
+
+function getMonthlyDailyStats(monthTransactions) {
+    const selectedDate = new Date(`${elements.monthFilter.value}-01T12:00:00`);
+    const year = selectedDate.getFullYear();
+    const month = selectedDate.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date();
+    const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
+    const currentDay = isCurrentMonth ? today.getDate() : -1;
+
+    const days = Array.from({ length: daysInMonth }, (_, index) => {
+        const dayNumber = index + 1;
+        const date = new Date(year, month, dayNumber, 12, 0, 0);
+        return {
+            day: dayNumber,
+            date,
+            isToday: dayNumber === currentDay,
+            isWeekend: date.getDay() === 0 || date.getDay() === 6,
+            income: 0,
+            expense: 0,
+            incomeTransactions: [],
+            expenseTransactions: []
+        };
+    });
+
+    monthTransactions.forEach((tx) => {
+        const date = new Date(tx.date);
+        if (Number.isNaN(date.getTime())) return;
+        const dayNumber = date.getDate();
+        if (dayNumber >= 1 && dayNumber <= daysInMonth) {
+            const dayItem = days[dayNumber - 1];
+            const amount = Number(tx.amount) || 0;
+            if (tx.type === 'income') {
+                dayItem.income += amount;
+                dayItem.incomeTransactions.push(tx);
+            } else {
+                dayItem.expense += amount;
+                dayItem.expenseTransactions.push(tx);
+            }
+        }
+    });
+
+    return {
+        selectedDate,
+        year,
+        month,
+        daysInMonth,
+        days
+    };
+}
+
+function renderDailyCashStackedChart(dailyStats) {
+    if (!elements.dailyCashPeriod || !elements.dailyStackedChart) return;
+
+    const monthName = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(dailyStats.selectedDate);
+    elements.dailyCashPeriod.textContent = monthName;
+
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let peakFlow = 0;
+    let peakDay = null;
+    let activeDaysCount = 0;
+    let surplusDaysCount = 0;
+    let defisitDaysCount = 0;
+
+    dailyStats.days.forEach((day) => {
+        totalIncome += day.income;
+        totalExpense += day.expense;
+        const flow = day.income + day.expense;
+        if (flow > peakFlow) {
+            peakFlow = flow;
+            peakDay = day;
+        }
+        if (flow > 0) activeDaysCount += 1;
+        if (day.income > day.expense) surplusDaysCount += 1;
+        else if (day.expense > day.income) defisitDaysCount += 1;
+    });
+
+    const netCash = totalIncome - totalExpense;
+    const maxDailyFlow = Math.max(0, ...dailyStats.days.map((d) => d.income + d.expense));
+
+    elements.dailyCashIncome.textContent = formatCurrency(totalIncome);
+    elements.dailyCashExpense.textContent = formatCurrency(totalExpense);
+    elements.dailyCashNet.textContent = `${netCash > 0 ? '+' : ''}${formatCurrency(netCash)}`;
+    elements.dailyCashNet.className = `daily-metric-value ${netCash >= 0 ? 'text-income' : 'text-expense'}`;
+    elements.dailyCashPeak.textContent = peakDay && peakFlow > 0 ? `Tgl ${peakDay.day} (${formatCompactCurrency(peakFlow)})` : '-';
+
+    if (maxDailyFlow === 0) {
+        elements.dailyCashCaption.textContent = 'Belum ada transaksi kas pada bulan ini. Catat transaksi untuk melihat dinamika pergerakan kas per hari.';
+    } else {
+        const netStatus = netCash >= 0 ? `surplus bersih sebesar ${formatCurrency(netCash)}` : `defisit sebesar ${formatCurrency(Math.abs(netCash))}`;
+        const peakDesc = peakDay ? `Puncak perputaran kas terjadi pada tanggal ${peakDay.day} (${formatCurrency(peakFlow)}).` : '';
+        elements.dailyCashCaption.textContent = `Terdapat ${activeDaysCount} hari aktif (${surplusDaysCount} hari surplus, ${defisitDaysCount} hari defisit) dengan kondisi akhir ${netStatus}. ${peakDesc}`;
+    }
+
+    elements.dailyStackedChart.replaceChildren();
+
+    dailyStats.days.forEach((day) => {
+        const col = document.createElement('div');
+        col.className = `daily-col${day.isToday ? ' is-today' : ''}${day.isWeekend ? ' is-weekend' : ''}`;
+        col.tabIndex = 0;
+        col.setAttribute('role', 'button');
+        const dayTotal = day.income + day.expense;
+        col.setAttribute('aria-label', `Tanggal ${day.day}: Masuk ${formatCurrency(day.income)}, Keluar ${formatCurrency(day.expense)}`);
+
+        const barWrap = document.createElement('div');
+        barWrap.className = 'daily-bar-wrap';
+
+        if (dayTotal > 0 && maxDailyFlow > 0) {
+            const net = day.income - day.expense;
+            const netPip = document.createElement('span');
+            netPip.className = `daily-net-pip ${net >= 0 ? 'is-surplus' : 'is-defisit'}`;
+            netPip.textContent = net > 0 ? '+' : (net < 0 ? '−' : '•');
+            netPip.title = net >= 0 ? `Surplus ${formatCurrency(net)}` : `Defisit ${formatCurrency(Math.abs(net))}`;
+            barWrap.append(netPip);
+
+            const bar = document.createElement('div');
+            bar.className = 'daily-stacked-bar';
+            const barHeightPct = Math.max(6, (dayTotal / maxDailyFlow) * 100);
+            bar.style.height = `${barHeightPct}%`;
+
+            if (day.expense > 0) {
+                const expSeg = document.createElement('span');
+                expSeg.className = 'segment-expense';
+                expSeg.style.height = `${(day.expense / dayTotal) * 100}%`;
+                bar.append(expSeg);
+            }
+            if (day.income > 0) {
+                const incSeg = document.createElement('span');
+                incSeg.className = 'segment-income';
+                incSeg.style.height = `${(day.income / dayTotal) * 100}%`;
+                bar.append(incSeg);
+            }
+            barWrap.append(bar);
+        } else {
+            const emptyMark = document.createElement('span');
+            emptyMark.className = 'daily-bar-empty';
+            barWrap.append(emptyMark);
+        }
+
+        const dayLabel = document.createElement('span');
+        dayLabel.className = 'daily-col-label';
+        dayLabel.textContent = String(day.day);
+        col.append(barWrap, dayLabel);
+
+        const showTooltip = () => {
+            if (!elements.stackedChartTooltip || !elements.dailyCashPanel) return;
+            elements.stackedChartTooltip.replaceChildren();
+
+            const dateHeader = document.createElement('div');
+            dateHeader.className = 'chart-tooltip-date';
+            dateHeader.textContent = fullDateFormatter.format(day.date);
+
+            const inRow = document.createElement('div');
+            inRow.className = 'chart-tooltip-row';
+            inRow.innerHTML = `<span>Kas Masuk</span><strong class="text-income">+${formatCurrency(day.income)}</strong>`;
+
+            const outRow = document.createElement('div');
+            outRow.className = 'chart-tooltip-row';
+            outRow.innerHTML = `<span>Kas Keluar</span><strong class="text-expense">-${formatCurrency(day.expense)}</strong>`;
+
+            const netDiff = day.income - day.expense;
+            const netRow = document.createElement('div');
+            netRow.className = 'chart-tooltip-row';
+            const netClass = netDiff >= 0 ? 'text-income' : 'text-expense';
+            const netSign = netDiff > 0 ? '+' : '';
+            netRow.innerHTML = `<span>Net Kas</span><strong class="${netClass}">${netSign}${formatCurrency(netDiff)}</strong>`;
+
+            elements.stackedChartTooltip.append(dateHeader, inRow, outRow, netRow);
+
+            const allTxs = [...day.incomeTransactions, ...day.expenseTransactions];
+            if (allTxs.length > 0) {
+                const txsWrap = document.createElement('div');
+                txsWrap.className = 'chart-tooltip-txs';
+                allTxs.slice(0, 3).forEach((tx) => {
+                    const item = document.createElement('div');
+                    item.className = 'chart-tooltip-tx-item';
+                    const desc = document.createElement('span');
+                    desc.textContent = tx.desc || tx.category || 'Transaksi';
+                    const val = document.createElement('strong');
+                    val.className = tx.type === 'income' ? 'text-income' : 'text-expense';
+                    val.textContent = `${tx.type === 'income' ? '+' : '-'}${formatCurrency(Number(tx.amount) || 0)}`;
+                    item.append(desc, val);
+                    txsWrap.append(item);
+                });
+                if (allTxs.length > 3) {
+                    const more = document.createElement('span');
+                    more.textContent = `+${allTxs.length - 3} lainnya`;
+                    txsWrap.append(more);
+                }
+                elements.stackedChartTooltip.append(txsWrap);
+            }
+
+            const colRect = col.getBoundingClientRect();
+            const panelRect = elements.dailyCashPanel.getBoundingClientRect();
+            const left = colRect.left - panelRect.left + colRect.width / 2;
+            const top = colRect.top - panelRect.top + 30;
+
+            elements.stackedChartTooltip.style.left = `${left}px`;
+            elements.stackedChartTooltip.style.top = `${top}px`;
+            elements.stackedChartTooltip.hidden = false;
+        };
+
+        const hideTooltip = () => {
+            if (elements.stackedChartTooltip) elements.stackedChartTooltip.hidden = true;
+        };
+
+        col.addEventListener('mouseenter', showTooltip);
+        col.addEventListener('mouseleave', hideTooltip);
+        col.addEventListener('focus', showTooltip);
+        col.addEventListener('blur', hideTooltip);
+        col.addEventListener('touchstart', showTooltip, { passive: true });
+
+        elements.dailyStackedChart.append(col);
+    });
+}
+
+function renderDailyLineChart(dailyStats, type) {
+    const isIncome = type === 'income';
+    const periodEl = isIncome ? elements.incomeLinePeriod : elements.expenseLinePeriod;
+    const totalEl = isIncome ? elements.incomeLineTotal : elements.expenseLineTotal;
+    const avgEl = isIncome ? elements.incomeLineAvg : elements.expenseLineAvg;
+    const peakEl = isIncome ? elements.incomeLinePeak : elements.expenseLinePeak;
+    const containerEl = isIncome ? elements.incomeLineChart : elements.expenseLineChart;
+    const tooltipEl = isIncome ? elements.incomeLineTooltip : elements.expenseLineTooltip;
+    const captionEl = isIncome ? elements.incomeLineCaption : elements.expenseLineCaption;
+
+    if (!containerEl) return;
+
+    const monthName = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(dailyStats.selectedDate);
+    if (periodEl) periodEl.textContent = monthName;
+
+    const values = dailyStats.days.map((d) => d[type]);
+    const total = values.reduce((sum, v) => sum + v, 0);
+    const avg = Math.round(total / dailyStats.daysInMonth);
+    const maxVal = Math.max(0, ...values);
+    const peakDay = maxVal > 0 ? dailyStats.days.find((d) => d[type] === maxVal) : null;
+
+    if (totalEl) totalEl.textContent = formatCurrency(total);
+    if (avgEl) avgEl.textContent = formatCurrency(avg);
+    if (peakEl) peakEl.textContent = peakDay ? `Tgl ${peakDay.day} (${formatCompactCurrency(maxVal)})` : '-';
+
+    const labelName = isIncome ? 'pemasukan' : 'pengeluaran';
+    if (captionEl) {
+        if (maxVal === 0) {
+            captionEl.textContent = `Belum ada ${labelName} tercatat pada bulan ${monthName}.`;
+        } else {
+            captionEl.textContent = `Total ${labelName} sebesar ${formatCurrency(total)} (rata-rata ${formatCurrency(avg)}/hari). Puncak ${labelName} tercatat pada tanggal ${peakDay.day} (${formatCurrency(maxVal)}).`;
+        }
+    }
+
+    containerEl.replaceChildren();
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', '0 0 680 170');
+    svg.setAttribute('preserveAspectRatio', 'none');
+
+    const defs = document.createElementNS(svgNS, 'defs');
+    const gradId = `${type}AreaGradient`;
+    const grad = document.createElementNS(svgNS, 'linearGradient');
+    grad.setAttribute('id', gradId);
+    grad.setAttribute('x1', '0');
+    grad.setAttribute('y1', '0');
+    grad.setAttribute('x2', '0');
+    grad.setAttribute('y2', '1');
+
+    const stop1 = document.createElementNS(svgNS, 'stop');
+    stop1.setAttribute('offset', '0%');
+    stop1.setAttribute('style', `stop-color: var(${isIncome ? '--green' : '--red'}); stop-opacity: 0.28;`);
+
+    const stop2 = document.createElementNS(svgNS, 'stop');
+    stop2.setAttribute('offset', '100%');
+    stop2.setAttribute('style', `stop-color: var(${isIncome ? '--green' : '--red'}); stop-opacity: 0.0;`);
+
+    grad.append(stop1, stop2);
+    defs.append(grad);
+    svg.append(defs);
+
+    const padding = { top: 22, right: 18, bottom: 26, left: 56 };
+    const plotW = 680 - padding.left - padding.right;
+    const plotH = 170 - padding.top - padding.bottom;
+    const niceMax = getNiceCeiling(maxVal);
+
+    const gridLevels = [
+        { val: niceMax, label: formatCompactCurrency(niceMax), ratio: 1 },
+        { val: niceMax / 2, label: formatCompactCurrency(niceMax / 2), ratio: 0.5 },
+        { val: 0, label: 'Rp 0', ratio: 0 }
+    ];
+
+    gridLevels.forEach((level) => {
+        const y = padding.top + plotH - level.ratio * plotH;
+        const line = document.createElementNS(svgNS, 'line');
+        line.setAttribute('class', 'line-grid-line');
+        line.setAttribute('x1', String(padding.left));
+        line.setAttribute('x2', String(padding.left + plotW));
+        line.setAttribute('y1', String(y));
+        line.setAttribute('y2', String(y));
+        svg.append(line);
+
+        const text = document.createElementNS(svgNS, 'text');
+        text.setAttribute('class', 'line-axis-label');
+        text.setAttribute('x', String(padding.left - 8));
+        text.setAttribute('y', String(y + 3));
+        text.setAttribute('text-anchor', 'end');
+        text.textContent = level.label;
+        svg.append(text);
+    });
+
+    const points = dailyStats.days.map((day, idx) => {
+        const x = padding.left + (idx / (dailyStats.daysInMonth - 1)) * plotW;
+        const val = day[type];
+        const y = padding.top + plotH - (maxVal > 0 ? (val / niceMax) * plotH : 0);
+        return { x, y, day, val, index: idx };
+    });
+
+    const smoothLinePath = buildSmoothPath(points);
+    const baselineY = padding.top + plotH;
+
+    if (smoothLinePath) {
+        const areaPath = document.createElementNS(svgNS, 'path');
+        const lastPt = points[points.length - 1];
+        const firstPt = points[0];
+        areaPath.setAttribute('d', `${smoothLinePath} L ${lastPt.x.toFixed(1)} ${baselineY.toFixed(1)} L ${firstPt.x.toFixed(1)} ${baselineY.toFixed(1)} Z`);
+        areaPath.setAttribute('fill', `url(#${gradId})`);
+        svg.append(areaPath);
+
+        const strokeLine = document.createElementNS(svgNS, 'path');
+        strokeLine.setAttribute('d', smoothLinePath);
+        strokeLine.setAttribute('class', isIncome ? 'line-path-income' : 'line-path-expense');
+        svg.append(strokeLine);
+    }
+
+    const labelDays = new Set([1, 5, 10, 15, 20, 25, dailyStats.daysInMonth]);
+    points.forEach((pt) => {
+        if (labelDays.has(pt.day.day)) {
+            const dateText = document.createElementNS(svgNS, 'text');
+            dateText.setAttribute('class', 'line-axis-label');
+            dateText.setAttribute('x', String(pt.x));
+            dateText.setAttribute('y', String(baselineY + 16));
+            dateText.setAttribute('text-anchor', 'middle');
+            dateText.textContent = String(pt.day.day);
+            svg.append(dateText);
+        }
+
+        if (pt.val > 0) {
+            const circle = document.createElementNS(svgNS, 'circle');
+            circle.setAttribute('cx', String(pt.x));
+            circle.setAttribute('cy', String(pt.y));
+            circle.setAttribute('r', pt.val === maxVal ? '4.5' : '3');
+            circle.setAttribute('class', isIncome ? 'line-point-income' : 'line-point-expense');
+            if (pt.val === maxVal) circle.classList.add('is-peak');
+            svg.append(circle);
+        }
+    });
+
+    const crosshair = document.createElementNS(svgNS, 'line');
+    crosshair.setAttribute('class', 'line-crosshair');
+    crosshair.setAttribute('y1', String(padding.top));
+    crosshair.setAttribute('y2', String(baselineY));
+    crosshair.style.display = 'none';
+    svg.append(crosshair);
+
+    const activeDot = document.createElementNS(svgNS, 'circle');
+    activeDot.setAttribute('class', `line-active-dot ${type}`);
+    activeDot.setAttribute('r', '4.5');
+    activeDot.style.display = 'none';
+    svg.append(activeDot);
+
+    const handlePointer = (event) => {
+        const rect = svg.getBoundingClientRect();
+        if (!rect.width) return;
+        const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+        const mouseX = ((clientX - rect.left) / rect.width) * 680;
+        const dayIdx = Math.round(((mouseX - padding.left) / plotW) * (dailyStats.daysInMonth - 1));
+        const clampedIdx = Math.max(0, Math.min(dailyStats.daysInMonth - 1, dayIdx));
+        const pt = points[clampedIdx];
+        if (!pt) return;
+
+        crosshair.setAttribute('x1', String(pt.x));
+        crosshair.setAttribute('x2', String(pt.x));
+        crosshair.style.display = 'block';
+
+        activeDot.setAttribute('cx', String(pt.x));
+        activeDot.setAttribute('cy', String(pt.y));
+        activeDot.style.display = 'block';
+
+        if (tooltipEl) {
+            tooltipEl.replaceChildren();
+
+            const dateHeader = document.createElement('div');
+            dateHeader.className = 'chart-tooltip-date';
+            dateHeader.textContent = fullDateFormatter.format(pt.day.date);
+
+            const row = document.createElement('div');
+            row.className = 'chart-tooltip-row';
+            row.innerHTML = `<span>${isIncome ? 'Pemasukan' : 'Pengeluaran'}</span><strong class="${isIncome ? 'text-income' : 'text-expense'}">${formatCurrency(pt.val)}</strong>`;
+
+            const countRow = document.createElement('div');
+            countRow.className = 'chart-tooltip-row';
+            const txs = pt.day[type + 'Transactions'];
+            countRow.innerHTML = `<span>Transaksi</span><strong>${txs.length} kali</strong>`;
+
+            tooltipEl.append(dateHeader, row, countRow);
+
+            if (txs.length > 0) {
+                const txsWrap = document.createElement('div');
+                txsWrap.className = 'chart-tooltip-txs';
+                txs.slice(0, 3).forEach((tx) => {
+                    const item = document.createElement('div');
+                    item.className = 'chart-tooltip-tx-item';
+                    const desc = document.createElement('span');
+                    desc.textContent = tx.desc || tx.category || 'Transaksi';
+                    const val = document.createElement('strong');
+                    val.className = isIncome ? 'text-income' : 'text-expense';
+                    val.textContent = `${isIncome ? '+' : '-'}${formatCurrency(Number(tx.amount) || 0)}`;
+                    item.append(desc, val);
+                    txsWrap.append(item);
+                });
+                if (txs.length > 3) {
+                    const more = document.createElement('span');
+                    more.textContent = `+${txs.length - 3} lainnya`;
+                    txsWrap.append(more);
+                }
+                tooltipEl.append(txsWrap);
+            }
+
+            tooltipEl.hidden = false;
+            const leftPct = (pt.x / 680) * 100;
+            const topPct = (pt.y / 170) * 100;
+            tooltipEl.style.left = `${leftPct}%`;
+            tooltipEl.style.top = `${topPct}%`;
+        }
+    };
+
+    const handlePointerLeave = () => {
+        crosshair.style.display = 'none';
+        activeDot.style.display = 'none';
+        if (tooltipEl) tooltipEl.hidden = true;
+    };
+
+    svg.addEventListener('pointermove', handlePointer);
+    svg.addEventListener('pointerleave', handlePointerLeave);
+    svg.addEventListener('touchstart', handlePointer, { passive: true });
+    svg.addEventListener('touchmove', handlePointer, { passive: true });
+    svg.addEventListener('touchend', handlePointerLeave);
+
+    containerEl.append(svg);
+}
+
+function renderDailyCharts(monthTransactions) {
+    const dailyStats = getMonthlyDailyStats(monthTransactions);
+    renderDailyCashStackedChart(dailyStats);
+    renderDailyLineChart(dailyStats, 'income');
+    renderDailyLineChart(dailyStats, 'expense');
 }
 
 function renderBudgets() {
@@ -800,6 +1337,15 @@ function signOut(showStatus = true, revokeSession = true) {
     elements.goalList.replaceChildren();
     elements.trendChart.replaceChildren();
     elements.trendCaption.textContent = '';
+    if (elements.dailyStackedChart) elements.dailyStackedChart.replaceChildren();
+    if (elements.dailyCashCaption) elements.dailyCashCaption.textContent = '';
+    if (elements.incomeLineChart) elements.incomeLineChart.replaceChildren();
+    if (elements.incomeLineCaption) elements.incomeLineCaption.textContent = '';
+    if (elements.expenseLineChart) elements.expenseLineChart.replaceChildren();
+    if (elements.expenseLineCaption) elements.expenseLineCaption.textContent = '';
+    if (elements.stackedChartTooltip) elements.stackedChartTooltip.hidden = true;
+    if (elements.incomeLineTooltip) elements.incomeLineTooltip.hidden = true;
+    if (elements.expenseLineTooltip) elements.expenseLineTooltip.hidden = true;
     elements.analysisResult.replaceChildren();
     elements.analysisResult.hidden = true;
     elements.form.reset();
