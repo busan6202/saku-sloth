@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const { Pool } = require('pg');
 const cors = require('cors');
 require('dotenv').config();
@@ -6,6 +7,11 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 app.use(cors());
+app.use(express.static(__dirname));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
 
 // Koneksi ke Neon PostgreSQL (Konfigurasi SSL yang bersih & aman)
 const pool = new Pool({
