@@ -4,41 +4,53 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f5f6f2">
-    <meta name="description" content="Dashboard keuangan pribadi Saku Harian. Pantau pemasukan, pengeluaran, dan transaksi dalam satu tempat.">
-    <title>Saku Harian — Ruang finansialmu</title>
+    <meta name="description" content="Saku Harian Smart Planner — Aplikasi perencana keuangan harian dengan kalender bulanan, rekomendasi finansial pintar, pengingat tagihan, dan ekspor Google Sheets.">
+    <title>Saku Harian — Smart Daily Financial Planner</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.8/dist/simple-statistics.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
     <script src="script.js" defer></script>
 </head>
 <body>
+    <!-- Layer Animasi Koin & Partikel Kartun -->
+    <div id="cartoonCelebration" class="cartoon-celebration" aria-hidden="true"></div>
+
     <div class="app-shell">
         <aside class="sidebar" aria-label="Navigasi utama">
-            <a class="brand" href="#overview" aria-label="Saku Harian, ke beranda">
+            <a class="brand" href="#overview" aria-label="Saku Harian Smart Planner, ke beranda">
                 <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-                <span class="brand-copy">saku<span>harian</span></span>
+                <span class="brand-copy">saku<span>planner</span></span>
             </a>
 
-            <div class="sidebar-label">MENU</div>
+            <div class="sidebar-label">SMART PLANNER</div>
             <nav class="side-nav">
-                <a class="nav-link is-active" href="#overview" data-nav="overview"><i class="nav-symbol" data-lucide="layout-dashboard" aria-hidden="true"></i>Ringkasan</a>
+                <a class="nav-link is-active" href="#overview" data-nav="overview"><i class="nav-symbol" data-lucide="sparkles" aria-hidden="true"></i>Daily Planner</a>
+                <a class="nav-link" href="#calendar-section" data-nav="calendar-section"><i class="nav-symbol" data-lucide="calendar-days" aria-hidden="true"></i>Kalender & Timeline</a>
+                <a class="nav-link" href="#planner" data-nav="planner"><i class="nav-symbol" data-lucide="lightbulb" aria-hidden="true"></i>Saran Hemat AI/JS</a>
+                <a class="nav-link" href="#bills" data-nav="bills">
+                    <i class="nav-symbol" data-lucide="bell-ring" aria-hidden="true"></i>Pengingat Tagihan
+                    <span class="nav-badge" id="navBillBadge" hidden>0</span>
+                </a>
+                <a class="nav-link" href="#insights" data-nav="insights"><i class="nav-symbol" data-lucide="chart-pie" aria-hidden="true"></i>Analisis Kas</a>
                 <a class="nav-link" href="#transactions" data-nav="transactions"><i class="nav-symbol" data-lucide="arrow-left-right" aria-hidden="true"></i>Transaksi</a>
-                <a class="nav-link" href="#insights" data-nav="insights"><i class="nav-symbol" data-lucide="chart-pie" aria-hidden="true"></i>Analisis</a>
             </nav>
 
             <div class="sidebar-bottom">
-                <div class="bot-card">
-                    <div class="bot-icon" aria-hidden="true">✳</div>
-                    <p class="bot-title">Catat lebih cepat</p>
-                    <p class="bot-copy">Kirim nota atau voice note ke bot Telegram kamu.</p>
+                <div class="bot-card cartoon-bot-card">
+                    <div class="bot-card-header">
+                        <div class="bot-icon" aria-hidden="true">🦥</div>
+                        <span class="bot-pill">Asisten Aktif</span>
+                    </div>
+                    <p class="bot-title">Catat cepat via Bot</p>
+                    <p class="bot-copy">Kirim foto struk atau voice note ke Telegram Saku Harian.</p>
                     <a href="https://t.me/" target="_blank" rel="noreferrer" class="bot-link">Buka Telegram <span aria-hidden="true">↗</span></a>
                 </div>
                 <div class="profile">
-                    <div class="profile-avatar" aria-hidden="true">S</div>
-                    <div><strong>Ruang pribadimu</strong><span>Keuangan harian</span></div>
+                    <div class="profile-avatar" aria-hidden="true">✨</div>
+                    <div><strong>Smart Financial</strong><span>Daily Planner Mode</span></div>
                     <span class="profile-more" aria-hidden="true">···</span>
                 </div>
             </div>
@@ -46,53 +58,395 @@
 
         <main class="main-content" id="overview">
             <header class="topbar">
-                <div class="breadcrumb"><span>Ruang finansial</span><span aria-hidden="true">/</span><strong>Ringkasan</strong></div>
+                <div class="breadcrumb">
+                    <span>Smart Daily Planner</span>
+                    <span aria-hidden="true">/</span>
+                    <strong id="activeSectionTitle">Ringkasan Harian</strong>
+                </div>
                 <div class="topbar-actions">
-                    <label class="month-control">
+                    <label class="month-control" title="Pilih bulan kalender dan laporan">
                         <span class="sr-only">Pilih bulan laporan</span>
-                        <span class="calendar-icon" aria-hidden="true">▦</span>
+                        <span class="calendar-icon" aria-hidden="true">📅</span>
                         <input id="monthFilter" type="month" aria-label="Pilih bulan laporan">
                     </label>
-                    <button class="icon-button export-button" id="exportXlsx" type="button" aria-label="Unduh laporan Excel XLSX" title="Ekspor semua transaksi ke XLSX">
-                        <i data-lucide="file-spreadsheet" aria-hidden="true"></i><span class="export-label">Ekspor XLSX</span>
+
+                    <div class="notif-dropdown-wrap">
+                        <button class="icon-button notif-button" id="notifToggleBtn" type="button" aria-label="Pengingat tagihan dan notifikasi" title="Notifikasi Tagihan">
+                            <i data-lucide="bell" aria-hidden="true"></i>
+                            <span class="notif-dot" id="notifBadge" hidden>0</span>
+                        </button>
+                        <div class="notif-popover" id="notifPopover" hidden>
+                            <div class="notif-popover-head">
+                                <strong>🔔 Pusat Pengingat</strong>
+                                <button class="text-button" id="enableBrowserNotifBtn" type="button">Aktifkan Notif Browser</button>
+                            </div>
+                            <div class="notif-list" id="notifList"></div>
+                        </div>
+                    </div>
+
+                    <button class="icon-button gsheet-button" id="exportGSheet" type="button" aria-label="Ekspor ke Google Sheets" title="Ekspor ke Google Sheets">
+                        <i data-lucide="sheet" aria-hidden="true"></i>
+                        <span class="export-label">Google Sheets</span>
                     </button>
                     <button class="icon-button" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
                     <button class="icon-button theme-button" id="themeToggle" type="button" aria-label="Ganti tema" title="Ganti tema"><i data-lucide="moon" aria-hidden="true"></i></button>
                 </div>
             </header>
 
-            <section class="welcome-row" aria-labelledby="page-title">
-                <div>
-                    <p class="eyebrow" id="todayLabel">HARI INI</p>
-                    <h1 id="page-title">Uangmu, lebih <span>terarah.</span></h1>
-                    <p class="welcome-copy">Satu pandangan untuk keputusan finansial yang lebih tenang.</p>
+            <!-- HERO BANNER DENGAN KARTUN INTERAKTIF & SMART PLANNER -->
+            <section class="hero-planner-banner" aria-labelledby="page-title">
+                <div class="hero-copy-col">
+                    <div class="hero- pill-row">
+                        <span class="eyebrow-pill" id="todayLabel">HARI INI</span>
+                        <span class="planner-status-pill" id="plannerMoodBadge">✨ Mode Hemat Aktif</span>
+                    </div>
+                    <h1 id="page-title">Smart Planner <span>Keuangan Harianmu.</span></h1>
+                    <p class="welcome-copy" id="mascotSpeech">Halo! Aku Saku si Sloth. Yuk pantau jatah uang harian, kalender bulanan, dan tagihanmu agar tabungan makin gendut!</p>
+                    <div class="hero-actions">
+                        <button class="button button-primary" id="openTransaction" type="button">
+                            <i data-lucide="plus-circle" aria-hidden="true"></i> Catat Transaksi
+                        </button>
+                        <button class="button button-secondary" id="openBillQuick" type="button">
+                            <i data-lucide="bell-plus" aria-hidden="true"></i> Tambah Tagihan
+                        </button>
+                        <button class="button button-ghost" id="openBudgetModalBtn" type="button">
+                            <i data-lucide="sliders-horizontal" aria-hidden="true"></i> Atur Target Bulanan
+                        </button>
+                    </div>
                 </div>
-                <button class="button button-primary" id="openTransaction" type="button"><i data-lucide="plus" aria-hidden="true"></i> Catat transaksi</button>
+
+                <!-- Maskot Kartun SVG Animasi Interaktif -->
+                <div class="hero-cartoon-stage" id="mascotStage" title="Klik Saku si Sloth untuk tips finansial kejutan!" role="button" tabindex="0" aria-label="Maskot kartun Saku si Sloth, klik untuk tips">
+                    <div class="cartoon-floating-coin coin-1" aria-hidden="true">Rp</div>
+                    <div class="cartoon-floating-coin coin-2" aria-hidden="true">★</div>
+                    <div class="cartoon-floating-coin coin-3" aria-hidden="true">💰</div>
+                    <div class="cartoon-sparkle sp-1" aria-hidden="true">✦</div>
+                    <div class="cartoon-sparkle sp-2" aria-hidden="true">✦</div>
+                    <svg class="sloth-cartoon-svg" viewBox="0 0 240 210" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                        <!-- Bayangan bawah -->
+                        <ellipse cx="120" cy="194" rx="68" ry="10" fill="rgba(37, 54, 28, 0.14)" class="cartoon-shadow"/>
+                        <!-- Daun & Cabang Pohon tempat bersandar -->
+                        <path d="M35 168C75 178 165 178 205 162" stroke="#7A583B" stroke-width="10" stroke-linecap="round"/>
+                        <path d="M38 165C22 152 18 134 34 128C48 123 54 146 38 165Z" fill="#89BD5C" class="cartoon-leaf-left"/>
+                        <path d="M200 160C216 146 222 128 206 122C192 118 186 142 200 160Z" fill="#B8F36A" class="cartoon-leaf-right"/>
+                        <!-- Badan Sloth -->
+                        <ellipse cx="120" cy="132" rx="52" ry="48" fill="#A68263"/>
+                        <ellipse cx="120" cy="138" rx="36" ry="34" fill="#EBD9C5"/>
+                        <!-- Kaki Sloth -->
+                        <ellipse cx="86" cy="172" rx="14" ry="10" fill="#8C6B4F"/>
+                        <ellipse cx="154" cy="172" rx="14" ry="10" fill="#8C6B4F"/>
+                        <!-- Tangan Kiri memegang Clipboard Smart Planner -->
+                        <g class="cartoon-left-arm">
+                            <path d="M72 122C54 126 48 144 64 154" stroke="#8C6B4F" stroke-width="16" stroke-linecap="round"/>
+                            <rect x="44" y="120" width="34" height="42" rx="6" transform="rotate(-10 44 120)" fill="#FFFFFF" stroke="#29451D" stroke-width="2.5"/>
+                            <rect x="52" y="116" width="16" height="7" rx="3" transform="rotate(-10 52 116)" fill="#B8F36A" stroke="#29451D" stroke-width="2"/>
+                            <line x1="52" y1="132" x2="70" y2="129" stroke="#89BD5C" stroke-width="3" stroke-linecap="round"/>
+                            <line x1="54" y1="140" x2="72" y2="137" stroke="#E9756A" stroke-width="3" stroke-linecap="round"/>
+                            <line x1="56" y1="148" x2="68" y2="146" stroke="#91A8D0" stroke-width="3" stroke-linecap="round"/>
+                        </g>
+                        <!-- Tangan Kanan Melambai memegang Koin Emas -->
+                        <g class="cartoon-wave-arm">
+                            <path d="M166 120C188 106 196 86 184 72" stroke="#8C6B4F" stroke-width="16" stroke-linecap="round"/>
+                            <circle cx="186" cy="64" r="16" fill="#FFD452" stroke="#C89116" stroke-width="3"/>
+                            <text x="186" y="69" text-anchor="middle" fill="#785204" font-size="11" font-weight="800" font-family="sans-serif">Rp</text>
+                        </g>
+                        <!-- Kepala Sloth -->
+                        <g class="cartoon-head">
+                            <ellipse cx="120" cy="76" rx="48" ry="40" fill="#A68263"/>
+                            <!-- Jambul Rambut Lucu -->
+                            <path d="M112 37C114 26 124 24 126 36C132 28 140 32 134 40" stroke="#8C6B4F" stroke-width="5" stroke-linecap="round"/>
+                            <!-- Wajah Cream -->
+                            <ellipse cx="120" cy="80" rx="38" ry="30" fill="#F5E8D8"/>
+                            <!-- Patch Mata Khas Sloth -->
+                            <ellipse cx="99" cy="78" rx="14" ry="11" transform="rotate(-10 99 78)" fill="#785A40"/>
+                            <ellipse cx="141" cy="78" rx="14" ry="11" transform="rotate(10 141 78)" fill="#785A40"/>
+                            <!-- Mata Berkedip -->
+                            <g class="cartoon-eyes">
+                                <circle cx="100" cy="77" r="5" fill="#1F241F"/>
+                                <circle cx="102" cy="75" r="1.8" fill="#FFFFFF"/>
+                                <circle cx="140" cy="77" r="5" fill="#1F241F"/>
+                                <circle cx="142" cy="75" r="1.8" fill="#FFFFFF"/>
+                            </g>
+                            <!-- Kacamata Pintar Financial Planner -->
+                            <rect x="83" y="66" width="32" height="22" rx="8" stroke="#29451D" stroke-width="3" fill="rgba(184, 243, 106, 0.18)"/>
+                            <rect x="125" y="66" width="32" height="22" rx="8" stroke="#29451D" stroke-width="3" fill="rgba(184, 243, 106, 0.18)"/>
+                            <line x1="115" y1="76" x2="125" y2="76" stroke="#29451D" stroke-width="3"/>
+                            <!-- Hidung & Mulut Ekspresif -->
+                            <ellipse cx="120" cy="85" rx="6" ry="4.2" fill="#4A3525"/>
+                            <path id="mascotMouth" d="M111 93C115 99 125 99 129 93" stroke="#4A3525" stroke-width="3" stroke-linecap="round"/>
+                            <!-- Pipi Merona -->
+                            <ellipse cx="86" cy="90" rx="6" ry="3.5" fill="#F49D94" opacity="0.7"/>
+                            <ellipse cx="154" cy="90" rx="6" ry="3.5" fill="#F49D94" opacity="0.7"/>
+                            <!-- Tetes Keringat (Muncul saat boros) -->
+                            <path id="mascotSweat" d="M163 54C163 54 169 62 169 66C169 69.3 166.3 72 163 72C159.7 72 157 69.3 157 66C157 62 163 54 163 54Z" fill="#6EC6FF" opacity="0"/>
+                        </g>
+                    </svg>
+                    <span class="mascot-caption">Klik Saku untuk motivasi! 🐾</span>
+                </div>
             </section>
 
             <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
 
-            <section class="summary-grid" aria-label="Ringkasan keuangan bulan terpilih">
+            <!-- BANNER PENGINGAT TAGIHAN MENDESAK -->
+            <div class="urgent-bill-banner" id="urgentBillBanner" hidden>
+                <div class="urgent-bill-left">
+                    <span class="urgent-cartoon-bell" aria-hidden="true">🔔</span>
+                    <div>
+                        <strong id="urgentBillTitle">Pengingat Tagihan Bulan Ini</strong>
+                        <p id="urgentBillDesc">Ada tagihan yang segera jatuh tempo.</p>
+                    </div>
+                </div>
+                <div class="urgent-bill-actions">
+                    <a href="#bills" class="button button-secondary button-sm">Lihat Tagihan</a>
+                </div>
+            </div>
+
+            <!-- SMART DAILY PLANNER PULSE (4 KARTU UTAMA) -->
+            <section class="summary-grid" aria-label="Ringkasan Smart Daily Financial Planner">
+                <article class="summary-card safe-spend-card">
+                    <div class="summary-head">
+                        <span class="summary-label">Jatah Aman Hari Ini (Safe-to-Spend)</span>
+                        <span class="card-orbit" aria-hidden="true">🎯</span>
+                    </div>
+                    <p class="summary-value" id="safeSpendValue">Rp 0</p>
+                    <div class="summary-foot">
+                        <span class="balance-dot"></span>
+                        <span id="safeSpendCaption">Hari ini terpakai Rp 0</span>
+                    </div>
+                    <div class="daily-progress-mini">
+                        <span id="dailySpendBar" style="width: 0%"></span>
+                    </div>
+                </article>
+
                 <article class="summary-card balance-card">
-                    <div class="summary-head"><span class="summary-label">Sisa bersih</span><span class="card-orbit" aria-hidden="true">↗</span></div>
+                    <div class="summary-head"><span class="summary-label">Sisa Bersih Bulanan</span><span class="card-orbit" aria-hidden="true">↗</span></div>
                     <p class="summary-value" id="balanceValue">Rp 0</p>
                     <div class="summary-foot"><span class="balance-dot"></span><span id="balanceCaption">Pemasukan dikurangi pengeluaran</span></div>
                     <div class="balance-decoration" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
                 </article>
 
                 <article class="summary-card">
-                    <div class="summary-head"><span class="summary-label">Pemasukan</span><span class="metric-icon income-icon" aria-hidden="true">↙</span></div>
+                    <div class="summary-head"><span class="summary-label">Pemasukan Bulan Ini</span><span class="metric-icon income-icon" aria-hidden="true">↙</span></div>
                     <p class="summary-value" id="incomeValue">Rp 0</p>
                     <div class="summary-foot"><span class="metric-indicator income-indicator"></span><span id="incomeCount">0 transaksi</span></div>
                 </article>
 
                 <article class="summary-card">
-                    <div class="summary-head"><span class="summary-label">Pengeluaran</span><span class="metric-icon expense-icon" aria-hidden="true">↗</span></div>
+                    <div class="summary-head"><span class="summary-label">Pengeluaran Bulan Ini</span><span class="metric-icon expense-icon" aria-hidden="true">↗</span></div>
                     <p class="summary-value" id="expenseValue">Rp 0</p>
                     <div class="summary-foot"><span class="metric-indicator expense-indicator"></span><span id="expenseCount">0 transaksi</span></div>
                 </article>
             </section>
 
+            <!-- ================= KALENDER BULANAN (GOOGLE CALENDAR STYLE) & TIMELINE PERBULAN ================= -->
+            <section class="panel calendar-panel" id="calendar-section" aria-label="Kalender keuangan bulanan dan timeline">
+                <div class="calendar-topbar">
+                    <div class="calendar-title-group">
+                        <p class="eyebrow">GOOGLE CALENDAR FINANCIAL VIEW</p>
+                        <div class="calendar-nav-row">
+                            <h2 id="calendarMonthHeading">Oktober 2026</h2>
+                            <div class="calendar-nav-btns">
+                                <button class="icon-button btn-sm" id="prevMonthBtn" type="button" aria-label="Bulan sebelumnya" title="Bulan sebelumnya"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
+                                <button class="button button-secondary button-sm" id="todayMonthBtn" type="button">Hari Ini</button>
+                                <button class="icon-button btn-sm" id="nextMonthBtn" type="button" aria-label="Bulan berikutnya" title="Bulan berikutnya"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="calendar-controls">
+                        <div class="calendar-legend-pills">
+                            <span class="cal-pill cal-pill-income">● Masuk</span>
+                            <span class="cal-pill cal-pill-expense">● Keluar</span>
+                            <span class="cal-pill cal-pill-bill">🔔 Tagihan</span>
+                        </div>
+                        <div class="view-switcher" role="tablist" aria-label="Mode tampilan kalender">
+                            <button class="view-tab is-active" type="button" data-cal-view="both" role="tab" aria-selected="true">Kalender + Timeline</button>
+                            <button class="view-tab" type="button" data-cal-view="grid" role="tab" aria-selected="false">Grid Bulanan</button>
+                            <button class="view-tab" type="button" data-cal-view="timeline" role="tab" aria-selected="false">Timeline Perbulan</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="calendar-workspace" id="calendarWorkspace">
+                    <!-- GRID KALENDER BULANAN SEPERTI GOOGLE CALENDAR -->
+                    <div class="gcal-container" id="gcalContainer">
+                        <div class="gcal-weekdays" aria-hidden="true">
+                            <div>Sen</div>
+                            <div>Sel</div>
+                            <div>Rab</div>
+                            <div>Kam</div>
+                            <div>Jum</div>
+                            <div class="weekend">Sab</div>
+                            <div class="weekend">Min</div>
+                        </div>
+                        <div class="gcal-grid" id="gcalGrid" role="grid" aria-label="Kalender transaksi bulanan"></div>
+                    </div>
+
+                    <!-- PANEL INSPEKTOR HARI TERPILIH -->
+                    <aside class="day-inspector" id="dayInspector" aria-live="polite">
+                        <div class="day-inspector-head">
+                            <div>
+                                <span class="eyebrow" id="selectedDayEyebrow">DETAIL TANGGAL</span>
+                                <h3 id="selectedDayTitle">Pilih tanggal</h3>
+                            </div>
+                            <button class="button button-primary button-sm" id="addOnSelectedDateBtn" type="button">
+                                <i data-lucide="plus" aria-hidden="true"></i> Catat
+                            </button>
+                        </div>
+                        <div class="day-summary-chips" id="selectedDaySummary"></div>
+                        <div class="day-events-list" id="selectedDayEvents"></div>
+                    </aside>
+                </div>
+
+                <!-- TIMELINE PERBULAN (MONTHLY TIMELINE BAR + CHRONOLOGICAL STREAM) -->
+                <div class="monthly-timeline-wrap" id="monthlyTimelineWrap">
+                    <div class="timeline-header">
+                        <div>
+                            <p class="eyebrow">TIMELINE PERBULAN</p>
+                            <h3>Alur Aktivitas & Arus Kas Harian Sepanjang Bulan</h3>
+                        </div>
+                        <span class="period-chip" id="timelineSummaryChip">31 Hari</span>
+                    </div>
+
+                    <!-- Grafik Bar Timeline Harian sebulan penuh -->
+                    <div class="timeline-Heatmap-strip" id="monthlyBarTimeline" aria-label="Grafik timeline harian sebulan"></div>
+
+                    <!-- Stream Kronologis Per Tanggal -->
+                    <div class="timeline-stream" id="monthlyTimelineStream"></div>
+                </div>
+            </section>
+
+            <!-- ================= REKOMENDASI PENGHEMATAN (FINANCIAL PLANNER JS LIBRARY) ================= -->
+            <section class="panel planner-panel" id="planner" aria-label="Rekomendasi penghematan berdasarkan Financial Planner JS">
+                <div class="panel-heading planner-heading">
+                    <div class="planner-title-with-cartoon">
+                        <!-- Kartun Celengan Babi Animasi -->
+                        <div class="piggy-cartoon-box" aria-hidden="true">
+                            <svg class="piggy-svg" viewBox="0 0 90 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="45" cy="14" r="8" fill="#FFD452" stroke="#C89116" stroke-width="2" class="dropping-coin"/>
+                                <ellipse cx="45" cy="48" rx="28" ry="22" fill="#FFB5C2" stroke="#9E4758" stroke-width="2.5"/>
+                                <rect x="36" y="26" width="16" height="4" rx="2" fill="#7A2E3D"/>
+                                <ellipse cx="73" cy="48" rx="7" ry="9" fill="#FF99AC" stroke="#9E4758" stroke-width="2.5"/>
+                                <circle cx="71" cy="46" r="1.5" fill="#7A2E3D"/>
+                                <circle cx="75" cy="46" r="1.5" fill="#7A2E3D"/>
+                                <circle cx="58" cy="40" r="3" fill="#2A1E21"/>
+                                <path d="M26 28L20 18L34 24Z" fill="#FF99AC" stroke="#9E4758" stroke-width="2"/>
+                                <rect x="28" y="64" width="7" height="10" rx="3" fill="#FF99AC" stroke="#9E4758" stroke-width="2"/>
+                                <rect x="52" y="64" width="7" height="10" rx="3" fill="#FF99AC" stroke="#9E4758" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="eyebrow">SMART FINANCIAL PLANNER ENGINE (SIMPLE-STATISTICS JS + 50/30/20 RULE)</p>
+                            <h2>Saran & Rekomendasi Penghematan Pintar</h2>
+                        </div>
+                    </div>
+                    <div class="planner-score-badge">
+                        <span>Skor Finansial</span>
+                        <strong id="financialScoreValue">100/100</strong>
+                    </div>
+                </div>
+
+                <!-- Bar Alokasi 50/30/20 & Statistik Proyeksi -->
+                <div class="planner-analytics-grid">
+                    <div class="planner-rule-card">
+                        <div class="rule-card-head">
+                            <strong>Analisis Aturan 50 / 30 / 20</strong>
+                            <span id="budgetReferenceLabel">Basis: Pemasukan/Target</span>
+                        </div>
+                        <div class="rule-bars" id="ruleBarsContainer">
+                            <div class="rule-row">
+                                <div class="rule-meta">
+                                    <span>🏠 Kebutuhan Pokok (Ideal ≤ 50%)</span>
+                                    <strong id="needsRatioText">0% (Rp 0)</strong>
+                                </div>
+                                <div class="rule-track"><span class="rule-fill fill-needs" id="needsBar" style="width:0%"></span></div>
+                            </div>
+                            <div class="rule-row">
+                                <div class="rule-meta">
+                                    <span>☕ Gaya Hidup & Keinginan (Ideal ≤ 30%)</span>
+                                    <strong id="wantsRatioText">0% (Rp 0)</strong>
+                                </div>
+                                <div class="rule-track"><span class="rule-fill fill-wants" id="wantsBar" style="width:0%"></span></div>
+                            </div>
+                            <div class="rule-row">
+                                <div class="rule-meta">
+                                    <span>🌱 Tabungan & Investasi (Ideal ≥ 20%)</span>
+                                    <strong id="savingsRatioText">0% (Rp 0)</strong>
+                                </div>
+                                <div class="rule-track"><span class="rule-fill fill-savings" id="savingsBar" style="width:0%"></span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="planner-stats-card">
+                        <div class="rule-card-head">
+                            <strong>Proyeksi Statistik JS (Simple-Statistics)</strong>
+                            <span class="period-chip">Regresi & Burn Rate</span>
+                        </div>
+                        <div class="stats-metrics-grid">
+                            <div class="stat-box">
+                                <span>Rata-rata Harian (Mean)</span>
+                                <strong id="statDailyMean">Rp 0</strong>
+                            </div>
+                            <div class="stat-box">
+                                <span>Proyeksi Akhir Bulan</span>
+                                <strong id="statMonthProjection">Rp 0</strong>
+                            </div>
+                            <div class="stat-box">
+                                <span>Batas Anomali Transaksi</span>
+                                <strong id="statAnomalyThreshold">Rp 0</strong>
+                            </div>
+                            <div class="stat-box highlight-saving">
+                                <span>Potensi Penghematan</span>
+                                <strong id="statPotentialSaving">Rp 0</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Kartu Rekomendasi Penghematan -->
+                <div class="recommendations-grid" id="recommendationsGrid" aria-live="polite"></div>
+            </section>
+
+            <!-- ================= PENGINGAT TAGIHAN BULANAN & NOTIFIKASI ================= -->
+            <section class="panel bills-panel" id="bills" aria-label="Pengingat tagihan bulanan">
+                <div class="panel-heading bills-heading">
+                    <div class="bills-title-wrap">
+                        <div class="cartoon-bell-avatar" aria-hidden="true">⏰</div>
+                        <div>
+                            <p class="eyebrow">PENGINGAT TAGIHAN & JATUH TEMPO BULANAN</p>
+                            <h2>Jadwal Tagihan Rutin</h2>
+                        </div>
+                    </div>
+                    <div class="bills-actions">
+                        <button class="button button-secondary button-sm" id="testNotificationBtn" type="button">
+                            <i data-lucide="bell-ring" aria-hidden="true"></i> Tes Notifikasi
+                        </button>
+                        <button class="button button-primary button-sm" id="addBillBtn" type="button">
+                            <i data-lucide="plus" aria-hidden="true"></i> Tambah Tagihan
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bills-summary-strip" id="billsSummaryStrip">
+                    <div class="bill-stat-pill">
+                        <span>Total Tagihan Bulan Ini</span>
+                        <strong id="billTotalAmount">Rp 0</strong>
+                    </div>
+                    <div class="bill-stat-pill">
+                        <span>Belum Dibayar</span>
+                        <strong id="billUnpaidAmount" class="text-danger">Rp 0</strong>
+                    </div>
+                    <div class="bill-stat-pill">
+                        <span>Sudah Lunas</span>
+                        <strong id="billPaidCount" class="text-success">0 / 0 Tagihan</strong>
+                    </div>
+                </div>
+
+                <div class="bills-grid" id="billsGrid" aria-live="polite"></div>
+            </section>
+
+            <!-- ================= ANALISIS ARUS KAS & KATEGORI ================= -->
             <section class="content-grid" id="insights">
                 <article class="panel flow-panel">
                     <div class="panel-heading">
@@ -125,9 +479,10 @@
                 </article>
             </section>
 
+            <!-- ================= DAFTAR TRANSAKSI ================= -->
             <section class="panel transactions-panel" id="transactions">
                 <div class="panel-heading transaction-heading">
-                    <div><p class="eyebrow">AKTIVITAS</p><h2>Transaksi terbaru</h2></div>
+                    <div><p class="eyebrow">AKTIVITAS HARIAN</p><h2>Riwayat Transaksi</h2></div>
                     <div class="transaction-tools">
                         <label class="search-box"><span aria-hidden="true">⌕</span><span class="sr-only">Cari transaksi</span><input id="transactionSearch" type="search" placeholder="Cari transaksi..." autocomplete="off"></label>
                         <button class="text-button" id="showAllTransactions" type="button">Lihat semua <span aria-hidden="true">→</span></button>
@@ -137,52 +492,167 @@
                     <div class="loading-state"><span class="spinner" aria-hidden="true"></span>Memuat transaksi...</div>
                 </div>
                 <div class="empty-state" id="emptyState" hidden>
-                    <span class="empty-illustration" aria-hidden="true">↗</span>
+                    <span class="empty-illustration" aria-hidden="true">🦥</span>
                     <strong>Belum ada transaksi</strong>
-                    <span>Catat transaksi pertama untuk mulai melihat gambaran keuanganmu.</span>
+                    <span>Catat transaksi pertama untuk mulai melihat kalender dan rekomendasi finansialmu.</span>
                     <button class="text-button" type="button" data-open-form>Catat transaksi <span aria-hidden="true">→</span></button>
                 </div>
                 <p class="list-status" id="listStatus" aria-live="polite"></p>
             </section>
 
-            <footer class="page-footer"><span>Saku Harian</span><span>Keuangan yang jelas, langkah yang lebih yakin.</span></footer>
+            <footer class="page-footer">
+                <span>Saku Harian — Smart Daily Financial Planner</span>
+                <span>Kalender Bulanan · Financial Planner JS · Pengingat Tagihan · Google Sheets</span>
+            </footer>
         </main>
     </div>
 
+    <!-- NAVIGASI MOBILE -->
     <nav class="mobile-nav" aria-label="Navigasi bawah">
-        <a href="#overview" class="mobile-nav-link is-active" data-nav="overview"><i data-lucide="layout-dashboard" aria-hidden="true"></i><span>Ringkasan</span></a>
-        <a href="#transactions" class="mobile-nav-link" data-nav="transactions"><i data-lucide="arrow-left-right" aria-hidden="true"></i><span>Transaksi</span></a>
-        <a href="#insights" class="mobile-nav-link" data-nav="insights"><i data-lucide="chart-pie" aria-hidden="true"></i><span>Analisis</span></a>
+        <a href="#overview" class="mobile-nav-link is-active" data-nav="overview"><i data-lucide="sparkles" aria-hidden="true"></i><span>Planner</span></a>
+        <a href="#calendar-section" class="mobile-nav-link" data-nav="calendar-section"><i data-lucide="calendar-days" aria-hidden="true"></i><span>Kalender</span></a>
+        <a href="#planner" class="mobile-nav-link" data-nav="planner"><i data-lucide="lightbulb" aria-hidden="true"></i><span>Hemat</span></a>
+        <a href="#bills" class="mobile-nav-link" data-nav="bills"><i data-lucide="bell-ring" aria-hidden="true"></i><span>Tagihan</span></a>
         <button class="mobile-add" type="button" data-open-form aria-label="Catat transaksi"><i data-lucide="plus" aria-hidden="true"></i></button>
     </nav>
 
+    <!-- DIALOG CATAT TRANSAKSI BARU -->
     <dialog class="transaction-dialog" id="transactionDialog" aria-labelledby="dialogTitle">
         <form id="transactionForm">
             <div class="dialog-heading">
-                <div><p class="eyebrow">CATAT MANUAL</p><h2 id="dialogTitle">Transaksi baru</h2></div>
+                <div><p class="eyebrow">SMART DAILY PLANNER</p><h2 id="dialogTitle">Catat Transaksi</h2></div>
                 <button class="dialog-close" id="closeTransaction" type="button" aria-label="Tutup">×</button>
             </div>
             <div class="form-label"><span>Jenis transaksi</span>
                 <span class="type-switch">
-                    <label><input type="radio" name="type" value="expense" checked><span>Pengeluaran</span></label>
-                    <label><input type="radio" name="type" value="income"><span>Pemasukan</span></label>
+                    <label><input type="radio" name="type" value="expense" checked><span>🔴 Pengeluaran</span></label>
+                    <label><input type="radio" name="type" value="income"><span>🟢 Pemasukan</span></label>
                 </span>
             </div>
             <label class="form-label" for="transactionDescription">Keterangan
-                <input id="transactionDescription" name="desc" type="text" maxlength="160" placeholder="Contoh: Makan siang" required>
+                <input id="transactionDescription" name="desc" type="text" maxlength="160" placeholder="Contoh: Makan siang nasi padang" required>
             </label>
-            <label class="form-label" for="transactionAmount">Nominal
-                <span class="amount-input"><span>Rp</span><input id="transactionAmount" name="amount" type="number" min="1" step="1" inputmode="numeric" placeholder="0" required></span>
-            </label>
+            <div class="form-row-2">
+                <label class="form-label" for="transactionAmount">Nominal
+                    <span class="amount-input"><span>Rp</span><input id="transactionAmount" name="amount" type="number" min="1" step="1" inputmode="numeric" placeholder="0" required></span>
+                </label>
+                <label class="form-label" for="transactionDate">Tanggal
+                    <input id="transactionDate" name="date" type="date" required>
+                </label>
+            </div>
             <label class="form-label" for="transactionCategory">Kategori
-                <input id="transactionCategory" name="category" type="text" maxlength="100" placeholder="Contoh: Makan & minum" value="Umum">
+                <input id="transactionCategory" name="category" type="text" list="categorySuggestions" maxlength="100" placeholder="Contoh: Makan & minum" value="Makan & Minum">
+                <datalist id="categorySuggestions">
+                    <option value="Makan & Minum"></option>
+                    <option value="Transportasi"></option>
+                    <option value="Tagihan & Utilitas"></option>
+                    <option value="Belanja & Lifestyle"></option>
+                    <option value="Rumah & Sewa"></option>
+                    <option value="Kesehatan"></option>
+                    <option value="Langganan Digital"></option>
+                    <option value="Tabungan & Investasi"></option>
+                    <option value="Gaji & Penghasilan"></option>
+                </datalist>
             </label>
             <p class="form-error" id="formError" role="alert" hidden></p>
             <div class="dialog-actions">
                 <button class="button button-secondary" id="cancelTransaction" type="button">Batal</button>
-                <button class="button button-primary" id="saveTransaction" type="submit">Simpan transaksi</button>
+                <button class="button button-primary" id="saveTransaction" type="submit">Simpan ke Kalender</button>
             </div>
         </form>
+    </dialog>
+
+    <!-- DIALOG TAMBAH PENGINGAT TAGIHAN BULANAN -->
+    <dialog class="transaction-dialog" id="billDialog" aria-labelledby="billDialogTitle">
+        <form id="billForm">
+            <div class="dialog-heading">
+                <div><p class="eyebrow">PENGINGAT BULANAN</p><h2 id="billDialogTitle">Tambah Tagihan Rutin</h2></div>
+                <button class="dialog-close" id="closeBillDialog" type="button" aria-label="Tutup">×</button>
+            </div>
+            <label class="form-label" for="billName">Nama Tagihan
+                <input id="billName" name="name" type="text" maxlength="100" placeholder="Contoh: Listrik PLN / WiFi IndiHome" required>
+            </label>
+            <div class="form-row-2">
+                <label class="form-label" for="billAmount">Estimasi Nominal
+                    <span class="amount-input"><span>Rp</span><input id="billAmount" name="amount" type="number" min="1" step="1" placeholder="350000" required></span>
+                </label>
+                <label class="form-label" for="billDueDay">Tanggal Jatuh Tempo (1-31)
+                    <input id="billDueDay" name="dueDay" type="number" min="1" max="31" value="20" required>
+                </label>
+            </div>
+            <label class="form-label" for="billCategory">Kategori Tagihan
+                <select id="billCategory" name="category" class="form-select">
+                    <option value="Tagihan & Utilitas">⚡ Listrik, Air & Utilitas</option>
+                    <option value="Langganan Digital">🌐 Internet & Streaming</option>
+                    <option value="Rumah & Sewa">🏠 Kost, KPR & Hunian</option>
+                    <option value="Kesehatan">🏥 BPJS & Asuransi</option>
+                    <option value="Cicilan & Kredit">💳 Cicilan & Kartu Kredit</option>
+                </select>
+            </label>
+            <div class="dialog-actions">
+                <button class="button button-secondary" id="cancelBillDialog" type="button">Batal</button>
+                <button class="button button-primary" type="submit">Simpan Pengingat</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- DIALOG ATUR TARGET ANGGARAN BULANAN (SMART PLANNER) -->
+    <dialog class="transaction-dialog" id="budgetDialog" aria-labelledby="budgetDialogTitle">
+        <form id="budgetForm">
+            <div class="dialog-heading">
+                <div><p class="eyebrow">KONFIGURASI SMART PLANNER</p><h2 id="budgetDialogTitle">Target Anggaran Bulanan</h2></div>
+                <button class="dialog-close" id="closeBudgetDialog" type="button" aria-label="Tutup">×</button>
+            </div>
+            <p class="dialog-subcopy">Atur batas anggaran pengeluaran bulananmu. Jika dikosongkan (0), Smart Planner otomatis menggunakan pemasukan bulan ini sebagai basis aturan 50/30/20.</p>
+            <label class="form-label" for="monthlyBudgetInput">Target Maksimal Pengeluaran per Bulan
+                <span class="amount-input"><span>Rp</span><input id="monthlyBudgetInput" name="budget" type="number" min="0" step="50000" placeholder="Contoh: 5000000"></span>
+            </label>
+            <div class="dialog-actions">
+                <button class="button button-secondary" id="cancelBudgetDialog" type="button">Batal</button>
+                <button class="button button-primary" type="submit">Simpan Target</button>
+            </div>
+        </form>
+    </dialog>
+
+    <!-- DIALOG EKSPOR KE GOOGLE SHEETS -->
+    <dialog class="transaction-dialog gsheet-dialog" id="gsheetDialog" aria-labelledby="gsheetDialogTitle">
+        <div class="dialog-heading">
+            <div><p class="eyebrow">INTEGRASI CLOUD SPREADSHEET</p><h2 id="gsheetDialogTitle">Ekspor ke Google Sheets</h2></div>
+            <button class="dialog-close" id="closeGSheetDialog" type="button" aria-label="Tutup">×</button>
+        </div>
+        <div class="gsheet-options">
+            <div class="gsheet-option-card recommended">
+                <div class="gsheet-option-head">
+                    <span class="gsheet-badge">⚡ Tercepat & Direkomendasikan</span>
+                    <strong>1. Salin Otomatis & Buka Google Sheets Baru</strong>
+                </div>
+                <p>Menyalin seluruh tabel transaksi, jadwal tagihan, & ringkasan planner dalam format kolom Google Sheets, lalu membuka <code>sheets.new</code>. Cukup tekan <strong>Ctrl+V / Cmd+V</strong> di sel A1!</p>
+                <button class="button button-primary button-full" id="copyAndOpenGSheetBtn" type="button">
+                    <i data-lucide="external-link" aria-hidden="true"></i> Salin & Buka Google Sheets Baru
+                </button>
+            </div>
+
+            <div class="gsheet-option-card">
+                <div class="gsheet-option-head">
+                    <strong>2. Unduh File Format Google Sheets (.CSV)</strong>
+                </div>
+                <p>Unduh file yang sudah diformat untuk langsung dibuka melalui menu <em>File → Impor → Upload</em> di Google Sheets atau Google Drive.</p>
+                <button class="button button-secondary button-full" id="downloadGSheetCsvBtn" type="button">
+                    <i data-lucide="download" aria-hidden="true"></i> Unduh CSV Google Sheets
+                </button>
+            </div>
+
+            <div class="gsheet-option-card">
+                <div class="gsheet-option-head">
+                    <strong>3. Sinkronisasi Webhook Google Apps Script (Opsional)</strong>
+                </div>
+                <p>Masukkan URL Web App Google Apps Script milikmu untuk mengirim data langsung ke lembar Google Sheets secara otomatis.</p>
+                <div class="webhook-row">
+                    <input id="gsheetWebhookUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" class="webhook-input">
+                    <button class="button button-secondary" id="syncGSheetWebhookBtn" type="button">Kirim</button>
+                </div>
+            </div>
+        </div>
     </dialog>
 </body>
 </html>

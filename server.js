@@ -169,13 +169,31 @@ app.get('/api/transactions', async (req, res) => {
 // API: Tambah Transaksi (Untuk Web)
 app.post('/api/transactions', async (req, res) => {
     try {
-        const { desc, amount, type, category } = req.body;
-        const query = `INSERT INTO transactions ("desc", amount, type, category) VALUES ($1, $2, $3, $4) RETURNING *`;
-        const values = [desc, amount, type, category || 'Umum'];
+        const { desc, amount, type, category, date } = req.body;
+        const parsedDate = date && !Number.isNaN(new Date(date).getTime()) ? new Date(date) : new Date();
+        const query = `INSERT INTO transactions ("desc", amount, type, category, date) VALUES ($1, $2, $3, $4, $5) RETURNING *`;
+        const values = [desc, amount, type, category || 'Umum', parsedDate];
         const result = await pool.query(query, values);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         res.status(400).json({ error: err.message });
+    }
+});
+
+// API: Export Google Sheets (CSV/TSV)
+app.get('/api/export-googlesheet', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT id, "desc", amount, type, category, date FROM transactions ORDER BY date DESC');
+        let csvContent = "\uFEFFID,Keterangan,Nominal,Tipe,Kategori,Tanggal\n";
+        result.rows.forEach(row => {
+            const desc = `"${String(row.desc || '').replace(/"/g, '""')}"`;
+            csvContent += `${row.id},${desc},${row.amount},${row.type === 'income' ? 'Pemasukan' : 'Pengeluaran'},"${row.category}","${row.date}"\n`;
+        });
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="saku-smart-planner-googlesheets.csv"');
+        res.status(200).send(csvContent);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
