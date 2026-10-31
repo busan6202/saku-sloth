@@ -28,6 +28,7 @@
             <div class="sidebar-label">SMART PLANNER</div>
             <nav class="side-nav">
                 <a class="nav-link is-active" href="#overview" data-nav="overview"><i class="nav-symbol" data-lucide="sparkles" aria-hidden="true"></i>Daily Planner</a>
+                <a class="nav-link" href="#wallets" data-nav="wallets"><i class="nav-symbol" data-lucide="wallet" aria-hidden="true"></i>Kantong Dana</a>
                 <a class="nav-link" href="#calendar-section" data-nav="calendar-section"><i class="nav-symbol" data-lucide="calendar-days" aria-hidden="true"></i>Kalender & Timeline</a>
                 <a class="nav-link" href="#planner" data-nav="planner"><i class="nav-symbol" data-lucide="lightbulb" aria-hidden="true"></i>Saran Hemat AI/JS</a>
                 <a class="nav-link" href="#bills" data-nav="bills">
@@ -44,8 +45,8 @@
                         <div class="bot-icon" aria-hidden="true">🦥</div>
                         <span class="bot-pill">Asisten Aktif</span>
                     </div>
-                    <p class="bot-title">Catat cepat via Bot</p>
-                    <p class="bot-copy">Kirim foto struk atau voice note ke Telegram Saku Harian.</p>
+                    <p class="bot-title">Catat & Edit via Bot</p>
+                    <p class="bot-copy">Kirim struk, voice note, atau ketik <code>/edit</code> & <code>/dompet</code> di Telegram.</p>
                     <a href="https://t.me/" target="_blank" rel="noreferrer" class="bot-link">Buka Telegram <span aria-hidden="true">↗</span></a>
                 </div>
                 <div class="profile">
@@ -236,6 +237,24 @@
                     <p class="summary-value" id="expenseValue">Rp 0</p>
                     <div class="summary-foot"><span class="metric-indicator expense-indicator"></span><span id="expenseCount">0 transaksi</span></div>
                 </article>
+            </section>
+
+            <!-- ================= KANTONG DANA / BANK & E-WALLET POPULER ================= -->
+            <section class="panel wallets-panel" id="wallets" aria-label="Kantong dana bank dan e-wallet">
+                <div class="panel-heading wallets-heading">
+                    <div class="wallets-title-group">
+                        <span class="wallet-cartoon-badge" aria-hidden="true">👛</span>
+                        <div>
+                            <p class="eyebrow">KANTONG DANA · BANK & E-WALLET POPULER</p>
+                            <h2>Saldo & Aktivitas per Dompet Digital / Bank</h2>
+                        </div>
+                    </div>
+                    <div class="wallets-actions">
+                        <span class="period-chip" id="activeWalletFilterChip">Filter: Semua Kantong</span>
+                        <button class="button button-secondary button-sm" id="resetWalletFilterBtn" type="button" hidden>Tampilkan Semua</button>
+                    </div>
+                </div>
+                <div class="wallets-scroller" id="walletsGrid" role="list" aria-label="Daftar kantong dana populer"></div>
             </section>
 
             <!-- ================= KALENDER BULANAN (GOOGLE CALENDAR STYLE) & TIMELINE PERBULAN ================= -->
@@ -482,8 +501,14 @@
             <!-- ================= DAFTAR TRANSAKSI ================= -->
             <section class="panel transactions-panel" id="transactions">
                 <div class="panel-heading transaction-heading">
-                    <div><p class="eyebrow">AKTIVITAS HARIAN</p><h2>Riwayat Transaksi</h2></div>
+                    <div><p class="eyebrow">AKTIVITAS HARIAN · BISA DIEDIT KAPAN SAJA</p><h2>Riwayat Transaksi</h2></div>
                     <div class="transaction-tools">
+                        <label class="wallet-filter-box">
+                            <span class="sr-only">Filter kantong dana</span>
+                            <select id="walletFilterSelect" aria-label="Filter berdasarkan kantong dana">
+                                <option value="all">👛 Semua Kantong Dana</option>
+                            </select>
+                        </label>
                         <label class="search-box"><span aria-hidden="true">⌕</span><span class="sr-only">Cari transaksi</span><input id="transactionSearch" type="search" placeholder="Cari transaksi..." autocomplete="off"></label>
                         <button class="text-button" id="showAllTransactions" type="button">Lihat semua <span aria-hidden="true">→</span></button>
                     </div>
@@ -502,7 +527,7 @@
 
             <footer class="page-footer">
                 <span>Saku Harian — Smart Daily Financial Planner</span>
-                <span>Kalender Bulanan · Financial Planner JS · Pengingat Tagihan · Google Sheets</span>
+                <span>Kalender Bulanan · Multi E-Wallet & Bank · Edit Kapan Saja · Google Sheets</span>
             </footer>
         </main>
     </div>
@@ -510,17 +535,19 @@
     <!-- NAVIGASI MOBILE -->
     <nav class="mobile-nav" aria-label="Navigasi bawah">
         <a href="#overview" class="mobile-nav-link is-active" data-nav="overview"><i data-lucide="sparkles" aria-hidden="true"></i><span>Planner</span></a>
+        <a href="#wallets" class="mobile-nav-link" data-nav="wallets"><i data-lucide="wallet" aria-hidden="true"></i><span>Wallet</span></a>
         <a href="#calendar-section" class="mobile-nav-link" data-nav="calendar-section"><i data-lucide="calendar-days" aria-hidden="true"></i><span>Kalender</span></a>
         <a href="#planner" class="mobile-nav-link" data-nav="planner"><i data-lucide="lightbulb" aria-hidden="true"></i><span>Hemat</span></a>
         <a href="#bills" class="mobile-nav-link" data-nav="bills"><i data-lucide="bell-ring" aria-hidden="true"></i><span>Tagihan</span></a>
         <button class="mobile-add" type="button" data-open-form aria-label="Catat transaksi"><i data-lucide="plus" aria-hidden="true"></i></button>
     </nav>
 
-    <!-- DIALOG CATAT TRANSAKSI BARU -->
+    <!-- DIALOG CATAT / EDIT TRANSAKSI KAPAN SAJA -->
     <dialog class="transaction-dialog" id="transactionDialog" aria-labelledby="dialogTitle">
         <form id="transactionForm">
+            <input type="hidden" id="editingTransactionId" name="id" value="">
             <div class="dialog-heading">
-                <div><p class="eyebrow">SMART DAILY PLANNER</p><h2 id="dialogTitle">Catat Transaksi</h2></div>
+                <div><p class="eyebrow" id="dialogEyebrow">SMART DAILY PLANNER</p><h2 id="dialogTitle">Catat Transaksi</h2></div>
                 <button class="dialog-close" id="closeTransaction" type="button" aria-label="Tutup">×</button>
             </div>
             <div class="form-label"><span>Jenis transaksi</span>
@@ -540,20 +567,62 @@
                     <input id="transactionDate" name="date" type="date" required>
                 </label>
             </div>
-            <label class="form-label" for="transactionCategory">Kategori
-                <input id="transactionCategory" name="category" type="text" list="categorySuggestions" maxlength="100" placeholder="Contoh: Makan & minum" value="Makan & Minum">
-                <datalist id="categorySuggestions">
-                    <option value="Makan & Minum"></option>
-                    <option value="Transportasi"></option>
-                    <option value="Tagihan & Utilitas"></option>
-                    <option value="Belanja & Lifestyle"></option>
-                    <option value="Rumah & Sewa"></option>
-                    <option value="Kesehatan"></option>
-                    <option value="Langganan Digital"></option>
-                    <option value="Tabungan & Investasi"></option>
-                    <option value="Gaji & Penghasilan"></option>
-                </datalist>
-            </label>
+            <div class="form-row-2">
+                <label class="form-label" for="transactionCategory">Kategori
+                    <input id="transactionCategory" name="category" type="text" list="categorySuggestions" maxlength="100" placeholder="Contoh: Makan & minum" value="Makan & Minum">
+                </label>
+                <label class="form-label" for="transactionWallet">Kantong Dana / Wallet
+                    <select id="transactionWallet" name="wallet" class="form-select">
+                        <optgroup label="E-Wallet Populer">
+                            <option value="GoPay">💚 GoPay</option>
+                            <option value="DANA">💙 DANA</option>
+                            <option value="OVO">💜 OVO</option>
+                            <option value="ShopeePay">🧡 ShopeePay</option>
+                            <option value="LinkAja">❤️ LinkAja</option>
+                        </optgroup>
+                        <optgroup label="Bank & Digital Bank">
+                            <option value="BCA">🏦 Bank BCA</option>
+                            <option value="Mandiri">🏦 Bank Mandiri (Livin')</option>
+                            <option value="BRI">🏦 Bank BRI (BRImo)</option>
+                            <option value="BNI">🏦 Bank BNI (wondr)</option>
+                            <option value="SeaBank">🌊 SeaBank</option>
+                            <option value="Bank Jago">🟡 Bank Jago</option>
+                            <option value="BSI">🏦 Bank Syariah Indonesia (BSI)</option>
+                            <option value="Blu BCA">🩵 Blu by BCA Digital</option>
+                        </optgroup>
+                        <optgroup label="Tunai & Lainnya">
+                            <option value="Tunai" selected>💵 Tunai (Cash)</option>
+                            <option value="Kartu Kredit">💳 Kartu Kredit / Paylater</option>
+                        </optgroup>
+                    </select>
+                </label>
+            </div>
+            <div class="quick-wallet-row">
+                <span class="quick-wallet-label">Pilih cepat:</span>
+                <div class="quick-wallet-pills" id="quickWalletPills">
+                    <button type="button" class="q-wallet-pill" data-pick-wallet="Tunai">💵 Tunai</button>
+                    <button type="button" class="q-wallet-pill" data-pick-wallet="GoPay">💚 GoPay</button>
+                    <button type="button" class="q-wallet-pill" data-pick-wallet="DANA">💙 DANA</button>
+                    <button type="button" class="q-wallet-pill" data-pick-wallet="OVO">💜 OVO</button>
+                    <button type="button" class="q-wallet-pill" data-pick-wallet="ShopeePay">🧡 ShopeePay</button>
+                    <button type="button" class="q-wallet-pill" data-pick-wallet="LinkAja">❤️ LinkAja</button>
+                    <button type="button" class="q-wallet-pill" data-pick-wallet="BCA">🏦 BCA</button>
+                    <button type="button" class="q-wallet-pill" data-pick-wallet="Mandiri">🏦 Mandiri</button>
+                    <button type="button" class="q-wallet-pill" data-pick-wallet="BRI">🏦 BRI</button>
+                    <button type="button" class="q-wallet-pill" data-pick-wallet="SeaBank">🌊 SeaBank</button>
+                </div>
+            </div>
+            <datalist id="categorySuggestions">
+                <option value="Makan & Minum"></option>
+                <option value="Transportasi"></option>
+                <option value="Tagihan & Utilitas"></option>
+                <option value="Belanja & Lifestyle"></option>
+                <option value="Rumah & Sewa"></option>
+                <option value="Kesehatan"></option>
+                <option value="Langganan Digital"></option>
+                <option value="Tabungan & Investasi"></option>
+                <option value="Gaji & Penghasilan"></option>
+            </datalist>
             <p class="form-error" id="formError" role="alert" hidden></p>
             <div class="dialog-actions">
                 <button class="button button-secondary" id="cancelTransaction" type="button">Batal</button>
