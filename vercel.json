@@ -16,12 +16,20 @@
     {
       "src": "script.js",
       "use": "@vercel/static"
+    },
+    {
+      "src": "icons/*.svg",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
       "dest": "server.js"
+    },
+    {
+      "src": "/icons/(.*)",
+      "dest": "/icons/$1"
     },
     {
       "src": "/style.css",

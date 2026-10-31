@@ -67,15 +67,19 @@ const POPULAR_WALLETS = [
     { id: 'OVO', label: '💜 OVO' },
     { id: 'ShopeePay', label: '🧡 ShopeePay' },
     { id: 'LinkAja', label: '❤️ LinkAja' },
+    { id: 'QRIS', label: '📱 QRIS' },
+    { id: 'Flip', label: '🧡 Flip' },
     { id: 'Tunai', label: '💵 Tunai' },
     { id: 'BCA', label: '🏦 BCA' },
     { id: 'Mandiri', label: '🏦 Mandiri' },
     { id: 'BRI', label: '🏦 BRI' },
     { id: 'BNI', label: '🏦 BNI' },
+    { id: 'BSI', label: '🏦 BSI' },
+    { id: 'CIMB Niaga', label: '🏦 CIMB Niaga' },
     { id: 'SeaBank', label: '🌊 SeaBank' },
     { id: 'Bank Jago', label: '🟡 Bank Jago' },
-    { id: 'BSI', label: '🏦 BSI' },
-    { id: 'Blu BCA', label: '🩵 Blu BCA' }
+    { id: 'Blu BCA', label: '🩵 Blu BCA' },
+    { id: 'Jenius', label: '💠 Jenius' }
 ];
 
 const POPULAR_CATEGORIES = [
