@@ -1706,6 +1706,11 @@ async function loadTransactions() {
 
         const data = await response.json();
         if (!Array.isArray(data)) throw new Error('Format data transaksi tidak sesuai.');
+        if (data.length === 0) {
+            localStorage.removeItem(STORAGE_KEYS.trxEdits);
+            localStorage.removeItem(STORAGE_KEYS.deletedIds);
+            localStorage.removeItem(STORAGE_KEYS.dateOverrides);
+        }
         transactions = applyLocalOverrides(data);
         localStorage.setItem(STORAGE_KEYS.localTrxCache, JSON.stringify(transactions));
         renderDashboard();
