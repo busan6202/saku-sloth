@@ -288,7 +288,18 @@ const elements = {
     budgetForm: document.getElementById('budgetForm'),
     monthlyBudgetInput: document.getElementById('monthlyBudgetInput'),
     gsheetDialog: document.getElementById('gsheetDialog'),
-    gsheetWebhookUrl: document.getElementById('gsheetWebhookUrl')
+    gsheetWebhookUrl: document.getElementById('gsheetWebhookUrl'),
+    resetBalanceDialog: document.getElementById('resetBalanceDialog'),
+    resetModalMonthBalance: document.getElementById('resetModalMonthBalance'),
+    resetModalTotalBalance: document.getElementById('resetModalTotalBalance'),
+    resetModalTrxCount: document.getElementById('resetModalTrxCount'),
+    resetSpecificWalletCard: document.getElementById('resetSpecificWalletCard'),
+    resetSpecificWalletTitle: document.getElementById('resetSpecificWalletTitle'),
+    resetSpecificWalletDesc: document.getElementById('resetSpecificWalletDesc'),
+    confirmResetAllBtn: document.getElementById('confirmResetAllBtn'),
+    confirmZeroBalanceBtn: document.getElementById('confirmZeroBalanceBtn'),
+    confirmZeroWalletBtn: document.getElementById('confirmZeroWalletBtn'),
+    confirmZeroWalletBtnLabel: document.getElementById('confirmZeroWalletBtnLabel')
 };
 
 let transactions = [];
@@ -1847,6 +1858,152 @@ async function deleteTransactionById(id) {
     }
 }
 
+/* ================= HAPUS / RESET SALDO BERJALAN & DATA ================= */
+function openResetBalanceDialog() {
+    const monthTrx = selectedMonthTransactions();
+    let monthInc = 0;
+    let monthExp = 0;
+    monthTrx.forEach((t) => {
+        const amt = Number(t.amount) || 0;
+        if (t.type === 'income') monthInc += amt;
+        else monthExp += amt;
+    });
+    const monthNet = monthInc - monthExp;
+
+    let totalInc = 0;
+    let totalExp = 0;
+    transactions.forEach((t) => {
+        const amt = Number(t.amount) || 0;
+        if (t.type === 'income') totalInc += amt;
+        else totalExp += amt;
+    });
+    const totalNet = totalInc - totalExp;
+
+    elements.resetModalMonthBalance.textContent = formatCurrency(monthNet);
+    elements.resetModalTotalBalance.textContent = formatCurrency(totalNet);
+    elements.resetModalTrxCount.textContent = `${transactions.length} transaksi`;
+
+    if (selectedWalletFilter !== 'all') {
+        const wMeta = getWalletMeta(selectedWalletFilter);
+        let wNet = 0;
+        monthTrx.forEach((t) => {
+            if (getWalletMeta(t.wallet).id.toLowerCase() === wMeta.id.toLowerCase()) {
+                const amt = Number(t.amount) || 0;
+                wNet += t.type === 'income' ? amt : -amt;
+            }
+        });
+        elements.resetSpecificWalletCard.hidden = false;
+        elements.resetSpecificWalletTitle.textContent = `3. Nolkan Saldo Kantong ${wMeta.name} (${formatCurrency(wNet)} → Rp 0)`;
+        elements.resetSpecificWalletDesc.textContent = `Membuat penyesuaian otomatis agar saldo kantong ${wMeta.name} kembali menjadi Rp 0 tanpa menghapus riwayat transaksi.`;
+        elements.confirmZeroWalletBtnLabel.textContent = `Nolkan Saldo ${wMeta.name} (Rp 0)`;
+    } else {
+        elements.resetSpecificWalletCard.hidden = true;
+    }
+
+    elements.resetBalanceDialog.showModal();
+    renderIcons();
+}
+
+async function executeResetBalance(mode = 'all') {
+    const btnAll = elements.confirmResetAllBtn;
+    const btnZero = elements.confirmZeroBalanceBtn;
+    const btnWallet = elements.confirmZeroWalletBtn;
+    [btnAll, btnZero, btnWallet].forEach((b) => { if (b) b.disabled = true; });
+
+    try {
+        if (mode === 'all') {
+            localStorage.removeItem(STORAGE_KEYS.localTrxCache);
+            localStorage.removeItem(STORAGE_KEYS.trxEdits);
+            localStorage.removeItem(STORAGE_KEYS.deletedIds);
+            localStorage.removeItem(STORAGE_KEYS.dateOverrides);
+            transactions = [];
+            renderDashboard();
+
+            try {
+                const res = await fetch(`${TRANSACTIONS_URL}/reset`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    body: JSON.stringify({ mode: 'all' })
+                });
+                if (!res.ok) {
+                    await fetch(TRANSACTIONS_URL, { method: 'DELETE' });
+                }
+            } catch {
+                // fallback offline sudah dikosongkan
+            }
+
+            elements.resetBalanceDialog.close();
+            triggerCartoonCelebration(16);
+            setNotice('Semua transaksi telah dihapus dan saldo berhasil direset kembali ke semula (Rp 0)!');
+            return;
+        }
+
+        if (mode === 'wallet' && selectedWalletFilter !== 'all') {
+            const wMeta = getWalletMeta(selectedWalletFilter);
+            const monthTrx = selectedMonthTransactions();
+            let wNet = 0;
+            monthTrx.forEach((t) => {
+                if (getWalletMeta(t.wallet).id.toLowerCase() === wMeta.id.toLowerCase()) {
+                    const amt = Number(t.amount) || 0;
+                    wNet += t.type === 'income' ? amt : -amt;
+                }
+            });
+
+            if (wNet === 0) {
+                elements.resetBalanceDialog.close();
+                setNotice(`Saldo kantong ${wMeta.name} pada bulan ini sudah Rp 0.`);
+                return;
+            }
+
+            const adjType = wNet > 0 ? 'expense' : 'income';
+            const adjAmount = Math.abs(wNet);
+            await createNewTransaction({
+                desc: `Penyesuaian Hapus Saldo ${wMeta.name} (Rp 0)`,
+                amount: adjAmount,
+                type: adjType,
+                category: 'Umum',
+                wallet: wMeta.id,
+                dateStr: selectedDateKey || localDateKey(new Date())
+            });
+            elements.resetBalanceDialog.close();
+            setNotice(`Saldo kantong ${wMeta.name} berhasil dinolkan menjadi Rp 0!`);
+            return;
+        }
+
+        // Mode === 'zero': Nolkan Saldo Berjalan Bulan Ini & Server tanpa hapus riwayat
+        const monthTrx = selectedMonthTransactions();
+        let monthInc = 0;
+        let monthExp = 0;
+        monthTrx.forEach((t) => {
+            const amt = Number(t.amount) || 0;
+            if (t.type === 'income') monthInc += amt;
+            else monthExp += amt;
+        });
+        const monthNet = monthInc - monthExp;
+
+        if (monthNet === 0) {
+            elements.resetBalanceDialog.close();
+            setNotice('Saldo berjalan pada periode ini sudah Rp 0.');
+            return;
+        }
+
+        const adjType = monthNet > 0 ? 'expense' : 'income';
+        const adjAmount = Math.abs(monthNet);
+        await createNewTransaction({
+            desc: 'Penyesuaian Hapus Saldo Berjalan (Rp 0)',
+            amount: adjAmount,
+            type: adjType,
+            category: 'Umum',
+            wallet: selectedWalletFilter !== 'all' ? selectedWalletFilter : 'Tunai',
+            dateStr: selectedDateKey || localDateKey(new Date())
+        });
+        elements.resetBalanceDialog.close();
+        setNotice('Saldo berjalan berhasil dihapus / dinolkan kembali ke Rp 0!');
+    } finally {
+        [btnAll, btnZero, btnWallet].forEach((b) => { if (b) b.disabled = false; });
+    }
+}
+
 /* ================= EKSPOR KE GOOGLE SHEETS ================= */
 function buildGoogleSheetsRows() {
     const header = ['ID', 'Tanggal', 'Keterangan', 'Kategori', 'Kantong Dana / Wallet', 'Tipe', 'Nominal (IDR)', 'Pos 50/30/20'];
@@ -2225,6 +2382,16 @@ document.getElementById('copyAndOpenGSheetBtn').addEventListener('click', copyAn
 document.getElementById('downloadGSheetCsvBtn').addEventListener('click', downloadGoogleSheetsCsv);
 document.getElementById('syncGSheetWebhookBtn').addEventListener('click', syncToGoogleSheetsWebhook);
 
+// Reset / Hapus Saldo Modal Events
+['openResetBalanceBtn', 'openResetFromBalanceCardBtn', 'openResetFromWalletBtn', 'openResetFromListBtn'].forEach((btnId) => {
+    document.getElementById(btnId)?.addEventListener('click', openResetBalanceDialog);
+});
+document.getElementById('closeResetDialog').addEventListener('click', () => elements.resetBalanceDialog.close());
+document.getElementById('cancelResetDialog').addEventListener('click', () => elements.resetBalanceDialog.close());
+elements.confirmResetAllBtn.addEventListener('click', () => executeResetBalance('all'));
+elements.confirmZeroBalanceBtn.addEventListener('click', () => executeResetBalance('zero'));
+elements.confirmZeroWalletBtn.addEventListener('click', () => executeResetBalance('wallet'));
+
 // Mascot Click Interaction
 elements.mascotStage.addEventListener('click', () => {
     slothTipIndex = (slothTipIndex + 1) % SLOTH_TIPS.length;
@@ -2249,7 +2416,7 @@ document.getElementById('showAllTransactions').addEventListener('click', () => {
 });
 document.getElementById('refreshButton').addEventListener('click', loadTransactions);
 
-[elements.dialog, elements.billDialog, elements.budgetDialog, elements.gsheetDialog].forEach((dlg) => {
+[elements.dialog, elements.billDialog, elements.budgetDialog, elements.gsheetDialog, elements.resetBalanceDialog].forEach((dlg) => {
     dlg?.addEventListener('click', (event) => {
         if (event.target === dlg) dlg.close();
     });
@@ -2260,3 +2427,14 @@ initializeCalendarViewTabs();
 initializeNavigation();
 renderIcons();
 loadTransactions();
+
+// Sinkronisasi otomatis menu & webhook Telegram di latar belakang
+fetch(`${API_BASE_URL}/setup-telegram-menu`)
+    .then((r) => r.json())
+    .then((d) => {
+        if (d?.report?.botUsername) {
+            const botLink = document.querySelector('.bot-link');
+            if (botLink) botLink.href = `https://t.me/${d.report.botUsername}`;
+        }
+    })
+    .catch(() => {});

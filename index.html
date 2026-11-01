@@ -124,6 +124,9 @@
                         <button class="button button-ghost" id="openBudgetModalBtn" type="button">
                             <i data-lucide="sliders-horizontal" aria-hidden="true"></i> Atur Target Bulanan
                         </button>
+                        <button class="button button-danger-soft" id="openResetBalanceBtn" type="button">
+                            <i data-lucide="rotate-ccw" aria-hidden="true"></i> Hapus / Reset Saldo
+                        </button>
                     </div>
                 </div>
 
@@ -231,7 +234,15 @@
                 </article>
 
                 <article class="summary-card balance-card">
-                    <div class="summary-head"><span class="summary-label">Sisa Bersih Bulanan</span><span class="card-orbit" aria-hidden="true">↗</span></div>
+                    <div class="summary-head">
+                        <span class="summary-label">Sisa Bersih Bulanan</span>
+                        <div class="summary-head-actions">
+                            <button class="card-reset-pill" id="openResetFromBalanceCardBtn" type="button" title="Hapus atau Reset Saldo Berjalan ke Rp 0">
+                                🔄 Hapus Saldo
+                            </button>
+                            <span class="card-orbit" aria-hidden="true">↗</span>
+                        </div>
+                    </div>
                     <p class="summary-value" id="balanceValue">Rp 0</p>
                     <div class="summary-foot"><span class="balance-dot"></span><span id="balanceCaption">Pemasukan dikurangi pengeluaran</span></div>
                     <div class="balance-decoration" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -288,6 +299,9 @@
                         <div class="w-stat-actions">
                             <button class="button button-primary button-sm" id="addTrxInSelectedWalletBtn" type="button">
                                 <i data-lucide="plus" aria-hidden="true"></i> Catat
+                            </button>
+                            <button class="button button-danger-soft button-sm" id="openResetFromWalletBtn" type="button" title="Hapus / Nolkan Saldo">
+                                <i data-lucide="rotate-ccw" aria-hidden="true"></i> Hapus Saldo
                             </button>
                             <button class="button button-secondary button-sm" id="resetWalletFilterBtn" type="button" hidden>Semua</button>
                         </div>
@@ -548,6 +562,9 @@
                             </select>
                         </label>
                         <label class="search-box"><span aria-hidden="true">⌕</span><span class="sr-only">Cari transaksi</span><input id="transactionSearch" type="search" placeholder="Cari transaksi..." autocomplete="off"></label>
+                        <button class="button button-danger-soft button-sm" id="openResetFromListBtn" type="button" title="Hapus / Reset Saldo & Data">
+                            🔄 Hapus Saldo
+                        </button>
                         <button class="text-button" id="showAllTransactions" type="button">Lihat semua <span aria-hidden="true">→</span></button>
                     </div>
                 </div>
@@ -730,6 +747,71 @@
                     <button class="button button-secondary" id="syncGSheetWebhookBtn" type="button">Kirim</button>
                 </div>
             </div>
+        </div>
+    </dialog>
+
+    <!-- DIALOG HAPUS SALDO BERJALAN / RESET KEMBALI KE SEMULA -->
+    <dialog class="transaction-dialog reset-dialog" id="resetBalanceDialog" aria-labelledby="resetDialogTitle">
+        <div class="dialog-heading">
+            <div>
+                <p class="eyebrow">MANAJEMEN SALDO & DATA</p>
+                <h2 id="resetDialogTitle">Hapus / Reset Saldo ke Rp 0</h2>
+            </div>
+            <button class="dialog-close" id="closeResetDialog" type="button" aria-label="Tutup">×</button>
+        </div>
+
+        <div class="reset-summary-banner">
+            <div class="reset-stat-item">
+                <span>Saldo Berjalan Bulan Ini</span>
+                <strong id="resetModalMonthBalance">Rp 0</strong>
+            </div>
+            <div class="reset-stat-item">
+                <span>Total Saldo Keseluruhan</span>
+                <strong id="resetModalTotalBalance">Rp 0</strong>
+            </div>
+            <div class="reset-stat-item">
+                <span>Data Tersimpan</span>
+                <strong id="resetModalTrxCount">0 transaksi</strong>
+            </div>
+        </div>
+
+        <div class="gsheet-options reset-options">
+            <div class="gsheet-option-card reset-card-danger">
+                <div class="gsheet-option-head">
+                    <span class="gsheet-badge badge-danger">🗑️ Reset Penuh ke Semula</span>
+                    <strong>1. Reset Semua ke Semula (Hapus Data → Rp 0)</strong>
+                </div>
+                <p>Menghapus seluruh riwayat transaksi dan mengembalikan semua saldo (Sisa Bersih, Pemasukan, Pengeluaran, dan seluruh E-Wallet/Bank) kembali ke <strong>Rp 0</strong> seperti baru.</p>
+                <button class="button button-danger button-full" id="confirmResetAllBtn" type="button">
+                    <i data-lucide="trash-2" aria-hidden="true"></i> Reset Semua ke Semula (Rp 0)
+                </button>
+            </div>
+
+            <div class="gsheet-option-card">
+                <div class="gsheet-option-head">
+                    <span class="gsheet-badge badge-neutral">🧹 Simpan Riwayat Lama</span>
+                    <strong>2. Hapus / Nolkan Saldo Berjalan Saja (→ Rp 0)</strong>
+                </div>
+                <p>Membuat transaksi penyesuaian otomatis agar <strong>Saldo Berjalan menjadi Rp 0</strong> tanpa menghapus catatan riwayat transaksi sebelumnya.</p>
+                <button class="button button-secondary button-full" id="confirmZeroBalanceBtn" type="button">
+                    <i data-lucide="rotate-ccw" aria-hidden="true"></i> Nolkan Saldo Berjalan Saja (Rp 0)
+                </button>
+            </div>
+
+            <div class="gsheet-option-card" id="resetSpecificWalletCard" hidden>
+                <div class="gsheet-option-head">
+                    <span class="gsheet-badge badge-wallet">👛 Kantong Dana Aktif</span>
+                    <strong id="resetSpecificWalletTitle">3. Nolkan Saldo Kantong Terpilih (→ Rp 0)</strong>
+                </div>
+                <p id="resetSpecificWalletDesc">Menyesuaikan saldo kantong dana yang sedang dipilih agar kembali menjadi Rp 0.</p>
+                <button class="button button-secondary button-full" id="confirmZeroWalletBtn" type="button">
+                    <i data-lucide="wallet" aria-hidden="true"></i> <span id="confirmZeroWalletBtnLabel">Nolkan Saldo Kantong Ini</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="dialog-actions" style="margin-top: 14px;">
+            <button class="button button-secondary" id="cancelResetDialog" type="button">Batal</button>
         </div>
     </dialog>
 </body>

@@ -24,9 +24,9 @@ const pool = new Pool({
     max: 5
 });
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8584715332:AAEF5F54-ipvf8vQGH-Eh7bqrYZYCIuLHjQ';
-const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const TELEGRAM_BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || '8584715332:AAEF5F54-ipvf8vQGH-Eh7bqrYZYCIuLHjQ').trim();
+const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
+const PUBLIC_WEBHOOK_URL = (process.env.WEBHOOK_URL || 'https://saku-sloth.vercel.app/api/telegram-webhook').trim();
 
 // Daftar Menu Perintah Resmi di Tombol Menu (/) Telegram
 const TELEGRAM_BOT_COMMANDS = [
@@ -39,56 +39,125 @@ const TELEGRAM_BOT_COMMANDS = [
     { command: 'reset', description: '🔄 Hapus Saldo Berjalan / Reset Kembali ke Semula' }
 ];
 
-async function setupTelegramBotCommands() {
+let telegramSetupDone = false;
+
+async function setupTelegramBotCommands(forceWebhookSync = false) {
+    const report = {
+        commandsSet: false,
+        menuButtonSet: false,
+        webhookSet: false,
+        botUsername: null,
+        webhookInfo: null
+    };
+
     try {
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
+        const meRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe`);
+        const meData = await meRes.json().catch(() => ({}));
+        if (meData?.ok && meData?.result?.username) {
+            report.botUsername = meData.result.username;
+        }
+
+        // Pastikan Webhook aktif dan menerima message + callback_query (klik tombol inline)
+        if (forceWebhookSync || !telegramSetupDone) {
+            const whInfoRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo`);
+            const whInfoData = await whInfoRes.json().catch(() => ({}));
+            report.webhookInfo = whInfoData?.result || null;
+
+            const currentUrl = whInfoData?.result?.url || '';
+            const currentAllowed = Array.isArray(whInfoData?.result?.allowed_updates)
+                ? whInfoData.result.allowed_updates
+                : [];
+            const needsCallbackQuery = !currentAllowed.includes('callback_query');
+
+            if (forceWebhookSync || currentUrl !== PUBLIC_WEBHOOK_URL || needsCallbackQuery) {
+                const setWhRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
+                    body: JSON.stringify({
+                        url: PUBLIC_WEBHOOK_URL,
+                        allowed_updates: ['message', 'edited_message', 'callback_query'],
+                        drop_pending_updates: false
+                    })
+                });
+                const setWhData = await setWhRes.json().catch(() => ({}));
+                report.webhookSet = Boolean(setWhData?.ok);
+            } else {
+                report.webhookSet = true;
+            }
+        }
+
+        const cmdRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setMyCommands`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
             body: JSON.stringify({ commands: TELEGRAM_BOT_COMMANDS })
         });
+        const cmdData = await cmdRes.json().catch(() => ({}));
+        report.commandsSet = Boolean(cmdData?.ok);
+
+        const btnRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setChatMenuButton`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
+            body: JSON.stringify({ menu_button: { type: 'commands' } })
+        });
+        const btnData = await btnRes.json().catch(() => ({}));
+        report.menuButtonSet = Boolean(btnData?.ok);
+
+        telegramSetupDone = true;
     } catch (err) {
-        console.warn("Gagal setMyCommands Telegram:", err.message);
+        console.warn("Gagal sinkronisasi konfigurasi Telegram:", err.message);
     }
+
+    return report;
 }
 
-// Inisialisasi Tabel Transaksi + Kolom Wallet + Tabel Sesi Edit/Wizard Telegram
-async function initDatabase() {
-    try {
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS transactions (
-                id SERIAL PRIMARY KEY,
-                "desc" TEXT NOT NULL,
-                amount NUMERIC NOT NULL,
-                type VARCHAR(20) NOT NULL,
-                category VARCHAR(100) DEFAULT 'Umum',
-                wallet VARCHAR(80) DEFAULT 'Tunai',
-                date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-        await pool.query(`
-            ALTER TABLE transactions
-            ADD COLUMN IF NOT EXISTS wallet VARCHAR(80) DEFAULT 'Tunai'
-        `);
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS telegram_edit_sessions (
-                chat_id VARCHAR(64) PRIMARY KEY,
-                trx_id INTEGER NOT NULL,
-                field VARCHAR(40) NOT NULL,
-                payload TEXT DEFAULT '{}',
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-        await pool.query(`
-            ALTER TABLE telegram_edit_sessions
-            ADD COLUMN IF NOT EXISTS payload TEXT DEFAULT '{}'
-        `);
-        console.log("Berhasil terhubung ke Neon PostgreSQL & sinkronisasi skema Wallet/Menu! 🐘");
-        setupTelegramBotCommands();
-    } catch (err) {
-        console.error("Gagal inisialisasi database Neon:", err);
-    }
+// Inisialisasi Tabel Transaksi + Kolom Wallet + Tabel Sesi Edit/Wizard Telegram (Singleton Promise)
+let dbReadyPromise = null;
+
+async function ensureDatabaseReady() {
+    if (dbReadyPromise) return dbReadyPromise;
+    dbReadyPromise = (async () => {
+        try {
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id SERIAL PRIMARY KEY,
+                    "desc" TEXT NOT NULL,
+                    amount NUMERIC NOT NULL,
+                    type VARCHAR(20) NOT NULL,
+                    category VARCHAR(100) DEFAULT 'Umum',
+                    wallet VARCHAR(80) DEFAULT 'Tunai',
+                    date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            await pool.query(`
+                ALTER TABLE transactions
+                ADD COLUMN IF NOT EXISTS wallet VARCHAR(80) DEFAULT 'Tunai'
+            `);
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS telegram_edit_sessions (
+                    chat_id VARCHAR(64) PRIMARY KEY,
+                    trx_id INTEGER NOT NULL,
+                    field VARCHAR(40) NOT NULL,
+                    payload TEXT DEFAULT '{}',
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            await pool.query(`
+                ALTER TABLE telegram_edit_sessions
+                ADD COLUMN IF NOT EXISTS payload TEXT DEFAULT '{}'
+            `);
+            console.log("Berhasil terhubung ke Neon PostgreSQL & sinkronisasi skema Wallet/Menu! 🐘");
+            setupTelegramBotCommands(false).catch(() => {});
+            return true;
+        } catch (err) {
+            console.error("Gagal inisialisasi database Neon:", err);
+            dbReadyPromise = null;
+            return false;
+        }
+    })();
+    return dbReadyPromise;
 }
-initDatabase();
+
+ensureDatabaseReady();
 
 const POPULAR_WALLETS = [
     { id: 'GoPay', label: '💚 GoPay' },
@@ -204,6 +273,7 @@ async function setEditSession(chatId, trxId, field, payloadObj = {}) {
     const payloadStr = JSON.stringify(payloadObj || {});
     memoryEditSessions.set(String(chatId), { trxId: Number(trxId), field, payload: payloadObj || {} });
     try {
+        await ensureDatabaseReady();
         await pool.query(
             `INSERT INTO telegram_edit_sessions (chat_id, trx_id, field, payload, updated_at)
              VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
@@ -218,6 +288,7 @@ async function setEditSession(chatId, trxId, field, payloadObj = {}) {
 
 async function getEditSession(chatId) {
     try {
+        await ensureDatabaseReady();
         const res = await pool.query(`SELECT trx_id, field, payload FROM telegram_edit_sessions WHERE chat_id = $1`, [String(chatId)]);
         if (res.rows.length > 0) {
             let parsedPayload = {};
@@ -237,32 +308,56 @@ async function getEditSession(chatId) {
 async function clearEditSession(chatId) {
     memoryEditSessions.delete(String(chatId));
     try {
+        await ensureDatabaseReady();
         await pool.query(`DELETE FROM telegram_edit_sessions WHERE chat_id = $1`, [String(chatId)]);
     } catch {
         // abaikan
     }
 }
 
-// Fungsi Kirim Pesan Telegram (Otomatis menyertakan Menu Keyboard Bawah jika tidak ada Inline Keyboard)
+function stripMarkdownFormatting(text) {
+    return String(text || '').replace(/[*_`]/g, '');
+}
+
+// Fungsi Kirim Pesan Telegram (Anti-Gagal: Otomatis fallback ke Plain Text jika Markdown gagal parse)
 async function sendTelegramMessage(chatId, text, replyMarkup = null) {
+    const activeMarkup = replyMarkup || PERSISTENT_REPLY_KEYBOARD;
     try {
         const payload = {
             chat_id: chatId,
             text,
             parse_mode: 'Markdown',
-            reply_markup: replyMarkup || PERSISTENT_REPLY_KEYBOARD
+            reply_markup: activeMarkup
         };
-        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+        const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
             body: JSON.stringify(payload)
         });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+            // Fallback tanpa parse_mode agar karakter khusus pada deskripsi tidak pernah menggagalkan pengiriman
+            const fallbackPayload = {
+                chat_id: chatId,
+                text: stripMarkdownFormatting(text),
+                reply_markup: activeMarkup
+            };
+            await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
+                body: JSON.stringify(fallbackPayload)
+            });
+        }
     } catch (err) {
         console.error("Gagal kirim pesan Telegram:", err.message);
     }
 }
 
 async function editTelegramMessage(chatId, messageId, text, replyMarkup = null) {
+    if (!messageId) {
+        await sendTelegramMessage(chatId, text, replyMarkup);
+        return;
+    }
     try {
         const payload = { chat_id: chatId, message_id: messageId, text, parse_mode: 'Markdown' };
         if (replyMarkup) payload.reply_markup = replyMarkup;
@@ -271,8 +366,21 @@ async function editTelegramMessage(chatId, messageId, text, replyMarkup = null) 
             headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
             body: JSON.stringify(payload)
         });
-        if (!res.ok) {
-            await sendTelegramMessage(chatId, text, replyMarkup);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+            // Coba edit tanpa parse_mode terlebih dahulu
+            const plainPayload = { chat_id: chatId, message_id: messageId, text: stripMarkdownFormatting(text) };
+            if (replyMarkup) plainPayload.reply_markup = replyMarkup;
+            const retryRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/editMessageText`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
+                body: JSON.stringify(plainPayload)
+            });
+            const retryData = await retryRes.json().catch(() => ({}));
+            if (!retryRes.ok || !retryData.ok) {
+                // Jika tetap tidak bisa diedit (misal pesan sama / pesan lama), kirim pesan baru agar user selalu melihat hasil eksekusi
+                await sendTelegramMessage(chatId, text, replyMarkup);
+            }
         }
     } catch (err) {
         await sendTelegramMessage(chatId, text, replyMarkup);
@@ -280,6 +388,7 @@ async function editTelegramMessage(chatId, messageId, text, replyMarkup = null) 
 }
 
 async function answerCallbackQuery(callbackQueryId, text = '') {
+    if (!callbackQueryId) return;
     try {
         await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/answerCallbackQuery`, {
             method: 'POST',
@@ -463,6 +572,10 @@ function buildResetConfirmationKeyboard() {
     };
 }
 
+function sanitizeSafeText(val) {
+    return String(val || '').replace(/[*_`[\]]/g, '');
+}
+
 function formatTrxDetailMessage(trx, headerTitle = '✅ *DETAIL TRANSAKSI SAKU HARIAN*') {
     const symbol = trx.type === 'income' ? '🟢 PEMASUKAN' : '🔴 PENGELUARAN';
     const sign = trx.type === 'income' ? '+' : '-';
@@ -472,14 +585,15 @@ ${headerTitle}
 ━━━━━━━━━━━━━━━━━━━
 🆔 *ID Transaksi:* #${trx.id}
 ${symbol}
-📝 *Keterangan:* ${trx.desc}
-📁 *Kategori:* ${trx.category || 'Umum'}
-👛 *Kantong Dana:* ${trx.wallet || 'Tunai'}
+📝 *Keterangan:* ${sanitizeSafeText(trx.desc)}
+📁 *Kategori:* ${sanitizeSafeText(trx.category || 'Umum')}
+👛 *Kantong Dana:* ${sanitizeSafeText(trx.wallet || 'Tunai')}
 💰 *Nominal:* ${sign} Rp ${formattedAmount}
     `.trim();
 }
 
 async function getRunningBalanceSummary() {
+    await ensureDatabaseReady();
     const resStats = await pool.query(`
         SELECT
             COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS total_income,
@@ -503,7 +617,7 @@ async function buildSaldoMessageText() {
         FROM transactions
         GROUP BY COALESCE(wallet, 'Tunai')
         ORDER BY net DESC
-        LIMIT 5
+        LIMIT 6
     `);
 
     let walletLines = '';
@@ -511,7 +625,7 @@ async function buildSaldoMessageText() {
         walletLines = '\n👛 *Rincian Kantong Dana Teratas:*\n' + walletRes.rows.map((w) => {
             const netVal = Number(w.net || 0);
             const sign = netVal >= 0 ? '+' : '-';
-            return `• *${w.wallet}:* ${sign}Rp ${Math.abs(netVal).toLocaleString('id-ID')}`;
+            return `• *${sanitizeSafeText(w.wallet)}:* ${sign}Rp ${Math.abs(netVal).toLocaleString('id-ID')}`;
         }).join('\n');
     }
 
@@ -528,7 +642,7 @@ async function buildSaldoMessageText() {
 📌 *Status:* ${statusIcon}
 ${walletLines}
 
-👇 _Pilih tombol aksi cepat di bawah ini tanpa perlu ketik:_
+👇 Pilih tombol aksi cepat di bawah ini tanpa perlu ketik:
     `.trim();
 }
 
@@ -554,6 +668,7 @@ function buildSaldoInlineKeyboard() {
 }
 
 async function buildDompetMessageText() {
+    await ensureDatabaseReady();
     const result = await pool.query(`
         SELECT COALESCE(wallet, 'Tunai') as wallet,
                SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as pemasukan,
@@ -570,12 +685,13 @@ async function buildDompetMessageText() {
         const inc = Number(r.pemasukan || 0);
         const exp = Number(r.pengeluaran || 0);
         const net = inc - exp;
-        msg += `• *${r.wallet}:* *Rp ${net.toLocaleString('id-ID')}*\n   _(🟢 +Rp ${inc.toLocaleString('id-ID')} | 🔴 -Rp ${exp.toLocaleString('id-ID')})_\n`;
+        msg += `• *${sanitizeSafeText(r.wallet)}:* *Rp ${net.toLocaleString('id-ID')}*\n   (🟢 +Rp ${inc.toLocaleString('id-ID')} | 🔴 -Rp ${exp.toLocaleString('id-ID')})\n`;
     });
     return msg.trim();
 }
 
 async function buildHistoryMessagePayload() {
+    await ensureDatabaseReady();
     const result = await pool.query("SELECT * FROM transactions ORDER BY date DESC, id DESC LIMIT 6");
     if (result.rows.length === 0) {
         return {
@@ -596,11 +712,13 @@ async function buildHistoryMessagePayload() {
     result.rows.forEach((t, i) => {
         const sign = t.type === 'income' ? '+' : '-';
         const icon = t.type === 'income' ? '🟢' : '🔴';
-        const wallet = t.wallet || 'Tunai';
-        msg += `${i + 1}. ${icon} *#${t.id} ${t.desc}* (${t.category} · 👛 ${wallet}) — *${sign}Rp ${Number(t.amount).toLocaleString('id-ID')}*\n`;
+        const wallet = sanitizeSafeText(t.wallet || 'Tunai');
+        const safeDesc = sanitizeSafeText(t.desc);
+        const safeCat = sanitizeSafeText(t.category || 'Umum');
+        msg += `${i + 1}. ${icon} *#${t.id} ${safeDesc}* (${safeCat} · 👛 ${wallet}) — *${sign}Rp ${Number(t.amount).toLocaleString('id-ID')}*\n`;
         buttons.push([
             {
-                text: `✏️ Edit #${t.id}: ${String(t.desc).slice(0, 16)} (Rp ${Number(t.amount).toLocaleString('id-ID')})`,
+                text: `✏️ Edit #${t.id}: ${safeDesc.slice(0, 16)} (Rp ${Number(t.amount).toLocaleString('id-ID')})`,
                 callback_data: `edit_menu:${t.id}`
             }
         ]);
@@ -609,7 +727,7 @@ async function buildHistoryMessagePayload() {
         { text: '🔄 Hapus Saldo / Reset Semula', callback_data: 'menu_act:reset_prompt' },
         { text: '🧭 Menu Utama', callback_data: 'menu_act:main' }
     ]);
-    msg += "\n👇 _Tekan tombol transaksi di bawah ini untuk mengedit atau menghapus:_";
+    msg += "\n👇 Tekan tombol transaksi di bawah ini untuk mengedit atau menghapus:";
     return { text: msg, keyboard: { inline_keyboard: buttons } };
 }
 
@@ -630,10 +748,75 @@ Membuat penyesuaian otomatis agar *Saldo Berjalan menjadi Rp 0* tanpa menghapus 
     `.trim();
 }
 
-// Fungsi Panggil Gemini Teks & Gambar (Auto-Retry 503)
-async function callGeminiAPI(prompt, base64Image = null, retries = 3, delay = 2000) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
-    let parts = [{ text: prompt }];
+// Parser Lokal Pintar untuk Pesan Transaksi Natural (Fallback Cepat Tanpa Tergantung AI)
+function parseNaturalTransactionText(rawText) {
+    const clean = String(rawText || '').trim();
+    if (!clean) return null;
+
+    let multiplier = 1;
+    if (/\b(\d+[.,]?\d*)\s*(jt|juta)\b/i.test(clean)) multiplier = 1000000;
+    else if (/\b(\d+[.,]?\d*)\s*(rb|ribu|k)\b/i.test(clean)) multiplier = 1000;
+
+    const numMatch = clean.match(/(\d+(?:[.,]\d+)?)/);
+    if (!numMatch) return null;
+
+    const rawNum = numMatch[1];
+    let amount = 0;
+    if (multiplier > 1) {
+        amount = Math.round(parseFloat(rawNum.replace(',', '.')) * multiplier);
+    } else {
+        amount = Number(rawNum.replace(/[^0-9]/g, ''));
+    }
+
+    if (!Number.isFinite(amount) || amount <= 0) return null;
+
+    const lower = clean.toLowerCase();
+    const isIncome = /\b(gaji|masuk|pemasukan|bonus|thr|setoran|terima|jual|penjualan|freelance|komisi|cashback|untung|dividen)\b/i.test(lower);
+    const type = isIncome ? 'income' : 'expense';
+
+    let detectedWallet = 'Tunai';
+    for (const w of POPULAR_WALLETS) {
+        if (lower.includes(w.id.toLowerCase())) {
+            detectedWallet = w.id;
+            break;
+        }
+    }
+
+    let category = isIncome ? 'Gaji & Penghasilan' : 'Umum';
+    if (/makan|minum|kopi|jajan|sarapan|siang|malam|nasi|bakso|mie|resto|warung/.test(lower)) category = 'Makan & Minum';
+    else if (/bensin|bbm|grab|gojek|ojek|parkir|tol|transport|kereta|bus/.test(lower)) category = 'Transportasi';
+    else if (/listrik|pln|air|pdam|tagihan|cicilan|kredit|bpjs|pajak/.test(lower)) category = 'Tagihan & Utilitas';
+    else if (/wifi|internet|kuota|pulsa|netflix|spotify|langganan/.test(lower)) category = 'Langganan Digital';
+    else if (/belanja|alfamart|indomaret|supermarket|sembako|baju|shopee|tokopedia/.test(lower)) category = 'Belanja & Lifestyle';
+    else if (/kos|sewa|kontrakan|rumah/.test(lower)) category = 'Rumah & Sewa';
+    else if (/obat|dokter|apotek|rs|kesehatan/.test(lower)) category = 'Kesehatan';
+    else if (/tabung|investasi|emas|reksadana/.test(lower)) category = 'Tabungan & Investasi';
+
+    let desc = clean
+        .replace(/(\d+(?:[.,]\d+)?)\s*(jt|juta|rb|ribu|k)?/gi, '')
+        .replace(/\b(rp\.?|via|pakai|pake|dengan|ke|dari)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!desc) {
+        desc = isIncome ? 'Pemasukan Harian' : 'Pengeluaran Harian';
+    }
+
+    return {
+        isTransaction: true,
+        desc: desc.charAt(0).toUpperCase() + desc.slice(1),
+        amount,
+        type,
+        category,
+        wallet: detectedWallet
+    };
+}
+
+// Fungsi Panggil Gemini Teks & Gambar
+async function callGeminiAPI(prompt, base64Image = null, retries = 2, delay = 1200) {
+    if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY tidak tersedia');
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const parts = [{ text: prompt }];
     if (base64Image) {
         parts.push({ inline_data: { mime_type: "image/jpeg", data: base64Image } });
     }
@@ -643,7 +826,7 @@ async function callGeminiAPI(prompt, base64Image = null, retries = 3, delay = 20
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
-                body: JSON.stringify({ contents: [{ parts: parts }] })
+                body: JSON.stringify({ contents: [{ parts }] })
             });
             const responseText = await response.text();
             if (response.ok) {
@@ -655,7 +838,7 @@ async function callGeminiAPI(prompt, base64Image = null, retries = 3, delay = 20
                 delay *= 2;
                 continue;
             }
-            throw new Error(`Gemini API Error: ${responseText}`);
+            throw new Error(`Gemini API Error (${response.status}): ${responseText}`);
         } catch (err) {
             if (i === retries - 1) throw err;
             await new Promise(resolve => setTimeout(resolve, delay));
@@ -664,9 +847,10 @@ async function callGeminiAPI(prompt, base64Image = null, retries = 3, delay = 20
 }
 
 // Fungsi Panggil Gemini Voice Note (Audio)
-async function callGeminiAudioAPI(prompt, base64Audio, retries = 3, delay = 2000) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${GEMINI_API_KEY}`;
-    let parts = [
+async function callGeminiAudioAPI(prompt, base64Audio, retries = 2, delay = 1200) {
+    if (!GEMINI_API_KEY) throw new Error('GEMINI_API_KEY tidak tersedia');
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const parts = [
         { text: prompt },
         { inline_data: { mime_type: "audio/ogg", data: base64Audio } }
     ];
@@ -676,7 +860,7 @@ async function callGeminiAudioAPI(prompt, base64Audio, retries = 3, delay = 2000
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Connection': 'close' },
-                body: JSON.stringify({ contents: [{ parts: parts }] })
+                body: JSON.stringify({ contents: [{ parts }] })
             });
             const responseText = await response.text();
             if (response.ok) {
@@ -688,7 +872,7 @@ async function callGeminiAudioAPI(prompt, base64Audio, retries = 3, delay = 2000
                 delay *= 2;
                 continue;
             }
-            throw new Error(`Gemini API Error: ${responseText}`);
+            throw new Error(`Gemini API Error (${response.status}): ${responseText}`);
         } catch (err) {
             if (i === retries - 1) throw err;
             await new Promise(resolve => setTimeout(resolve, delay));
@@ -698,6 +882,7 @@ async function callGeminiAudioAPI(prompt, base64Audio, retries = 3, delay = 2000
 
 // Fungsi Simpan Transaksi & Analisis Saku Harian AI
 async function saveAndNotify(trxData, chatId, existingMessageId = null) {
+    await ensureDatabaseReady();
     const walletName = trxData.wallet || 'Tunai';
     const query = `INSERT INTO transactions ("desc", amount, type, category, wallet) VALUES ($1, $2, $3, $4, $5) RETURNING *`;
     const values = [trxData.desc, trxData.amount, trxData.type, trxData.category || 'Umum', walletName];
@@ -721,7 +906,8 @@ ${formatTrxDetailMessage(savedTrx, '✅ *BERHASIL DICATAT OLEH SAKU HARIAN*')}
 ━━━━━━━━━━━━━━━━━━━
 💳 *Saldo Berjalan:* *Rp ${balance.toLocaleString('id-ID')}*
 ${financialAdvice}
-_Klik tombol di bawah kapan saja untuk mengedit, mencatat lagi, atau reset saldo:_
+
+👇 Klik tombol di bawah kapan saja untuk mengedit, mencatat lagi, atau reset saldo:
     `.trim();
 
     if (existingMessageId) {
@@ -734,11 +920,16 @@ _Klik tombol di bawah kapan saja untuk mengedit, mencatat lagi, atau reset saldo
 
 // ================= REST API UNTUK WEB APP =================
 
-// API: Setup / Sinkronisasi Menu Komando Telegram
+// API: Setup / Sinkronisasi Menu Komando & Webhook Telegram
 app.get('/api/setup-telegram-menu', async (req, res) => {
     try {
-        await setupTelegramBotCommands();
-        res.json({ success: true, commands: TELEGRAM_BOT_COMMANDS });
+        await ensureDatabaseReady();
+        const report = await setupTelegramBotCommands(true);
+        res.json({
+            success: true,
+            report,
+            commands: TELEGRAM_BOT_COMMANDS
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -747,6 +938,7 @@ app.get('/api/setup-telegram-menu', async (req, res) => {
 // API: Ambil Semua Transaksi
 app.get('/api/transactions', async (req, res) => {
     try {
+        await ensureDatabaseReady();
         const result = await pool.query('SELECT * FROM transactions ORDER BY date DESC, id DESC');
         res.json(result.rows);
     } catch (err) {
@@ -757,6 +949,7 @@ app.get('/api/transactions', async (req, res) => {
 // API: Tambah Transaksi Baru
 app.post('/api/transactions', async (req, res) => {
     try {
+        await ensureDatabaseReady();
         const { desc, amount, type, category, wallet, date } = req.body;
         const parsedDate = date && !Number.isNaN(new Date(date).getTime()) ? new Date(date) : new Date();
         const query = `INSERT INTO transactions ("desc", amount, type, category, wallet, date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`;
@@ -768,11 +961,101 @@ app.post('/api/transactions', async (req, res) => {
     }
 });
 
-// API: Reset / Hapus Semua Transaksi atau Nolkan Saldo Berjalan
+// API: Hapus / Reset Saldo Berjalan atau Reset Semua Transaksi ke Semula (Rp 0)
+app.post('/api/transactions/reset', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const mode = String(req.body?.mode || 'all').toLowerCase();
+        const targetWallet = String(req.body?.wallet || '').trim();
+
+        if (mode === 'all') {
+            await pool.query('DELETE FROM transactions');
+            memoryEditSessions.clear();
+            await pool.query('DELETE FROM telegram_edit_sessions').catch(() => {});
+            return res.json({
+                success: true,
+                mode: 'all',
+                balance: 0,
+                message: 'Seluruh transaksi telah dihapus dan saldo berhasil direset kembali ke semula (Rp 0).'
+            });
+        }
+
+        if (mode === 'wallet' && targetWallet && targetWallet !== 'all') {
+            const wRes = await pool.query(
+                `SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0) AS net
+                 FROM transactions
+                 WHERE LOWER(COALESCE(wallet, 'Tunai')) = LOWER($1)`,
+                [targetWallet]
+            );
+            const walletNet = Number(wRes.rows[0]?.net || 0);
+            if (walletNet === 0) {
+                return res.json({
+                    success: true,
+                    mode: 'wallet',
+                    wallet: targetWallet,
+                    balance: 0,
+                    transaction: null,
+                    message: `Saldo kantong ${targetWallet} sudah Rp 0.`
+                });
+            }
+            const adjType = walletNet > 0 ? 'expense' : 'income';
+            const adjAmount = Math.abs(walletNet);
+            const ins = await pool.query(
+                `INSERT INTO transactions ("desc", amount, type, category, wallet, date)
+                 VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+                 RETURNING *`,
+                [`Penyesuaian Hapus Saldo ${targetWallet} (Rp 0)`, adjAmount, adjType, 'Umum', targetWallet]
+            );
+            return res.json({
+                success: true,
+                mode: 'wallet',
+                wallet: targetWallet,
+                balance: 0,
+                transaction: ins.rows[0],
+                message: `Saldo kantong ${targetWallet} berhasil dinolkan ke Rp 0.`
+            });
+        }
+
+        // Default mode === 'zero': Nolkan Saldo Berjalan tanpa menghapus riwayat transaksi
+        const { balance } = await getRunningBalanceSummary();
+        if (balance === 0) {
+            return res.json({
+                success: true,
+                mode: 'zero',
+                balance: 0,
+                transaction: null,
+                message: 'Saldo berjalan saat ini sudah Rp 0.'
+            });
+        }
+
+        const adjType = balance > 0 ? 'expense' : 'income';
+        const adjAmount = Math.abs(balance);
+        const ins = await pool.query(
+            `INSERT INTO transactions ("desc", amount, type, category, wallet, date)
+             VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+             RETURNING *`,
+            ['Penyesuaian Hapus Saldo Berjalan (Rp 0)', adjAmount, adjType, 'Umum', 'Tunai']
+        );
+        return res.json({
+            success: true,
+            mode: 'zero',
+            balance: 0,
+            transaction: ins.rows[0],
+            message: 'Saldo berjalan berhasil dinolkan kembali ke Rp 0.'
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Reset / Hapus Semua Transaksi (DELETE)
 app.delete('/api/transactions', async (req, res) => {
     try {
+        await ensureDatabaseReady();
         await pool.query('DELETE FROM transactions');
-        res.json({ success: true, message: 'Semua transaksi berhasil direset kembali ke semula (Rp 0).' });
+        memoryEditSessions.clear();
+        await pool.query('DELETE FROM telegram_edit_sessions').catch(() => {});
+        res.json({ success: true, mode: 'all', balance: 0, message: 'Semua transaksi berhasil direset kembali ke semula (Rp 0).' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -781,6 +1064,7 @@ app.delete('/api/transactions', async (req, res) => {
 // API: Edit / Update Transaksi Kapan Saja
 app.put('/api/transactions/:id', async (req, res) => {
     try {
+        await ensureDatabaseReady();
         const trxId = Number(req.params.id);
         if (!Number.isFinite(trxId)) return res.status(400).json({ error: 'ID transaksi tidak valid.' });
 
@@ -821,9 +1105,10 @@ app.put('/api/transactions/:id', async (req, res) => {
     }
 });
 
-// API: Hapus Transaksi
+// API: Hapus Transaksi Spesifik
 app.delete('/api/transactions/:id', async (req, res) => {
     try {
+        await ensureDatabaseReady();
         const trxId = Number(req.params.id);
         if (!Number.isFinite(trxId)) return res.status(400).json({ error: 'ID transaksi tidak valid.' });
         await pool.query('DELETE FROM transactions WHERE id = $1', [trxId]);
@@ -836,6 +1121,7 @@ app.delete('/api/transactions/:id', async (req, res) => {
 // API: Export Google Sheets (CSV/TSV)
 app.get('/api/export-googlesheet', async (req, res) => {
     try {
+        await ensureDatabaseReady();
         const result = await pool.query('SELECT id, "desc", amount, type, category, wallet, date FROM transactions ORDER BY date DESC');
         let csvContent = "\uFEFFID,Keterangan,Nominal,Tipe,Kategori,Kantong Dana,Tanggal\n";
         result.rows.forEach(row => {
@@ -853,6 +1139,7 @@ app.get('/api/export-googlesheet', async (req, res) => {
 // API: Export Excel (CSV)
 app.get('/api/export-excel', async (req, res) => {
     try {
+        await ensureDatabaseReady();
         const result = await pool.query('SELECT id, "desc", amount, type, category, wallet, date FROM transactions ORDER BY date DESC');
         let csvContent = "ID,Keterangan,Nominal,Tipe,Kategori,Kantong Dana,Tanggal\n";
         result.rows.forEach(row => {
@@ -869,17 +1156,18 @@ app.get('/api/export-excel', async (req, res) => {
 
 // ================= WEBHOOK TELEGRAM BOT =================
 app.post(`/api/telegram-webhook`, async (req, res) => {
-    const update = req.body;
+    await ensureDatabaseReady();
+    const update = req.body || {};
 
-    // 1. HANDLE TOMBOL INTERAKTIF (CALLBACK QUERY)
+    // 1. HANDLE TOMBOL INTERAKTIF (CALLBACK QUERY DARI INLINE KEYBOARD)
     if (update.callback_query) {
         const cb = update.callback_query;
-        const chatId = String(cb.message?.chat?.id || '');
+        const chatId = String(cb.message?.chat?.id || cb.from?.id || '');
         const messageId = cb.message?.message_id;
         const data = String(cb.data || '');
 
-        if (ADMIN_TELEGRAM_ID && chatId !== String(ADMIN_TELEGRAM_ID)) {
-            await answerCallbackQuery(cb.id, 'Akses terkunci');
+        if (!chatId) {
+            await answerCallbackQuery(cb.id);
             return res.sendStatus(200);
         }
 
@@ -898,7 +1186,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
                     await editTelegramMessage(
                         chatId,
                         messageId,
-                        `🧭 *MENU UTAMA SAKU HARIAN SMART PLANNER*\n━━━━━━━━━━━━━━━━━━━\n💳 *Saldo Berjalan:* *Rp ${balance.toLocaleString('id-ID')}*\n\n👇 _Silakan pencet tombol menu di bawah ini tanpa perlu repot mengetik:_`,
+                        `🧭 *MENU UTAMA SAKU HARIAN SMART PLANNER*\n━━━━━━━━━━━━━━━━━━━\n💳 *Saldo Berjalan:* *Rp ${balance.toLocaleString('id-ID')}*\n\n👇 Silakan pencet tombol menu di bawah ini tanpa perlu repot mengetik:`,
                         buildMainMenuInlineKeyboard()
                     );
                     return res.sendStatus(200);
@@ -927,7 +1215,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 
                 if (sub === 'tips') {
                     await answerCallbackQuery(cb.id, '💡 Tips Hemat Finansial');
-                    const { totalIncome, totalExpense, balance } = await getRunningBalanceSummary();
+                    const { totalIncome, balance } = await getRunningBalanceSummary();
                     const safeDaily = Math.max(0, Math.round(balance / Math.max(1, 30 - new Date().getDate() + 1)));
                     const tipsMsg = `
 💡 *SARAN HEMAT SMART FINANCIAL PLANNER*
@@ -940,14 +1228,14 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
 • ☕ *30% Keinginan & Gaya Hidup:* Maks Rp ${Math.round(totalIncome * 0.3).toLocaleString('id-ID')}
 • 🐷 *20% Tabungan & Investasi:* Min Rp ${Math.round(totalIncome * 0.2).toLocaleString('id-ID')}
 
-🦥 _Tips Saku: Pisahkan e-wallet harian (GoPay/DANA/OVO) dari rekening tabungan utama (BCA/Mandiri/SeaBank) agar saldo tidak bocor halus!_
+🦥 Tips Saku: Pisahkan e-wallet harian (GoPay/DANA/OVO) dari rekening tabungan utama (BCA/Mandiri/SeaBank) agar saldo tidak bocor halus!
                     `.trim();
                     await editTelegramMessage(chatId, messageId, tipsMsg, buildMainMenuInlineKeyboard());
                     return res.sendStatus(200);
                 }
 
                 if (sub === 'reset_prompt') {
-                    await answerCallbackQuery(cb.id, '⚠️ Konfirmasi Reset Saldo');
+                    await answerCallbackQuery(cb.id, '⚠️ Pilih Mode Hapus / Reset Saldo');
                     const promptText = await buildResetPromptText();
                     await editTelegramMessage(chatId, messageId, promptText, buildResetConfirmationKeyboard());
                     return res.sendStatus(200);
@@ -965,7 +1253,7 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
                     await editTelegramMessage(
                         chatId,
                         messageId,
-                        `✅ *RESET KEMBALI KE SEMULA BERHASIL!*\n━━━━━━━━━━━━━━━━━━━\n🗑️ Seluruh riwayat transaksi telah dihapus.\n💳 *Saldo Berjalan Sekarang:* *Rp 0*\n\n👇 _Silakan mulai mencatat kembali dengan menekan tombol di bawah:_`,
+                        `✅ *RESET KEMBALI KE SEMULA BERHASIL!*\n━━━━━━━━━━━━━━━━━━━\n🗑️ Seluruh riwayat transaksi telah dihapus.\n💳 *Saldo Berjalan Sekarang:* *Rp 0*\n\n👇 Silakan mulai mencatat kembali dengan menekan tombol di bawah:`,
                         buildMainMenuInlineKeyboard()
                     );
                     return res.sendStatus(200);
@@ -987,13 +1275,13 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
                     const adjAmount = Math.abs(balance);
                     await pool.query(
                         `INSERT INTO transactions ("desc", amount, type, category, wallet) VALUES ($1, $2, $3, $4, $5)`,
-                        ['Penyesuaian Reset Saldo Berjalan (Rp 0)', adjAmount, adjType, 'Umum', 'Tunai']
+                        ['Penyesuaian Hapus Saldo Berjalan (Rp 0)', adjAmount, adjType, 'Umum', 'Tunai']
                     );
                     await answerCallbackQuery(cb.id, '✅ Saldo berjalan dinolkan ke Rp 0!');
                     await editTelegramMessage(
                         chatId,
                         messageId,
-                        `🧹 *SALDO BERJALAN BERHASIL DIHAPUS / DINOLKAN!*\n━━━━━━━━━━━━━━━━━━━\n⚖️ Penyesuaian otomatis sebesar *Rp ${adjAmount.toLocaleString('id-ID')}* telah dicatat.\n💳 *Saldo Berjalan Sekarang:* *Rp 0*\n\n_Riwayat transaksi lama tetap tersimpan._`,
+                        `🧹 *SALDO BERJALAN BERHASIL DIHAPUS / DINOLKAN!*\n━━━━━━━━━━━━━━━━━━━\n⚖️ Penyesuaian otomatis sebesar *Rp ${adjAmount.toLocaleString('id-ID')}* telah dicatat.\n💳 *Saldo Berjalan Sekarang:* *Rp 0*\n\nRiwayat transaksi lama tetap tersimpan.`,
                         buildMainMenuInlineKeyboard()
                     );
                     return res.sendStatus(200);
@@ -1021,7 +1309,6 @@ app.post(`/api/telegram-webhook`, async (req, res) => {
                 const items = typeKey === 'inc' ? INCOME_QUICK_ITEMS : EXPENSE_QUICK_ITEMS;
                 const chosen = items[itemIdx] || items[0];
 
-                // Simpan sesi agar user juga bisa langsung ketik angka jika mau
                 await setEditSession(chatId, 0, 'qa_custom_amt', { typeKey, itemIdx });
 
                 await answerCallbackQuery(cb.id, `${chosen.label} dipilih`);
@@ -1030,7 +1317,7 @@ ${typeKey === 'inc' ? '🟢 *CATAT PEMASUKAN*' : '🔴 *CATAT PENGELUARAN*'}
 ━━━━━━━━━━━━━━━━━━━
 📌 *Kategori:* ${chosen.label}
 
-👇 *Langkah 2/3:* Pencet salah satu *Tombol Nominal* di bawah ini _(atau langsung ketik nominal/keterangan di chat)_:
+👇 *Langkah 2/3:* Pencet salah satu *Tombol Nominal* di bawah ini (atau langsung ketik nominal/keterangan di chat):
                 `.trim();
                 await editTelegramMessage(chatId, messageId, msg, buildQuickNominalKeyboard(typeKey, itemIdx));
                 return res.sendStatus(200);
@@ -1046,7 +1333,7 @@ ${typeKey === 'inc' ? '🟢 *CATAT PEMASUKAN*' : '🔴 *CATAT PENGELUARAN*'}
                 await answerCallbackQuery(cb.id, 'Silakan ketik nominal');
                 await sendTelegramMessage(
                     chatId,
-                    `⌨️ *KETIK NOMINAL UNTUK ${chosen.label.toUpperCase()}*\n━━━━━━━━━━━━━━━━━━━\nSilakan ketik nominalnya saja (contoh: \`35000\`) atau keterangan beserta nominal (contoh: \`Nasi Padang 35000\`).`
+                    `⌨️ *KETIK NOMINAL UNTUK ${chosen.label.toUpperCase()}*\n━━━━━━━━━━━━━━━━━━━\nSilakan ketik nominalnya saja (contoh: 35000) atau keterangan beserta nominal (contoh: Nasi Padang 35000).`
                 );
                 return res.sendStatus(200);
             }
@@ -1205,7 +1492,7 @@ ${typeKey === 'inc' ? '🟢 *CATAT PEMASUKAN*' : '🔴 *CATAT PENGELUARAN*'}
                 await answerCallbackQuery(cb.id, 'Ketik nominal baru');
                 await sendTelegramMessage(
                     chatId,
-                    `💰 *UBAH NOMINAL TRANSAKSI #${trxId}*\nSilakan balas pesan ini dengan mengetikkan *nominal baru* (angka saja, contoh: \`45000\`), atau ketik /batal untuk membatalkan.`
+                    `💰 *UBAH NOMINAL TRANSAKSI #${trxId}*\nSilakan balas pesan ini dengan mengetikkan *nominal baru* (angka saja, contoh: 45000), atau ketik /batal untuk membatalkan.`
                 );
                 return res.sendStatus(200);
             }
@@ -1234,110 +1521,130 @@ ${typeKey === 'inc' ? '🟢 *CATAT PEMASUKAN*' : '🔴 *CATAT PENGELUARAN*'}
             }
         } catch (err) {
             console.error("Callback Query Error:", err);
-            await answerCallbackQuery(cb.id, 'Terjadi kesalahan');
+            await answerCallbackQuery(cb.id, 'Memproses aksi...');
         }
         return res.sendStatus(200);
     }
 
-    if (!update.message) return res.sendStatus(200);
+    const msgObj = update.message || update.edited_message;
+    if (!msgObj) return res.sendStatus(200);
 
-    const chatId = String(update.message.chat.id);
-    const text = update.message.text;
-    const photo = update.message.photo;
-    const voice = update.message.voice;
+    const chatId = String(msgObj.chat?.id || '');
+    if (!chatId) return res.sendStatus(200);
 
-    if (ADMIN_TELEGRAM_ID && chatId !== String(ADMIN_TELEGRAM_ID)) {
-        await sendTelegramMessage(chatId, "⚠️ Maaf, bot finansial ini terkunci.");
-        return res.sendStatus(200);
-    }
+    const text = msgObj.text;
+    const photo = msgObj.photo;
+    const voice = msgObj.voice;
 
     try {
         const cleanText = String(text || '').trim();
         const lowerText = cleanText.toLowerCase();
+        // Normalisasi: hilangkan @NamaBot pada command & variasi karakter emoji (FE0F)
+        const normalizedCmd = lowerText.split('@')[0].replace(/\uFE0F/g, '').replace(/\s+/g, ' ').trim();
+        const hasDigits = /\d/.test(normalizedCmd);
 
-        // DETEKSI TOMBOL MENU KEYBOARD BAWAH ATAU KATA KUNCI LANGSUNG (TANPA HARUS PAKAI '/')
+        // DETEKSI TOMBOL MENU KEYBOARD BAWAH ATAU COMMAND '/' ATAU KATA KUNCI LANGSUNG
         const isMenuTrigger =
-            lowerText === '/start' ||
-            lowerText === '/menu' ||
-            lowerText === 'menu' ||
-            lowerText === '🧭 menu utama' ||
-            lowerText === 'menu utama' ||
-            lowerText === 'bantuan' ||
-            lowerText === '/help';
+            normalizedCmd === '/start' ||
+            normalizedCmd === '/menu' ||
+            normalizedCmd === '/help' ||
+            (!hasDigits && (
+                normalizedCmd === 'menu' ||
+                normalizedCmd.includes('menu utama') ||
+                normalizedCmd === 'bantuan' ||
+                normalizedCmd === 'mulai'
+            ));
 
         const isIncomeTrigger =
-            lowerText === '/pemasukan' ||
-            lowerText === 'pemasukan' ||
-            lowerText === '🟢 ➕ pemasukan' ||
-            lowerText === '➕ pemasukan' ||
-            lowerText === 'catat pemasukan';
+            normalizedCmd === '/pemasukan' ||
+            normalizedCmd === '/income' ||
+            normalizedCmd === '/masuk' ||
+            (!hasDigits && (
+                normalizedCmd.includes('pemasukan') ||
+                normalizedCmd === 'uang masuk' ||
+                normalizedCmd === 'catat masuk'
+            ));
 
         const isExpenseTrigger =
-            lowerText === '/pengeluaran' ||
-            lowerText === 'pengeluaran' ||
-            lowerText === '🔴 ➖ pengeluaran' ||
-            lowerText === '➖ pengeluaran' ||
-            lowerText === 'catat pengeluaran';
+            normalizedCmd === '/pengeluaran' ||
+            normalizedCmd === '/expense' ||
+            normalizedCmd === '/keluar' ||
+            (!hasDigits && (
+                normalizedCmd.includes('pengeluaran') ||
+                normalizedCmd === 'uang keluar' ||
+                normalizedCmd === 'catat keluar'
+            ));
 
         const isSaldoTrigger =
-            lowerText === '/saldo' ||
-            lowerText === '/rekap' ||
-            lowerText === 'saldo' ||
-            lowerText === 'cek saldo' ||
-            lowerText === '💰 cek saldo' ||
-            lowerText === 'rekap' ||
-            lowerText === 'info saldo';
+            normalizedCmd === '/saldo' ||
+            normalizedCmd === '/rekap' ||
+            (!hasDigits && (
+                normalizedCmd === 'saldo' ||
+                normalizedCmd.includes('cek saldo') ||
+                normalizedCmd.includes('info saldo') ||
+                normalizedCmd === 'rekap' ||
+                normalizedCmd === 'saldo berjalan'
+            ));
 
         const isDompetTrigger =
-            lowerText === '/dompet' ||
-            lowerText === '/wallet' ||
-            lowerText === 'dompet' ||
-            lowerText === 'wallet' ||
-            lowerText === '👛 saldo e-wallet' ||
-            lowerText === 'saldo e-wallet' ||
-            lowerText === 'cek dompet';
+            normalizedCmd === '/dompet' ||
+            normalizedCmd === '/wallet' ||
+            (!hasDigits && (
+                normalizedCmd === 'dompet' ||
+                normalizedCmd === 'wallet' ||
+                normalizedCmd.includes('saldo e-wallet') ||
+                normalizedCmd.includes('cek dompet') ||
+                normalizedCmd.includes('kantong dana')
+            ));
 
         const isHistoryTrigger =
-            lowerText === '/history' ||
-            lowerText === '/riwayat' ||
-            lowerText === '/edit' ||
-            lowerText === 'riwayat' ||
-            lowerText === 'history' ||
-            lowerText === 'edit' ||
-            lowerText === '📜 riwayat & edit';
+            normalizedCmd === '/history' ||
+            normalizedCmd === '/riwayat' ||
+            normalizedCmd === '/edit' ||
+            (!hasDigits && (
+                normalizedCmd === 'riwayat' ||
+                normalizedCmd === 'history' ||
+                normalizedCmd === 'edit' ||
+                normalizedCmd.includes('riwayat & edit') ||
+                normalizedCmd.includes('edit transaksi')
+            ));
 
         const isResetTrigger =
-            lowerText === '/reset' ||
-            lowerText === 'reset' ||
-            lowerText === 'hapus saldo' ||
-            lowerText === 'reset saldo' ||
-            lowerText === '🔄 reset saldo / data' ||
-            lowerText === 'reset data';
+            normalizedCmd === '/reset' ||
+            normalizedCmd === '/hapus' ||
+            (!hasDigits && (
+                normalizedCmd === 'reset' ||
+                normalizedCmd.includes('hapus saldo') ||
+                normalizedCmd.includes('reset saldo') ||
+                normalizedCmd.includes('reset data') ||
+                normalizedCmd.includes('nolkan saldo')
+            ));
 
         const isTipsTrigger =
-            lowerText === '/tips' ||
-            lowerText === 'tips' ||
-            lowerText === '💡 tips hemat ai' ||
-            lowerText === 'tips hemat';
+            normalizedCmd === '/tips' ||
+            (!hasDigits && (
+                normalizedCmd === 'tips' ||
+                normalizedCmd.includes('tips hemat') ||
+                normalizedCmd.includes('saran hemat')
+            ));
 
-        if (lowerText === '/batal' || lowerText === 'batal') {
+        if (normalizedCmd === '/batal' || normalizedCmd === 'batal') {
             await clearEditSession(chatId);
             await sendTelegramMessage(chatId, "✅ Aksi dibatalkan. Silakan pilih tombol menu di bawah.");
             return res.sendStatus(200);
         }
 
-        // JIKA USER MENEKAN TOMBOL MENU ATAU KETIK KATA KUNCI MENU, PRIORITASKAN MENU!
+        // EKSEKUSI TOMBOL MENU / COMMAND SECARA INSTAN
         if (isMenuTrigger) {
             await clearEditSession(chatId);
             const { balance } = await getRunningBalanceSummary();
-            // Kirim pesan pembuka yang memastikan Reply Keyboard bawah selalu aktif
             await sendTelegramMessage(
                 chatId,
-                `👋 *Selamat datang di Saku Harian Smart Planner Bot!*\nSekarang Anda *tidak perlu repot ketik-ketik* — cukup pencet tombol berikon di bawah layar atau tombol menu interaktif berikut:`
+                `👋 *Selamat datang di Saku Harian Smart Planner Bot!*\nKeyboard menu cepat di bagian bawah layar sudah aktif.`
             );
             await sendTelegramMessage(
                 chatId,
-                `🧭 *MENU UTAMA SAKU HARIAN*\n━━━━━━━━━━━━━━━━━━━\n💳 *Saldo Berjalan:* *Rp ${balance.toLocaleString('id-ID')}*\n\n✨ *Cara Pakai Super Mudah:*\n• Pencet *🟢 ➕ Pemasukan* atau *🔴 ➖ Pengeluaran*\n• Ketik *saldo* atau pencet *💰 Cek Saldo* kapan saja\n• Pencet *🔄 Reset Saldo / Data* untuk mengembalikan saldo ke *Rp 0*`,
+                `🧭 *MENU UTAMA SAKU HARIAN*\n━━━━━━━━━━━━━━━━━━━\n💳 *Saldo Berjalan:* *Rp ${balance.toLocaleString('id-ID')}*\n\n✨ *Pilih Tombol Menu Tanpa Ketik:*\n• Pencet *🟢 ➕ Pemasukan* atau *🔴 ➖ Pengeluaran*\n• Ketik *saldo* atau pencet *💰 Cek Saldo* kapan saja\n• Pencet *🔄 Hapus Saldo Berjalan / Reset Semula* untuk mengembalikan saldo ke *Rp 0*`,
                 buildMainMenuInlineKeyboard()
             );
             return res.sendStatus(200);
@@ -1419,7 +1726,6 @@ ${typeKey === 'inc' ? '🟢 *CATAT PEMASUKAN*' : '🔴 *CATAT PENGELUARAN*'}
                     const items = typeKey === 'inc' ? INCOME_QUICK_ITEMS : EXPENSE_QUICK_ITEMS;
                     const chosen = items[itemIdx] || items[0];
 
-                    // Ekstrak angka nominal (mendukung format 25000, 25.000, 25rb, 25k, 2jt)
                     let multiplier = 1;
                     if (/\b(\d+[.,]?\d*)\s*(jt|juta)\b/i.test(cleanText)) multiplier = 1000000;
                     else if (/\b(\d+[.,]?\d*)\s*(rb|ribu|k)\b/i.test(cleanText)) multiplier = 1000;
@@ -1449,7 +1755,7 @@ ${typeKey === 'inc' ? '🟢 *CATAT PEMASUKAN*' : '🔴 *CATAT PENGELUARAN*'}
                         const msg = `
 ${typeKey === 'inc' ? '🟢 *CATAT PEMASUKAN*' : '🔴 *CATAT PENGELUARAN*'}
 ━━━━━━━━━━━━━━━━━━━
-📝 *Keterangan:* ${customDesc || chosen.desc}
+📝 *Keterangan:* ${sanitizeSafeText(customDesc || chosen.desc)}
 📁 *Kategori:* ${chosen.label}
 💰 *Nominal:* *Rp ${parsedAmt.toLocaleString('id-ID')}*
 
@@ -1507,7 +1813,7 @@ ${typeKey === 'inc' ? '🟢 *CATAT PEMASUKAN*' : '🔴 *CATAT PENGELUARAN*'}
             {"desc": "Nama tempat/ringkasan", "amount": angka saja, "type": "expense", "category": "Kategori bebas", "wallet": "GoPay/DANA/OVO/ShopeePay/LinkAja/QRIS/BCA/Mandiri/BRI/BNI/Tunai"}`;
 
             const rawText = await callGeminiAPI(prompt, base64Image);
-            let parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
+            const parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
             await saveAndNotify(parsed, chatId);
         }
         // 2. VOICE NOTE (REKAMAN SUARA)
@@ -1523,37 +1829,51 @@ ${typeKey === 'inc' ? '🟢 *CATAT PEMASUKAN*' : '🔴 *CATAT PENGELUARAN*'}
             {"desc": "Keterangan singkat", "amount": angka saja, "type": "expense" atau "income", "category": "Kategori bebas", "wallet": "GoPay/DANA/OVO/ShopeePay/LinkAja/QRIS/BCA/Mandiri/BRI/BNI/SeaBank/Bank Jago/Tunai"}`;
 
             const rawText = await callGeminiAudioAPI(prompt, base64Audio);
-            let parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
+            const parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
             await saveAndNotify(parsed, chatId);
         }
-        // 3. PESAN TEKS BEBAS / AI NATURAL LANGUAGE
+        // 3. PESAN TEKS BEBAS (DENGAN FALLBACK PARSER LOKAL PINTAR)
         else if (cleanText) {
-            const checkPrompt = `Analisis pesan user: "${cleanText}".
-            Daftar wallet/bank populer: GoPay, DANA, OVO, ShopeePay, LinkAja, QRIS, Flip, BCA, Mandiri, BRI, BNI, BSI, CIMB Niaga, SeaBank, Bank Jago, Blu BCA, Jenius, Tunai.
-            Jika pesan ini adalah perintah mencatat transaksi uang, balas HANYA format JSON:
-            {"isTransaction": true, "desc": "...", "amount": angka, "type": "expense/income", "category": "...", "wallet": "nama wallet/bank jika disebutkan atau Tunai"}
-            Jika pesan ini adalah pertanyaan, konsultasi, atau ngobrol (bukan transaksi), balas HANYA format JSON:
-            {"isTransaction": false, "reply": "Jawaban Saku Harian sebagai asisten keuangan yang cerdas dan bijak"}`;
+            const localParsed = parseNaturalTransactionText(cleanText);
+            if (localParsed && localParsed.isTransaction) {
+                await saveAndNotify(localParsed, chatId);
+                return res.sendStatus(200);
+            }
 
-            const aiResp = await callGeminiAPI(checkPrompt);
-            let cleanedJson = aiResp.replace(/```json/g, '').replace(/```/g, '').trim();
-            const firstOpen = cleanedJson.indexOf('{');
-            const lastClose = cleanedJson.lastIndexOf('}');
-            if (firstOpen !== -1 && lastClose !== -1) cleanedJson = cleanedJson.substring(firstOpen, lastClose + 1);
+            try {
+                const checkPrompt = `Analisis pesan user: "${cleanText}".
+                Daftar wallet/bank populer: GoPay, DANA, OVO, ShopeePay, LinkAja, QRIS, Flip, BCA, Mandiri, BRI, BNI, BSI, CIMB Niaga, SeaBank, Bank Jago, Blu BCA, Jenius, Tunai.
+                Jika pesan ini adalah perintah mencatat transaksi uang, balas HANYA format JSON:
+                {"isTransaction": true, "desc": "...", "amount": angka, "type": "expense/income", "category": "...", "wallet": "nama wallet/bank jika disebutkan atau Tunai"}
+                Jika pesan ini adalah pertanyaan, konsultasi, atau ngobrol (bukan transaksi), balas HANYA format JSON:
+                {"isTransaction": false, "reply": "Jawaban Saku Harian sebagai asisten keuangan yang cerdas dan bijak"}`;
 
-            const parsed = JSON.parse(cleanedJson);
+                const aiResp = await callGeminiAPI(checkPrompt);
+                let cleanedJson = aiResp.replace(/```json/g, '').replace(/```/g, '').trim();
+                const firstOpen = cleanedJson.indexOf('{');
+                const lastClose = cleanedJson.lastIndexOf('}');
+                if (firstOpen !== -1 && lastClose !== -1) cleanedJson = cleanedJson.substring(firstOpen, lastClose + 1);
 
-            if (parsed.isTransaction) {
-                await saveAndNotify(parsed, chatId);
-            } else {
-                await sendTelegramMessage(chatId, `🤖 *Saku Harian:* ${parsed.reply}`, buildMainMenuInlineKeyboard());
+                const parsed = JSON.parse(cleanedJson);
+                if (parsed.isTransaction) {
+                    await saveAndNotify(parsed, chatId);
+                } else {
+                    await sendTelegramMessage(chatId, `🤖 *Saku Harian:* ${parsed.reply}`, buildMainMenuInlineKeyboard());
+                }
+            } catch {
+                const { balance } = await getRunningBalanceSummary();
+                await sendTelegramMessage(
+                    chatId,
+                    `🧭 *MENU SAKU HARIAN SMART PLANNER*\n━━━━━━━━━━━━━━━━━━━\n💳 *Saldo Berjalan:* *Rp ${balance.toLocaleString('id-ID')}*\n\n👇 Silakan pilih tombol aksi cepat di bawah ini tanpa perlu repot mengetik:`,
+                    buildMainMenuInlineKeyboard()
+                );
             }
         }
     } catch (err) {
         console.error("Error:", err);
         await sendTelegramMessage(
             chatId,
-            "⚠️ Format pesan kurang jelas. Anda bisa langsung menekan tombol *🟢 ➕ Pemasukan*, *🔴 ➖ Pengeluaran*, atau *💰 Cek Saldo* pada menu di bawah!",
+            "🧭 Silakan gunakan tombol menu cepat di bawah ini untuk mencatat *🟢 Pemasukan*, *🔴 Pengeluaran*, *💰 Cek Saldo*, atau *🔄 Hapus/Reset Saldo*:",
             buildMainMenuInlineKeyboard()
         );
     }
