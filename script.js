@@ -180,6 +180,14 @@ const DEFAULT_BILLS = [
     { id: 'bill-stream', name: 'Langganan Hiburan / Cloud', amount: 85000, dueDay: 28, category: 'Langganan Digital', paidMonths: [] }
 ];
 
+const COW_TIPS = [
+    '🐮 Moo-Moo: "Moo! Rumput segar itu kayak tabungan rutin, makin rajin dikumpulin makin makmur kandangnya!"',
+    '🥛 Moo-Moo: "Segelas susu tiap pagi, satu pos tabungan tiap gajian! Pisahkan rekening darurat biar gak kepake belanja impulsif."',
+    '🍀 Moo-Moo: "Nemuin daun semanggi keberuntungan itu rezeki, tapi kelola jatah harian (Safe-to-Spend) itu kunci kaya betulan!"',
+    '🔔 Moo-Moo: "Kliningan loncengku berbunyi tanda tagihan listrik & wi-fi harus dibayar tepat waktu sebelum jatuh tempo!"',
+    '🌾 Moo-Moo: "Mau jajan boba atau kopi kekinian? Boleh, asal jatah Safe-to-Spend hari ini masih hijau dan aman, Moo!"'
+];
+
 const SLOTH_TIPS = [
     '🦥 Tips Saku: Gunakan rumus 50/30/20! Maksimal 50% kebutuhan pokok, 30% keinginan, dan minimal 20% langsung ditabung di awal gajian.',
     '👛 Tips Saku: Pisahkan e-wallet harian (GoPay/DANA/OVO) dengan rekening tabungan utama (BCA/Mandiri/SeaBank) agar uang tabungan tidak terpakai!',
@@ -281,6 +289,13 @@ const elements = {
     mascotSpeech: document.getElementById('mascotSpeech'),
     mascotMouth: document.getElementById('mascotMouth'),
     mascotSweat: document.getElementById('mascotSweat'),
+    mascotTabCow: document.getElementById('mascotTabCow'),
+    mascotTabSloth: document.getElementById('mascotTabSloth'),
+    cowCartoonSvg: document.getElementById('cowCartoonSvg'),
+    slothCartoonSvg: document.getElementById('slothCartoonSvg'),
+    cowMouth: document.getElementById('cowMouth'),
+    cowSweat: document.getElementById('cowSweat'),
+    mascotCaption: document.getElementById('mascotCaption'),
     plannerMoodBadge: document.getElementById('plannerMoodBadge'),
     billDialog: document.getElementById('billDialog'),
     billForm: document.getElementById('billForm'),
@@ -310,6 +325,8 @@ let selectedDateKey = localDateKey(new Date());
 let selectedWalletFilter = 'all';
 let calendarViewMode = 'both';
 let noticeTimeout;
+let currentMascot = localStorage.getItem('saku_mascot') || 'cow';
+let cowTipIndex = 0;
 let slothTipIndex = 0;
 
 const currencyFormatter = new Intl.NumberFormat('id-ID', {
@@ -484,7 +501,7 @@ function classifyExpenseBucket(category, desc) {
 function triggerCartoonCelebration(count = 14) {
     const container = document.getElementById('cartoonCelebration');
     if (!container) return;
-    const symbols = ['🪙', '✨', '💰', '★', 'Rp', '🎉', '🦥'];
+    const symbols = ['🪙', '✨', '🥛', '🍀', '🐮', '🌾', '💰', '★', 'Rp', '🎉', '🦥'];
 
     for (let i = 0; i < count; i++) {
         const particle = document.createElement('span');
@@ -507,30 +524,86 @@ function triggerCartoonCelebration(count = 14) {
 }
 
 function updateMascotMood(mood, customMessage) {
-    if (!elements.mascotMouth || !elements.mascotSweat) return;
+    const isCow = (currentMascot === 'cow');
 
-    if (mood === 'danger') {
-        elements.mascotMouth.setAttribute('d', 'M111 97C115 91 125 91 129 97');
-        elements.mascotSweat.setAttribute('opacity', '1');
-        elements.plannerMoodBadge.textContent = '🚨 Waspada Arus Kas!';
-        elements.plannerMoodBadge.style.background = '#ffd5cf';
-        elements.plannerMoodBadge.style.color = '#8c271e';
-    } else if (mood === 'warning') {
-        elements.mascotMouth.setAttribute('d', 'M112 95L128 95');
-        elements.mascotSweat.setAttribute('opacity', '0.85');
-        elements.plannerMoodBadge.textContent = '⚠️ Rem Belanja Harian';
-        elements.plannerMoodBadge.style.background = '#ffe8b3';
-        elements.plannerMoodBadge.style.color = '#7a5206';
-    } else {
-        elements.mascotMouth.setAttribute('d', 'M110 92C115 100 125 100 130 92');
-        elements.mascotSweat.setAttribute('opacity', '0');
-        elements.plannerMoodBadge.textContent = '✨ Smart Planner Sehat';
-        elements.plannerMoodBadge.style.background = '';
-        elements.plannerMoodBadge.style.color = '';
+    // Update Sloth mouth & sweat
+    if (elements.mascotMouth && elements.mascotSweat) {
+        if (mood === 'danger') {
+            elements.mascotMouth.setAttribute('d', 'M111 97C115 91 125 91 129 97');
+            elements.mascotSweat.setAttribute('opacity', '1');
+        } else if (mood === 'warning') {
+            elements.mascotMouth.setAttribute('d', 'M112 95L128 95');
+            elements.mascotSweat.setAttribute('opacity', '0.85');
+        } else {
+            elements.mascotMouth.setAttribute('d', 'M110 92C115 100 125 100 130 92');
+            elements.mascotSweat.setAttribute('opacity', '0');
+        }
     }
 
-    if (customMessage) {
+    // Update Cow mouth & sweat
+    if (elements.cowMouth && elements.cowSweat) {
+        if (mood === 'danger') {
+            elements.cowMouth.setAttribute('d', 'M112 107 C116 102 124 102 128 107');
+            elements.cowSweat.setAttribute('opacity', '1');
+        } else if (mood === 'warning') {
+            elements.cowMouth.setAttribute('d', 'M112 105 L128 105');
+            elements.cowSweat.setAttribute('opacity', '0.85');
+        } else {
+            elements.cowMouth.setAttribute('d', 'M112 103 C116 109 124 109 128 103');
+            elements.cowSweat.setAttribute('opacity', '0');
+        }
+    }
+
+    if (elements.plannerMoodBadge) {
+        if (mood === 'danger') {
+            elements.plannerMoodBadge.textContent = '🚨 Waspada Arus Kas!';
+            elements.plannerMoodBadge.style.background = '#ffd5cf';
+            elements.plannerMoodBadge.style.color = '#8c271e';
+        } else if (mood === 'warning') {
+            elements.plannerMoodBadge.textContent = '⚠️ Rem Belanja Harian';
+            elements.plannerMoodBadge.style.background = '#ffe8b3';
+            elements.plannerMoodBadge.style.color = '#7a5206';
+        } else {
+            elements.plannerMoodBadge.textContent = isCow ? '🍀 Sapi Moo-Moo: Kas Subur' : '✨ Mode Hemat Aktif';
+            elements.plannerMoodBadge.style.background = '';
+            elements.plannerMoodBadge.style.color = '';
+        }
+    }
+
+    if (customMessage && elements.mascotSpeech) {
         elements.mascotSpeech.textContent = customMessage;
+    }
+}
+
+function switchMascot(name, announce = false) {
+    currentMascot = (name === 'sloth') ? 'sloth' : 'cow';
+    localStorage.setItem('saku_mascot', currentMascot);
+
+    const isCow = (currentMascot === 'cow');
+
+    if (elements.mascotTabCow && elements.mascotTabSloth) {
+        elements.mascotTabCow.classList.toggle('is-active', isCow);
+        elements.mascotTabCow.setAttribute('aria-selected', isCow ? 'true' : 'false');
+        elements.mascotTabSloth.classList.toggle('is-active', !isCow);
+        elements.mascotTabSloth.setAttribute('aria-selected', !isCow ? 'true' : 'false');
+    }
+
+    if (elements.cowCartoonSvg && elements.slothCartoonSvg) {
+        elements.cowCartoonSvg.style.display = isCow ? 'block' : 'none';
+        elements.slothCartoonSvg.style.display = !isCow ? 'block' : 'none';
+    }
+
+    if (elements.mascotCaption) {
+        elements.mascotCaption.textContent = isCow ? 'Klik Moo-Moo untuk tips hemat! 🐾' : 'Klik Saku untuk motivasi! 🦥';
+    }
+
+    if (elements.plannerMoodBadge && !elements.plannerMoodBadge.textContent.includes('Waspada') && !elements.plannerMoodBadge.textContent.includes('Rem')) {
+        elements.plannerMoodBadge.textContent = isCow ? '🍀 Sapi Moo-Moo: Kas Subur' : '✨ Mode Hemat Aktif';
+    }
+
+    if (announce && elements.mascotSpeech) {
+        elements.mascotSpeech.textContent = isCow ? COW_TIPS[cowTipIndex] : SLOTH_TIPS[slothTipIndex];
+        triggerCartoonCelebration(10);
     }
 }
 
@@ -2392,18 +2465,40 @@ elements.confirmResetAllBtn.addEventListener('click', () => executeResetBalance(
 elements.confirmZeroBalanceBtn.addEventListener('click', () => executeResetBalance('zero'));
 elements.confirmZeroWalletBtn.addEventListener('click', () => executeResetBalance('wallet'));
 
-// Mascot Click Interaction
-elements.mascotStage.addEventListener('click', () => {
-    slothTipIndex = (slothTipIndex + 1) % SLOTH_TIPS.length;
-    elements.mascotSpeech.textContent = SLOTH_TIPS[slothTipIndex];
-    triggerCartoonCelebration(10);
-});
-elements.mascotStage.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        elements.mascotStage.click();
-    }
-});
+// Mascot Interactive Switcher & Tips Interaction
+function initializeMascot() {
+    elements.mascotTabCow?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        switchMascot('cow', true);
+    });
+
+    elements.mascotTabSloth?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        switchMascot('sloth', true);
+    });
+
+    elements.mascotStage?.addEventListener('click', (e) => {
+        if (e.target.closest('.mascot-switcher')) return;
+        if (currentMascot === 'cow') {
+            cowTipIndex = (cowTipIndex + 1) % COW_TIPS.length;
+            elements.mascotSpeech.textContent = COW_TIPS[cowTipIndex];
+        } else {
+            slothTipIndex = (slothTipIndex + 1) % SLOTH_TIPS.length;
+            elements.mascotSpeech.textContent = SLOTH_TIPS[slothTipIndex];
+        }
+        triggerCartoonCelebration(10);
+    });
+
+    elements.mascotStage?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            if (e.target.closest('.mascot-switcher')) return;
+            e.preventDefault();
+            elements.mascotStage.click();
+        }
+    });
+
+    switchMascot(currentMascot, false);
+}
 
 // Search & Refresh
 elements.search.addEventListener('input', () => {
@@ -2423,6 +2518,7 @@ document.getElementById('refreshButton').addEventListener('click', loadTransacti
 });
 
 initializeTheme();
+initializeMascot();
 initializeCalendarViewTabs();
 initializeNavigation();
 renderIcons();

@@ -6,9 +6,12 @@
     <meta name="theme-color" content="#f5f6f2">
     <meta name="description" content="Saku Harian Smart Planner — Aplikasi perencana keuangan harian dengan kalender bulanan, rekomendasi finansial pintar, pengingat tagihan, dan ekspor Google Sheets.">
     <title>Saku Harian — Smart Daily Financial Planner</title>
+    <link rel="preconnect" href="https://api.fontshare.com">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+    <!-- Hallmark Hum Theme Typography: Chillax & Geist Mono -->
+    <link href="https://api.fontshare.com/v2/css?f[]=chillax@500,600,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.8/dist/simple-statistics.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
@@ -105,15 +108,16 @@
                 </div>
             </header>
 
-            <!-- HERO BANNER DENGAN KARTUN INTERAKTIF & SMART PLANNER -->
+            <!-- HERO BANNER DENGAN KARTUN INTERAKTIF & SMART PLANNER (HALLMARK HUM THEME) -->
             <section class="hero-planner-banner" aria-labelledby="page-title">
                 <div class="hero-copy-col">
-                    <div class="hero- pill-row">
+                    <div class="hero-pill-row">
                         <span class="eyebrow-pill" id="todayLabel">HARI INI</span>
                         <span class="planner-status-pill" id="plannerMoodBadge">✨ Mode Hemat Aktif</span>
+                        <span class="hum-craft-tag">🐮 Edisi Hum Farm & Craft</span>
                     </div>
-                    <h1 id="page-title">Smart Planner <span>Keuangan Harianmu.</span></h1>
-                    <p class="welcome-copy" id="mascotSpeech">Halo! Aku Saku si Sloth. Yuk pantau jatah uang harian, kalender bulanan, dan tagihanmu agar tabungan makin gendut!</p>
+                    <h1 id="page-title">Smart Planner <mark class="hum-mark">Keuangan Harianmu.</mark></h1>
+                    <p class="welcome-copy" id="mascotSpeech">Halo! Aku Moo-Moo si Sapi Finansial. Rezeki itu seperti susu segar, yuk pantau jatah belanja harian dan tagihanmu agar tabungan makin melimpah!</p>
                     <div class="hero-actions">
                         <button class="button button-primary" id="openTransaction" type="button">
                             <i data-lucide="plus-circle" aria-hidden="true"></i> Catat Transaksi
@@ -130,14 +134,118 @@
                     </div>
                 </div>
 
-                <!-- Maskot Kartun SVG Animasi Interaktif -->
-                <div class="hero-cartoon-stage" id="mascotStage" title="Klik Saku si Sloth untuk tips finansial kejutan!" role="button" tabindex="0" aria-label="Maskot kartun Saku si Sloth, klik untuk tips">
+                <!-- Maskot Kartun SVG Animasi Interaktif: Sapi Lucu (Moo-Moo) & Saku Sloth -->
+                <div class="hero-cartoon-stage" id="mascotStage" title="Klik maskot untuk tips finansial kejutan!" role="button" tabindex="0" aria-label="Maskot kartun animasi interaktif, klik untuk tips">
+                    <div class="mascot-switcher-wrap">
+                        <div class="mascot-switcher" role="tablist" aria-label="Pilih Maskot Kartun">
+                            <button type="button" class="mascot-tab-btn is-active" id="mascotTabCow" data-mascot="cow" aria-selected="true" title="Maskot Sapi Lucu">🐮 Sapi Moo-Moo</button>
+                            <button type="button" class="mascot-tab-btn" id="mascotTabSloth" data-mascot="sloth" aria-selected="false" title="Maskot Saku Sloth">🦥 Saku Sloth</button>
+                        </div>
+                    </div>
+
                     <div class="cartoon-floating-coin coin-1" aria-hidden="true">Rp</div>
-                    <div class="cartoon-floating-coin coin-2" aria-hidden="true">★</div>
-                    <div class="cartoon-floating-coin coin-3" aria-hidden="true">💰</div>
+                    <div class="cartoon-floating-coin coin-2" aria-hidden="true">🍀</div>
+                    <div class="cartoon-floating-coin coin-3" aria-hidden="true">🥛</div>
                     <div class="cartoon-sparkle sp-1" aria-hidden="true">✦</div>
                     <div class="cartoon-sparkle sp-2" aria-hidden="true">✦</div>
-                    <svg class="sloth-cartoon-svg" viewBox="0 0 240 210" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+
+                    <!-- 1. MASKOT SAPI LUCU (MOO-MOO SI SAPI FINANSIAL) -->
+                    <svg class="mascot-svg cow-cartoon-svg" id="cowCartoonSvg" viewBox="0 0 240 210" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                        <!-- Bayangan bawah padang rumput -->
+                        <ellipse cx="120" cy="196" rx="68" ry="10" fill="rgba(22, 27, 38, 0.12)" class="cartoon-shadow"/>
+                        <!-- Rumput Mini Tempat Berdiri -->
+                        <path d="M42 188 C70 178 170 178 198 188 C160 196 80 196 42 188 Z" fill="#EBF3D8" stroke="#DFEDC4" stroke-width="2"/>
+                        <circle cx="56" cy="184" r="3" fill="#FFC8D6"/>
+                        <circle cx="184" cy="184" r="3" fill="#FFD452"/>
+                        <!-- Ekor Sapi Lucu yang Bergoyang -->
+                        <g class="cow-tail">
+                            <path d="M165 142 C188 142 196 126 190 114" stroke="#FAF7F0" stroke-width="5" stroke-linecap="round"/>
+                            <path d="M190 114 C196 109 198 103 190 107 C184 111 185 116 190 114 Z" fill="#262E3D"/>
+                        </g>
+                        <!-- Kaki Sapi Lucu -->
+                        <ellipse cx="88" cy="176" rx="14" ry="11" fill="#FAF7F0" stroke="#161B26" stroke-width="2.5"/>
+                        <path d="M78 178 C80 185 96 185 98 178" fill="#161B26"/>
+                        <ellipse cx="152" cy="176" rx="14" ry="11" fill="#FAF7F0" stroke="#161B26" stroke-width="2.5"/>
+                        <path d="M142 178 C144 185 160 185 162 178" fill="#161B26"/>
+                        <!-- Badan Sapi Bulat Gembul -->
+                        <ellipse cx="120" cy="138" rx="54" ry="45" fill="#FAF7F0" stroke="#161B26" stroke-width="3"/>
+                        <!-- Corak / Spot Hitam Khas Sapi -->
+                        <path d="M76 122 C66 138 88 156 104 148 C116 142 96 116 76 122 Z" fill="#262E3D"/>
+                        <path d="M145 152 C158 158 170 148 168 136 C165 125 150 134 145 152 Z" fill="#262E3D"/>
+                        <!-- Kalung Merah/Coral & Lonceng Emas Gemerincing -->
+                        <path d="M88 122 C105 136 135 136 152 122" stroke="#F25B49" stroke-width="8" stroke-linecap="round"/>
+                        <g class="cow-bell">
+                            <circle cx="120" cy="138" r="11" fill="#FFD452" stroke="#C89116" stroke-width="2.5"/>
+                            <circle cx="120" cy="142" r="3.2" fill="#8C5C04"/>
+                            <line x1="114" y1="135" x2="126" y2="135" stroke="#C89116" stroke-width="2"/>
+                        </g>
+                        <!-- Tangan Kiri memegang Botol Susu Tabungan -->
+                        <g class="cow-left-arm">
+                            <ellipse cx="72" cy="136" rx="13" ry="10" transform="rotate(15 72 136)" fill="#FAF7F0" stroke="#161B26" stroke-width="2.5"/>
+                            <rect x="48" y="122" width="22" height="34" rx="6" fill="#FFFFFF" stroke="#161B26" stroke-width="2"/>
+                            <rect x="52" y="118" width="14" height="6" rx="2" fill="#4FD893" stroke="#161B26" stroke-width="1.5"/>
+                            <rect x="52" y="132" width="14" height="12" rx="3" fill="#EBF3D8"/>
+                            <text x="59" y="141" text-anchor="middle" font-size="7" font-weight="800" fill="#1A7A4D" font-family="sans-serif">Rp</text>
+                        </g>
+                        <!-- Tangan Kanan Melambai dengan Koin Emas -->
+                        <g class="cow-wave-arm">
+                            <ellipse cx="168" cy="128" rx="14" ry="11" transform="rotate(-25 168 128)" fill="#FAF7F0" stroke="#161B26" stroke-width="2.5"/>
+                            <circle cx="188" cy="106" r="15" fill="#FFD452" stroke="#C89116" stroke-width="2.5"/>
+                            <text x="188" y="111" text-anchor="middle" fill="#785204" font-size="10" font-weight="800" font-family="sans-serif">Rp</text>
+                        </g>
+                        <!-- Kepala Sapi -->
+                        <g class="cow-head">
+                            <!-- Telinga Kiri Bergoyang -->
+                            <g class="cow-ear-left">
+                                <ellipse cx="68" cy="62" rx="18" ry="10" transform="rotate(-20 68 62)" fill="#FAF7F0" stroke="#161B26" stroke-width="2.5"/>
+                                <ellipse cx="69" cy="62" rx="12" ry="6" transform="rotate(-20 69 62)" fill="#FFC8D6"/>
+                            </g>
+                            <!-- Telinga Kanan Bergoyang -->
+                            <g class="cow-ear-right">
+                                <ellipse cx="172" cy="62" rx="18" ry="10" transform="rotate(20 172 62)" fill="#FAF7F0" stroke="#161B26" stroke-width="2.5"/>
+                                <ellipse cx="171" cy="62" rx="12" ry="6" transform="rotate(20 171 62)" fill="#FFC8D6"/>
+                            </g>
+                            <!-- Tanduk Kuning Imut -->
+                            <path d="M96 46 C94 32 86 32 84 37 C87 45 94 48 96 46 Z" fill="#F5B942" stroke="#C89116" stroke-width="2"/>
+                            <path d="M144 46 C146 32 154 32 156 37 C153 45 146 48 144 46 Z" fill="#F5B942" stroke="#C89116" stroke-width="2"/>
+                            <!-- Lingkar Kepala Sapi -->
+                            <ellipse cx="120" cy="74" rx="46" ry="38" fill="#FAF7F0" stroke="#161B26" stroke-width="3"/>
+                            <!-- Spot Hitam di Dahi / Mata Kanan -->
+                            <path d="M128 44 C148 40 162 60 156 80 C146 88 135 68 128 44 Z" fill="#262E3D"/>
+                            <!-- Rambut Jambul Sapi Lucu -->
+                            <path d="M114 38 C116 28 124 28 126 38 C128 30 134 32 132 40" stroke="#FAF7F0" stroke-width="4" stroke-linecap="round"/>
+                            <!-- Mata Berkedip & Penuh Ekspresi -->
+                            <g class="cow-eyes">
+                                <circle cx="102" cy="72" r="5.5" fill="#161B26"/>
+                                <circle cx="104.5" cy="69.5" r="2" fill="#FFFFFF"/>
+                                <circle cx="100.5" cy="73.5" r="1" fill="#FFFFFF"/>
+                                <circle cx="138" cy="72" r="5.5" fill="#161B26"/>
+                                <circle cx="140.5" cy="69.5" r="2" fill="#FFFFFF"/>
+                                <circle cx="136.5" cy="73.5" r="1" fill="#FFFFFF"/>
+                            </g>
+                            <!-- Moncong / Hidung Pink Gembul -->
+                            <rect x="92" y="80" width="56" height="34" rx="17" fill="#FFC8D6" stroke="#161B26" stroke-width="2.5"/>
+                            <ellipse cx="108" cy="94" rx="4" ry="5" fill="#8C3B4E"/>
+                            <ellipse cx="132" cy="94" rx="4" ry="5" fill="#8C3B4E"/>
+                            <path id="cowMouth" class="cow-mouth-path" d="M112 103 C116 109 124 109 128 103" stroke="#8C3B4E" stroke-width="3" stroke-linecap="round"/>
+                            <!-- Pipi Merona / Blush -->
+                            <ellipse cx="85" cy="88" rx="7" ry="4.5" fill="#FFA5B9" opacity="0.8"/>
+                            <ellipse cx="155" cy="88" rx="7" ry="4.5" fill="#FFA5B9" opacity="0.8"/>
+                            <!-- Daun Semanggi 4 Daun Keberuntungan di Mulut -->
+                            <g class="cow-clover">
+                                <path d="M126 103 C138 106 146 112 150 118" stroke="#3E8027" stroke-width="2.5" stroke-linecap="round"/>
+                                <circle cx="148" cy="116" r="3.5" fill="#4FD893"/>
+                                <circle cx="154" cy="116" r="3.5" fill="#4FD893"/>
+                                <circle cx="151" cy="112" r="3.5" fill="#4FD893"/>
+                                <circle cx="151" cy="120" r="3.5" fill="#4FD893"/>
+                            </g>
+                            <!-- Tetes Keringat (Muncul saat boros) -->
+                            <path id="cowSweat" class="cow-sweat-path" d="M165 52C165 52 171 60 171 64C171 67.3 168.3 70 165 70C161.7 70 159 67.3 159 64C159 60 165 52 165 52Z" fill="#5B95F7" opacity="0"/>
+                        </g>
+                    </svg>
+
+                    <!-- 2. MASKOT SAKU SLOTH (ALTERNATIF YANG DAPAT DITUKAR) -->
+                    <svg class="mascot-svg sloth-cartoon-svg" id="slothCartoonSvg" viewBox="0 0 240 210" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:none;">
                         <!-- Bayangan bawah -->
                         <ellipse cx="120" cy="194" rx="68" ry="10" fill="rgba(37, 54, 28, 0.14)" class="cartoon-shadow"/>
                         <!-- Daun & Cabang Pohon tempat bersandar -->
@@ -188,15 +296,16 @@
                             <line x1="115" y1="76" x2="125" y2="76" stroke="#29451D" stroke-width="3"/>
                             <!-- Hidung & Mulut Ekspresif -->
                             <ellipse cx="120" cy="85" rx="6" ry="4.2" fill="#4A3525"/>
-                            <path id="mascotMouth" d="M111 93C115 99 125 99 129 93" stroke="#4A3525" stroke-width="3" stroke-linecap="round"/>
+                            <path id="mascotMouth" class="sloth-mouth-path" d="M111 93C115 99 125 99 129 93" stroke="#4A3525" stroke-width="3" stroke-linecap="round"/>
                             <!-- Pipi Merona -->
                             <ellipse cx="86" cy="90" rx="6" ry="3.5" fill="#F49D94" opacity="0.7"/>
                             <ellipse cx="154" cy="90" rx="6" ry="3.5" fill="#F49D94" opacity="0.7"/>
                             <!-- Tetes Keringat (Muncul saat boros) -->
-                            <path id="mascotSweat" d="M163 54C163 54 169 62 169 66C169 69.3 166.3 72 163 72C159.7 72 157 69.3 157 66C157 62 163 54 163 54Z" fill="#6EC6FF" opacity="0"/>
+                            <path id="mascotSweat" class="sloth-sweat-path" d="M163 54C163 54 169 62 169 66C169 69.3 166.3 72 163 72C159.7 72 157 69.3 157 66C157 62 163 54 163 54Z" fill="#6EC6FF" opacity="0"/>
                         </g>
                     </svg>
-                    <span class="mascot-caption">Klik Saku untuk motivasi! 🐾</span>
+
+                    <span class="mascot-caption" id="mascotCaption">Klik Moo-Moo untuk tips hemat! 🐾</span>
                 </div>
             </section>
 
