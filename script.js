@@ -1,5 +1,6 @@
 const API_BASE_URL = 'https://saku-sloth.vercel.app/api';
 const TRANSACTIONS_URL = `${API_BASE_URL}/transactions`;
+const DEBTS_URL = `${API_BASE_URL}/debts`;
 const VISIBLE_TRANSACTION_LIMIT = 6;
 const CATEGORY_COLORS = ['#89bd5c', '#e9756a', '#6b96d6', '#f5b942', '#9b7ede', '#57b8a6', '#e79a5a'];
 
@@ -279,6 +280,28 @@ const elements = {
     billPaidCount: document.getElementById('billPaidCount'),
     notifBadge: document.getElementById('notifBadge'),
     navBillBadge: document.getElementById('navBillBadge'),
+    // Piutang & Utang Elements
+    debtsList: document.getElementById('debtsList'),
+    debtsEmptyState: document.getElementById('debtsEmptyState'),
+    debtsListStatus: document.getElementById('debtsListStatus'),
+    piutangTotal: document.getElementById('piutangTotal'),
+    piutangOutstanding: document.getElementById('piutangOutstanding'),
+    utangTotal: document.getElementById('utangTotal'),
+    utangOutstanding: document.getElementById('utangOutstanding'),
+    debtsNetValue: document.getElementById('debtsNetValue'),
+    debtsNetCaption: document.getElementById('debtsNetCaption'),
+    debtDialog: document.getElementById('debtDialog'),
+    debtForm: document.getElementById('debtForm'),
+    editingDebtId: document.getElementById('editingDebtId'),
+    debtDialogTitle: document.getElementById('debtDialogTitle'),
+    debtFormError: document.getElementById('debtFormError'),
+    debtTypeFilter: document.getElementById('debtTypeFilter'),
+    debtStatusFilter: document.getElementById('debtStatusFilter'),
+    debtSearch: document.getElementById('debtSearch'),
+    openAddDebtBtn: document.getElementById('openAddDebtBtn'),
+    closeDebtDialog: document.getElementById('closeDebtDialog'),
+    cancelDebtBtn: document.getElementById('cancelDebtBtn'),
+    openAddDebtFromEmpty: document.getElementById('openAddDebtFromEmpty'),
     notifPopover: document.getElementById('notifPopover'),
     notifList: document.getElementById('notifList'),
     urgentBillBanner: document.getElementById('urgentBillBanner'),
@@ -318,7 +341,11 @@ const elements = {
 };
 
 let transactions = [];
+let debts = [];
 let bills = loadBills();
+let selectedDebtTypeFilter = 'all';
+let selectedDebtStatusFilter = 'all';
+let debtSearchQuery = '';
 let monthlyBudgetTarget = Number(localStorage.getItem(STORAGE_KEYS.budget) || 0);
 let showAllTransactions = false;
 let selectedDateKey = localDateKey(new Date());
@@ -1817,6 +1844,211 @@ async function loadTransactions() {
     }
 }
 
+/* ================= PIUTANG & UTANG ================= */
+
+async function loadDebts() {
+    elements.debtsList.hidden = false;
+    elements.debtsEmptyState.hidden = true;
+    const loadingState = document.createElement('div');
+    loadingState.className = 'loading-state';
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner';
+    spinner.setAttribute('aria-hidden', 'true');
+    loadingState.append(spinner, document.createTextNode('Memuat data piutang & utang...'));
+    elements.debtsList.replaceChildren(loadingState);
+
+    try {
+        const response = await fetch(DEBTS_URL, { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error(`Server merespons ${response.status}`);
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('Format data utang/piutang tidak sesuai.');
+        debts = data;
+        renderDebtsSummary(debts);
+        renderDebtsList(debts);
+    } catch (error) {
+        console.warn('Gagal memuat utang/piutang dari server:', error);
+        const cached = JSON.parse(localStorage.getItem('saku-local-debts-cache-v1') || '[]');
+        debts = Array.isArray(cached) ? cached : [];
+        renderDebtsSummary(debts);
+        renderDebtsList(debts);
+    }
+}
+
+async function saveDebtLocalCache() {
+    try { localStorage.setItem('saku-local-debts-cache-v1', JSON.stringify(debts)); } catch {}
+}
+
+async function createNewDebt({ type, desc, amount, dueDate, status, paidAmount }) {
+    try {
+        const response = await fetch(DEBTS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ type, desc, amount: Number(amount), due_date: dueDate || null, status, paid_amount: Number(paidAmount) || 0 })
+        });
+        if (!response.ok) {
+            const errorBody = await response.json().catch(() => ({}));
+            throw new Error(errorBody.error || `Server merespons ${response.status}`);
+        }
+        const savedDebt = await response.json();
+        debts.unshift(savedDebt);
+        await saveDebtLocalCache();
+        renderDebtsSummary(debts);
+        renderDebtsList(debts);
+        setNotice(`Berhasil mencatat ${type === 'piutang' ? 'piutang' : 'utang'} baru!`);
+        return true;
+    } catch (error) {
+        console.error('Gagal menyimpan utang/piutang:', error);
+        setNotice('Gagal menyimpan utang/piutang. Coba lagi nanti.');
+        return false;
+    }
+}
+
+async function updateDebt(debtId, updates) {
+    try {
+        const response = await fetch(`${DEBTS_URL}/${debtId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify(updates)
+        });
+        if (!response.ok) throw new Error(`Server merespons ${response.status}`);
+        const updated = await response.json();
+        const idx = debts.findIndex((d) => d.id === debtId);
+        if (idx !== -1) debts[idx] = updated;
+        await saveDebtLocalCache();
+        renderDebtsSummary(debts);
+        renderDebtsList(debts);
+        return true;
+    } catch (error) {
+        console.error('Gagal memperbarui utang/piutang:', error);
+        setNotice('Gagal memperbarui status utang/piutang.');
+        return false;
+    }
+}
+
+async function deleteDebt(debtId) {
+    if (!confirm('Yakin ingin menghapus data utang/piutang ini?')) return false;
+    try {
+        const response = await fetch(`${DEBTS_URL}/${debtId}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error(`Server merespons ${response.status}`);
+        debts = debts.filter((d) => d.id !== debtId);
+        await saveDebtLocalCache();
+        renderDebtsSummary(debts);
+        renderDebtsList(debts);
+        setNotice('Data utang/piutang berhasil dihapus.');
+        return true;
+    } catch (error) {
+        console.error('Gagal menghapus utang/piutang:', error);
+        setNotice('Gagal menghapus data utang/piutang.');
+        return false;
+    }
+}
+
+function formatDebtStatusBadge(status) {
+    const config = { pending: { label: 'Belum Lunas', color: '#e9756a' }, paid: { label: 'Sudah Lunas', color: '#89bd5c' }, partial: { label: 'Sebagian Lunas', color: '#f5b942' } };
+    const c = config[status] || config.pending;
+    return `<span class="debt-status-badge" style="background: color-mix(in srgb, ${c.color} 15%, transparent); color: ${c.color}; border: 1px solid ${c.color};">${c.label}</span>`;
+}
+
+function formatCurrencyId(amount) {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(Number(amount || 0));
+}
+
+function renderDebtsSummary(debtsList) {
+    const piutang = debtsList.filter((d) => d.type === 'piutang');
+    const utang = debtsList.filter((d) => d.type === 'utang');
+    const piutangTotal = piutang.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+    const piutangPaid = piutang.reduce((sum, d) => sum + Number(d.paid_amount || 0), 0);
+    const piutangOutstanding = piutangTotal - piutangPaid;
+    const utangTotal = utang.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+    const utangPaid = utang.reduce((sum, d) => sum + Number(d.paid_amount || 0), 0);
+    const utangOutstanding = utangTotal - utangPaid;
+    const net = piutangOutstanding - utangOutstanding;
+    elements.piutangTotal.textContent = formatCurrencyId(piutangTotal);
+    elements.piutangOutstanding.textContent = `Belum lunas: ${formatCurrencyId(piutangOutstanding)}`;
+    elements.utangTotal.textContent = formatCurrencyId(utangTotal);
+    elements.utangOutstanding.textContent = `Belum lunas: ${formatCurrencyId(utangOutstanding)}`;
+    elements.debtsNetValue.textContent = formatCurrencyId(net);
+    elements.debtsNetCaption.textContent = net >= 0 ? 'Piutang lebih besar dari utang' : 'Utang lebih besar dari piutang';
+    elements.debtsNetValue.style.color = net >= 0 ? '#89bd5c' : '#e9756a';
+}
+
+function renderDebtsList(debtsList) {
+    const filtered = debtsList.filter((d) => {
+        if (selectedDebtTypeFilter !== 'all' && d.type !== selectedDebtTypeFilter) return false;
+        if (selectedDebtStatusFilter !== 'all' && d.status !== selectedDebtStatusFilter) return false;
+        const q = debtSearchQuery.toLowerCase();
+        return (d.desc || '').toLowerCase().includes(q);
+    });
+    elements.debtsList.replaceChildren();
+    if (filtered.length === 0) {
+        elements.debtsList.hidden = true;
+        elements.debtsEmptyState.hidden = false;
+        elements.debtsListStatus.textContent = '';
+        return;
+    }
+    elements.debtsList.hidden = false;
+    elements.debtsEmptyState.hidden = true;
+    elements.debtsListStatus.textContent = `${filtered.length} data utang/piutang`;
+    filtered.forEach((debt) => {
+        const row = document.createElement('article');
+        row.className = 'debt-row';
+        row.style.animation = 'fadeIn 0.4s ease forwards';
+        const isPiutang = debt.type === 'piutang';
+        const typeLabel = isPiutang ? 'PIUTANG' : 'UTANG';
+        const typeIcon = isPiutang ? '🐮💸' : '🐮💰';
+        const outstanding = Number(debt.amount || 0) - Number(debt.paid_amount || 0);
+        const typeBadge = document.createElement('span');
+        typeBadge.className = `debt-type-badge ${isPiutang ? 'piutang' : 'utang'}`;
+        typeBadge.innerHTML = `${typeIcon} ${typeLabel}`;
+        const desc = document.createElement('div');
+        desc.className = 'debt-desc';
+        desc.textContent = debt.desc || '-';
+        const meta = document.createElement('div');
+        meta.className = 'debt-meta';
+        if (debt.due_date) {
+            const due = new Date(debt.due_date);
+            meta.innerHTML = `<span class="debt-due">${due.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>`;
+        }
+        const amount = document.createElement('div');
+        amount.className = 'debt-amount';
+        amount.textContent = formatCurrencyId(debt.amount);
+        const statusBadge = document.createElement('span');
+        statusBadge.className = 'debt-status';
+        statusBadge.innerHTML = formatDebtStatusBadge(debt.status);
+        const paidInfo = document.createElement('div');
+        paidInfo.className = 'debt-paid';
+        if (Number(debt.paid_amount || 0) > 0) {
+            paidInfo.textContent = `Terbayar: ${formatCurrencyId(debt.paid_amount)}`;
+        } else {
+            paidInfo.textContent = 'Belum dibayar';
+            paidInfo.style.color = '#e9756a';
+        }
+        const actions = document.createElement('div');
+        actions.className = 'debt-actions';
+        const payBtn = document.createElement('button');
+        payBtn.className = 'debt-btn debt-btn-pay';
+        payBtn.title = 'Tandai sebagai lunas / bayar sebagian';
+        payBtn.innerHTML = '💵 Bayar';
+        payBtn.addEventListener('click', () => {
+            const newPaid = prompt(`Masukkan jumlah yang sudah dibayar untuk "${debt.desc}"\n(Sisa belum lunas: ${formatCurrencyId(outstanding)})`, String(debt.paid_amount || 0));
+            if (newPaid !== null) {
+                const paidNum = Number(newPaid);
+                if (isNaN(paidNum) || paidNum < 0) { setNotice('Nominal tidak valid.'); return; }
+                const newStatus = paidNum >= Number(debt.amount) ? 'paid' : paidNum > 0 ? 'partial' : 'pending';
+                updateDebt(debt.id, { status: newStatus, paid_amount: paidNum });
+            }
+        });
+        const delBtn = document.createElement('button');
+        delBtn.className = 'debt-btn debt-btn-delete';
+        delBtn.title = 'Hapus data utang/piutang';
+        delBtn.textContent = '🗑️';
+        delBtn.addEventListener('click', () => deleteDebt(debt.id));
+        actions.append(payBtn, delBtn);
+        row.append(typeBadge, desc, meta, amount, statusBadge, paidInfo, actions);
+        elements.debtsList.append(row);
+    });
+}
+
 async function createNewTransaction({ desc, amount, type, category, wallet, dateStr }) {
     const chosenDateIso = dateStr ? `${dateStr}T12:00:00` : new Date().toISOString();
     const cleanWallet = wallet || 'Tunai';
@@ -2354,7 +2586,7 @@ function initializeTheme() {
 
 function initializeNavigation() {
     const navLinks = [...document.querySelectorAll('[data-nav]')];
-    const sections = [...document.querySelectorAll('#overview, #wallets, #calendar-section, #planner, #bills, #insights, #transactions')];
+    const sections = [...document.querySelectorAll('#overview, #wallets, #calendar-section, #planner, #bills, #insights, #transactions, #debts')];
 
     const observer = new IntersectionObserver((entries) => {
         const visible = entries
@@ -2431,6 +2663,63 @@ document.getElementById('addBillBtn').addEventListener('click', () => elements.b
 document.getElementById('closeBillDialog').addEventListener('click', () => elements.billDialog.close());
 document.getElementById('cancelBillDialog').addEventListener('click', () => elements.billDialog.close());
 elements.billForm.addEventListener('submit', submitNewBill);
+
+// Piutang & Utang Dialog Events
+document.getElementById('openAddDebtBtn').addEventListener('click', () => {
+    elements.debtForm.reset();
+    elements.editingDebtId.value = '';
+    elements.debtDialogTitle.textContent = 'Tambah Piutang / Utang';
+    document.querySelector('input[name="debtType"][value="piutang"]').checked = true;
+    elements.debtFormError.hidden = true;
+    elements.debtDialog.showModal();
+});
+document.getElementById('openAddDebtFromEmpty').addEventListener('click', () => {
+    elements.debtForm.reset();
+    elements.editingDebtId.value = '';
+    elements.debtDialogTitle.textContent = 'Tambah Piutang / Utang';
+    document.querySelector('input[name="debtType"][value="piutang"]').checked = true;
+    elements.debtFormError.hidden = true;
+    elements.debtDialog.showModal();
+});
+document.getElementById('closeDebtDialog').addEventListener('click', () => elements.debtDialog.close());
+document.getElementById('cancelDebtBtn').addEventListener('click', () => elements.debtDialog.close());
+
+async function submitNewDebt(event) {
+    event.preventDefault();
+    elements.debtFormError.hidden = true;
+    const formData = new FormData(elements.debtForm);
+    const type = String(formData.get('debtType') || 'piutang');
+    const desc = String(formData.get('desc') || '').trim();
+    const amount = Number(formData.get('amount'));
+    const dueDate = String(formData.get('dueDate') || '').trim() || null;
+    const status = String(formData.get('status') || 'pending');
+    const paidAmount = Number(formData.get('paidAmount') || 0);
+    if (!desc || !amount || amount <= 0) {
+        elements.debtFormError.hidden = false;
+        elements.debtFormError.textContent = 'Nama dan nominal harus diisi dengan benar.';
+        return;
+    }
+    const ok = await createNewDebt({ type, desc, amount, dueDate, status, paidAmount });
+    if (ok) {
+        elements.debtForm.reset();
+        elements.debtDialog.close();
+    }
+}
+elements.debtForm.addEventListener('submit', submitNewDebt);
+
+// Debt filter & search events
+elements.debtTypeFilter.addEventListener('change', () => {
+    selectedDebtTypeFilter = elements.debtTypeFilter.value;
+    renderDebtsList(debts);
+});
+elements.debtStatusFilter.addEventListener('change', () => {
+    selectedDebtStatusFilter = elements.debtStatusFilter.value;
+    renderDebtsList(debts);
+});
+elements.debtSearch.addEventListener('input', () => {
+    debtSearchQuery = elements.debtSearch.value;
+    renderDebtsList(debts);
+});
 
 document.getElementById('testNotificationBtn').addEventListener('click', requestAndTestBrowserNotification);
 document.getElementById('enableBrowserNotifBtn').addEventListener('click', requestAndTestBrowserNotification);
@@ -2534,6 +2823,7 @@ initializeCalendarViewTabs();
 initializeNavigation();
 renderIcons();
 loadTransactions();
+loadDebts();
 
 // Sinkronisasi otomatis menu & webhook Telegram di latar belakang
 fetch(`${API_BASE_URL}/setup-telegram-menu`)

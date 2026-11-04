@@ -2181,3 +2181,177 @@ h1 {
         transition-duration: 0.01ms !important;
     }
 }
+
+/* ================= PIUTANG & UTANG PANEL ================= */
+.debts-summary-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+}
+.debt-summary-card {
+    padding: 18px;
+    border-radius: 16px;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.debt-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+}
+.debt-label {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+}
+.debt-icon {
+    font-size: 20px;
+}
+.debt-value {
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0;
+}
+.debt-foot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+}
+.debt-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+.debt-dot.piutang-dot { background: #89bd5c; }
+.debt-dot.utang-dot { background: #e9756a; }
+.debt-dot.net-dot { background: #f5b942; }
+
+.debts-filter {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.filter-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.filter-box select {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    color: var(--ink);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.debts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.debt-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    animation: fadeIn 0.4s ease forwards;
+}
+.debt-type-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid;
+}
+.debt-type-badge.piutang {
+    background: color-mix(in srgb, #89bd5c 15%, transparent);
+    color: #89bd5c;
+    border-color: #89bd5c;
+}
+.debt-type-badge.utang {
+    background: color-mix(in srgb, #e9756a 15%, transparent);
+    color: #e9756a;
+    border-color: #e9756a;
+}
+.debt-desc {
+    font-weight: 700;
+    min-width: 140px;
+}
+.debt-meta {
+    font-size: 11px;
+    color: var(--muted);
+}
+.debt-due {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    background: var(--surface);
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+}
+.debt-amount {
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    min-width: 90px;
+    text-align: right;
+}
+.debt-status {
+    min-width: 110px;
+}
+.debt-paid {
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 100px;
+    text-align: right;
+}
+.debt-actions {
+    display: flex;
+    gap: 6px;
+}
+.debt-btn {
+    border: 0;
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.12s;
+}
+.debt-btn-pay {
+    background: #89bd5c;
+    color: #fff;
+}
+.debt-btn-pay:hover { background: #6fa04c; }
+.debt-btn-delete {
+    background: #e9756a;
+    color: #fff;
+}
+.debt-btn-delete:hover { background: #c36459; }
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}

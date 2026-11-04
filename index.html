@@ -51,6 +51,7 @@
                 </a>
                 <a class="nav-link" href="#insights" data-nav="insights"><i class="nav-symbol" data-lucide="chart-pie" aria-hidden="true"></i>Analisis Kas</a>
                 <a class="nav-link" href="#transactions" data-nav="transactions"><i class="nav-symbol" data-lucide="arrow-left-right" aria-hidden="true"></i>Transaksi</a>
+<a class="nav-link" href="#debts" data-nav="debts"><i class="nav-symbol" data-lucide="credit-card" aria-hidden="true"></i>Piutang & Utang</a>
             </nav>
 
             <div class="sidebar-bottom">
@@ -689,7 +690,175 @@
                 <p class="list-status" id="listStatus" aria-live="polite"></p>
             </section>
 
+            <!-- ================= PIUTANG & UTANG PANEL ================= -->
+            <section class="panel debts-panel" id="debts" aria-label="Manajemen Piutang & Utang">
+                <div class="panel-heading">
+                    <div>
+                        <p class="eyebrow">HUTANG & PIUTANG</p>
+                        <h2>Kelola Piutang dan Utang</h2>
+                    </div>
+                    <button class="button button-primary button-sm" id="openAddDebtBtn" type="button" title="Tambah piutang atau utang baru">
+                        <i data-lucide="plus" aria-hidden="true"></i> Tambah
+                    </button>
+                </div>
+
+                <div class="debts-summary-row">
+                    <article class="debt-summary-card piutang-card">
+                        <div class="debt-card-header">
+                            <span class="debt-label">Total Piutang</span>
+                            <span class="debt-icon" aria-hidden="true">🐮💸</span>
+                        </div>
+                        <p class="debt-value" id="piutangTotal">Rp 0</p>
+                        <div class="debt-foot">
+                            <span class="debt-dot piutang-dot"></span>
+                            <span id="piutangOutstanding">Belum lunas: Rp 0</span>
+                        </div>
+                    </article>
+
+                    <article class="debt-summary-card utang-card">
+                        <div class="debt-card-header">
+                            <span class="debt-label">Total Utang</span>
+                            <span class="debt-icon" aria-hidden="true">🐮💰</span>
+                        </div>
+                        <p class="debt-value" id="utangTotal">Rp 0</p>
+                        <div class="debt-foot">
+                            <span class="debt-dot utang-dot"></span>
+                            <span id="utangOutstanding">Belum lunas: Rp 0</span>
+                        </div>
+                    </article>
+
+                    <article class="debt-summary-card net-card">
+                        <div class="debt-card-header">
+                            <span class="debt-label">Saldo Bersih (Piutang − Utang)</span>
+                            <span class="debt-icon" aria-hidden="true">🐮📊</span>
+                        </div>
+                        <p class="debt-value" id="debtsNetValue">Rp 0</p>
+                        <div class="debt-foot">
+                            <span class="debt-dot net-dot"></span>
+                            <span id="debtsNetCaption">Piutang dikurangi utang</span>
+                        </div>
+                    </article>
+                </div>
+
+                <!-- Form Tambah Piutang / Utang (Dialog) -->
+                <dialog class="transaction-dialog" id="debtDialog" aria-labelledby="debtDialogTitle">
+                    <form id="debtForm">
+                        <input type="hidden" id="editingDebtId" name="id" value="">
+                        <div class="dialog-heading">
+                            <div>
+                                <p class="eyebrow" id="debtDialogEyebrow">PIUTANG & UTANG</p>
+                                <h2 id="debtDialogTitle">Tambah Piutang / Utang</h2>
+                            </div>
+                            <button class="dialog-close" id="closeDebtDialog" type="button" aria-label="Tutup">×</button>
+                        </div>
+                        <div class="form-label">
+                            <span>Tipe</span>
+                            <span class="type-switch">
+                                <label><input type="radio" name="debtType" value="piutang" checked><span>🐮💸 Piutang (orang lain berhutang padaku)</span></label>
+                                <label><input type="radio" name="debtType" value="utang"><span>🐮💰 Utang (saya berhutang kepada orang lain)</span></label>
+                            </span>
+                        </div>
+                        <label class="form-label" for="debtDescription">Nama / Keterangan
+                            <input id="debtDescription" name="desc" type="text" maxlength="160" placeholder="Contoh: Budi, Toko ABC, Warung Pak Rudi" required>
+                        </label>
+                        <div class="form-row-2">
+                            <label class="form-label" for="debtAmount">Nominal
+                                <span class="amount-input"><span>Rp</span><input id="debtAmount" name="amount" type="number" min="1" step="1" inputmode="numeric" placeholder="0" required></span>
+                            </label>
+                            <label class="form-label" for="debtDueDate">Tanggal Jatuh Tempo
+                                <input id="debtDueDate" name="dueDate" type="date">
+                            </label>
+                        </div>
+                        <div class="form-label">
+                            <span>Status</span>
+                            <select id="debtStatus" name="status" class="form-select">
+                                <option value="pending">Belum Lunas</option>
+                                <option value="paid">Sudah Lunas</option>
+                                <option value="partial">Sebagian Lunas</option>
+                            </select>
+                        </div>
+                        <label class="form-label" for="debtPaidAmount">Jumlah Sudah Dibayar
+                            <span class="amount-input"><span>Rp</span><input id="debtPaidAmount" name="paidAmount" type="number" min="0" step="1" inputmode="numeric" placeholder="0" value="0"></span>
+                        </label>
+                        <p class="form-error" id="debtFormError" role="alert" hidden></p>
+                        <div class="dialog-actions">
+                            <button class="button button-secondary" id="cancelDebtBtn" type="button">Batal</button>
+                            <button class="button button-primary" id="saveDebtBtn" type="submit">Simpan</button>
+                        </div>
+                    </form>
+                </dialog>
+
+                <!-- Daftar Piutang & Utang -->
+                <div class="debts-list-wrap">
+                    <div class="debts-filter">
+                        <label class="filter-box">
+                            <span class="sr-only">Filter tipe</span>
+                            <select id="debtTypeFilter" aria-label="Filter berdasarkan tipe piutang/utang">
+                                <option value="all">🐮 Semua Piutang & Utang</option>
+                                <option value="piutang">💸 Hanya Piutang</option>
+                                <option value="utang">💰 Hanya Utang</option>
+                            </select>
+                        </label>
+                        <label class="filter-box">
+                            <span class="sr-only">Filter status</span>
+                            <select id="debtStatusFilter" aria-label="Filter berdasarkan status">
+                                <option value="all">Semua Status</option>
+                                <option value="pending">Belum Lunas</option>
+                                <option value="paid">Sudah Lunas</option>
+                                <option value="partial">Sebagian Lunas</option>
+                            </select>
+                        </label>
+                        <label class="search-box"><span aria-hidden="true">🔍</span><span class="sr-only">Cari piutang/utang</span><input id="debtSearch" type="search" placeholder="Cari nama atau keterangan..." autocomplete="off"></label>
+                    </div>
+                    <div class="debts-list" id="debtsList" aria-live="polite">
+                        <div class="loading-state"><span class="spinner" aria-hidden="true"></span>Memuat data piutang & utang...</div>
+                    </div>
+                    <div class="empty-state" id="debtsEmptyState" hidden>
+                        <span class="empty-illustration" aria-hidden="true">🐮</span>
+                        <strong>Belum ada data piutang atau utang</strong>
+                        <span>Mulai catat piutang atau utang pertama untuk mulai melacak keuangan Anda.</span>
+                        <button class="text-button" type="button" id="openAddDebtFromEmpty">Tambah Piutang / Utang <span aria-hidden="true">→</span></button>
+                    </div>
+                    <p class="list-status" id="debtsListStatus" aria-live="polite"></p>
+                </div>
+            </section>
+
             <footer class="page-footer">
+                        <div class="debt-card-header">
+                            <span class="debt-label">Total Piutang</span>
+                            <span class="debt-icon" aria-hidden="true">🐮💸</span>
+                        </div>
+                        <p class="debt-value" id="piutangTotal">Rp 0</p>
+                        <div class="debt-foot">
+                            <span class="debt-dot piutang-dot"></span>
+                            <span id="piutangOutstanding">Belum lunas: Rp 0</span>
+                        </div>
+                    </article>
+
+                    <article class="debt-summary-card utang-card">
+                        <div class="debt-card-header">
+                            <span class="debt-label">Total Utang</span>
+                            <span class="debt-icon" aria-hidden="true">🐮💰</span>
+                        </div>
+                        <p class="debt-value" id="utangTotal">Rp 0</p>
+                        <div class="debt-foot">
+                            <span class="debt-dot utang-dot"></span>
+                            <span id="utangOutstanding">Belum lunas: Rp 0</span>
+                        </div>
+                    </article>
+
+                    <article class="debt-summary-card net-card">
+                        <div class="debt-card-header">
+                            <span class="debt-label">Saldo Bersih (Piutang − Utang)</span>
+                            <span class="debt-icon" aria-hidden="true">🐮📊</span>
+                        </div>
+                        <p class="debt-value" id="debtsNetValue">Rp 0</p>
+                        <div class="debt-foot">
+                            <span class="debt-dot net-dot"></span>
+                            <span id="debtsNetCaption">Piutang dikurangi utang</span>
+                        </div>
+                    </article>
+                </div>
                 <span>Saku Harian — Smart Daily Financial Planner</span>
                 <span>Kalender Bulanan · Multi E-Wallet & Bank · Edit Kapan Saja · Google Sheets</span>
             </footer>
@@ -703,6 +872,7 @@
         <a href="#calendar-section" class="mobile-nav-link" data-nav="calendar-section"><i data-lucide="calendar-days" aria-hidden="true"></i><span>Kalender</span></a>
         <a href="#planner" class="mobile-nav-link" data-nav="planner"><i data-lucide="lightbulb" aria-hidden="true"></i><span>Hemat</span></a>
         <a href="#bills" class="mobile-nav-link" data-nav="bills"><i data-lucide="bell-ring" aria-hidden="true"></i><span>Tagihan</span></a>
+        <a href="#debts" class="mobile-nav-link" data-nav="debts"><i data-lucide="credit-card" aria-hidden="true"></i><span>Piutang & Utang</span></a>
         <button class="mobile-add" type="button" data-open-form aria-label="Catat transaksi"><i data-lucide="plus" aria-hidden="true"></i></button>
     </nav>
 

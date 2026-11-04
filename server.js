@@ -145,6 +145,9 @@ async function ensureDatabaseReady() {
                 ALTER TABLE telegram_edit_sessions
                 ADD COLUMN IF NOT EXISTS payload TEXT DEFAULT '{}'
             `);
+            await pool.query(`\n                CREATE TABLE IF NOT EXISTS debts (\n                    id SERIAL PRIMARY KEY,\n                    type VARCHAR(20) NOT NULL,\n                    "desc" TEXT NOT NULL,\n                    amount NUMERIC NOT NULL,\n                    paid_amount NUMERIC DEFAULT 0,\n                    status VARCHAR(20) DEFAULT 'pending',\n                    due_date DATE,\n                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n                )\n            `);
+            await pool.query(`\n                ALTER TABLE debts\n                ADD COLUMN IF NOT EXISTS paid_amount NUMERIC DEFAULT 0\n            `);
+            await pool.query(`\n                ALTER TABLE debts\n                ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'\n            `);
             console.log("Berhasil terhubung ke Neon PostgreSQL & sinkronisasi skema Wallet/Menu! 🐘");
             setupTelegramBotCommands(false).catch(() => {});
             return true;
@@ -1149,6 +1152,104 @@ app.get('/api/export-excel', async (req, res) => {
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', 'attachment; filename="laporan-keuangan-saku-harian.csv"');
         res.status(200).send(csvContent);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ================= API PIUTANG & UTANG =================
+
+// API: Ambil semua piutang & utang
+app.get('/api/debts', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const result = await pool.query('SELECT * FROM debts ORDER BY created_at DESC, id DESC');
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Ringkasan total piutang & utang
+app.get('/api/debts/summary', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const piutang = await pool.query(
+            `SELECT COALESCE(SUM(amount), 0) AS total, COALESCE(SUM(paid_amount), 0) AS paid FROM debts WHERE type = 'piutang'`
+        );
+        const utang = await pool.query(
+            `SELECT COALESCE(SUM(amount), 0) AS total, COALESCE(SUM(paid_amount), 0) AS paid FROM debts WHERE type = 'utang'`
+        );
+        const pTotal = Number(piutang.rows[0]?.total || 0);
+        const pPaid = Number(piutang.rows[0]?.paid || 0);
+        const uTotal = Number(utang.rows[0]?.total || 0);
+        const uPaid = Number(utang.rows[0]?.paid || 0);
+        res.json({
+            piutang: { total: pTotal, paid: pPaid, outstanding: pTotal - pPaid },
+            utang: { total: uTotal, paid: uPaid, outstanding: uTotal - uPaid },
+            net: (pTotal - pPaid) - (uTotal - uPaid)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Tambah piutang atau utang baru
+app.post('/api/debts', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const { type, desc, amount, due_date } = req.body;
+        if (!type || !['piutang', 'utang'].includes(type)) {
+            return res.status(400).json({ error: "Type harus 'piutang' atau 'utang'" });
+        }
+        if (!desc || !amount || Number(amount) <= 0) {
+            return res.status(400).json({ error: 'Deskripsi dan nominal harus diisi' });
+        }
+        const query = `INSERT INTO debts (type, "desc", amount, due_date) VALUES ($1, $2, $3, $4) RETURNING *`;
+        const result = await pool.query(query, [type, desc, Number(amount), due_date || null]);
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// API: Update status / pembayaran piutang atau utang
+app.put('/api/debts/:id', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const debtId = Number(req.params.id);
+        if (!Number.isFinite(debtId)) return res.status(400).json({ error: 'ID utang/piutang tidak valid.' });
+        const { status, paid_amount } = req.body;
+        const updateFields = [];
+        const values = [];
+        let paramIdx = 1;
+        if (status !== undefined) {
+            updateFields.push(`status = $${paramIdx++}`);
+            values.push(status);
+        }
+        if (paid_amount !== undefined) {
+            updateFields.push(`paid_amount = $${paramIdx++}`);
+            values.push(Number(paid_amount));
+        }
+        if (updateFields.length === 0) return res.status(400).json({ error: 'Tidak ada field untuk diupdate' });
+        values.push(debtId);
+        const query = `UPDATE debts SET ${updateFields.join(', ')} WHERE id = $${paramIdx} RETURNING *`;
+        const result = await pool.query(query, values);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Data utang/piutang tidak ditemukan.' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// API: Hapus piutang atau utang
+app.delete('/api/debts/:id', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const debtId = Number(req.params.id);
+        if (!Number.isFinite(debtId)) return res.status(400).json({ error: 'ID utang/piutang tidak valid.' });
+        await pool.query('DELETE FROM debts WHERE id = $1', [debtId]);
+        res.json({ success: true, id: debtId });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
