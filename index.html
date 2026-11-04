@@ -32,7 +32,185 @@
     <!-- Layer Animasi Koin & Partikel Kartun -->
     <div id="cartoonCelebration" class="cartoon-celebration" aria-hidden="true"></div>
 
-    <div class="app-shell">
+    <!-- ================= HALAMAN LOGIN & REGISTRASI (HALLMARK HUM THEME) ================= -->
+    <div id="authScreen" class="auth-screen" aria-label="Layar Autentikasi dan Masuk Akun" hidden>
+        <div class="auth-backdrop-decorations" aria-hidden="true">
+            <span class="auth-floating-shape shape-1">🐮</span>
+            <span class="auth-floating-shape shape-2">💸</span>
+            <span class="auth-floating-shape shape-3">✨</span>
+            <span class="auth-floating-shape shape-4">📊</span>
+        </div>
+
+        <div class="auth-card">
+            <!-- Brand & Mascot Header -->
+            <div class="auth-card-head">
+                <a class="brand auth-brand" href="#overview" tabindex="-1">
+                    <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+                    <span class="brand-copy">saku<span>planner</span></span>
+                </a>
+                <div class="auth-mascot-avatar" aria-hidden="true">
+                    <span class="auth-mascot-emoji" id="authMascotIcon">🐮</span>
+                    <span class="auth-mascot-bubble">Halo Sahabat Saku! 👋</span>
+                </div>
+                <div class="auth-badge-row">
+                    <span class="eyebrow-pill">LOGIN VIA EMAIL</span>
+                    <span class="auth-security-pill">🔒 Akun Terpisah & Aman</span>
+                </div>
+                <h1 class="auth-title" id="authTitle">Masuk ke Saku Harian</h1>
+                <p class="auth-subcopy" id="authSubcopy">Satu email, satu akun. Data keuangan setiap pengguna tersimpan terpisah dan privat.</p>
+            </div>
+
+            <!-- Tab Switcher: Masuk vs Daftar Baru -->
+            <div class="auth-tabs" role="tablist" aria-label="Pilihan Autentikasi">
+                <button type="button" class="auth-tab is-active" id="authTabLogin" role="tab" aria-selected="true" aria-controls="loginForm">
+                    <i data-lucide="log-in" aria-hidden="true"></i> Masuk Akun
+                </button>
+                <button type="button" class="auth-tab" id="authTabRegister" role="tab" aria-selected="false" aria-controls="registerForm">
+                    <i data-lucide="user-plus" aria-hidden="true"></i> Daftar Akun Baru
+                </button>
+            </div>
+
+            <!-- Pesan Notifikasi / Alert Box -->
+            <div class="auth-alert" id="authAlert" role="alert" hidden>
+                <span class="auth-alert-icon" id="authAlertIcon" aria-hidden="true">ℹ️</span>
+                <span class="auth-alert-text" id="authAlertText"></span>
+            </div>
+
+            <!-- FORM 1: MASUK (LOGIN) -->
+            <form id="loginForm" class="auth-form is-active" novalidate>
+                <label class="form-label" for="loginEmail">
+                    <span>Email Akun</span>
+                    <div class="auth-input-wrap">
+                        <i data-lucide="mail" class="auth-input-icon" aria-hidden="true"></i>
+                        <input id="loginEmail" name="email" type="email" inputmode="email" autocomplete="email" placeholder="nama@email.com" required>
+                    </div>
+                </label>
+
+                <label class="form-label" for="loginPassword">
+                    <div class="label-row-between">
+                        <span>Kata Sandi</span>
+                        <button type="button" class="auth-toggle-pwd" id="toggleLoginPwdBtn" aria-label="Lihat kata sandi">
+                            <i data-lucide="eye" aria-hidden="true"></i> <span>Tampilkan</span>
+                        </button>
+                    </div>
+                    <div class="auth-input-wrap">
+                        <i data-lucide="lock" class="auth-input-icon" aria-hidden="true"></i>
+                        <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Masukkan kata sandi akun" required>
+                    </div>
+                </label>
+
+                <div class="auth-options-row">
+                    <label class="auth-checkbox-label">
+                        <input type="checkbox" id="loginRemember" checked>
+                        <span>Ingat saya di perangkat ini</span>
+                    </label>
+                    <button type="button" class="auth-text-link" id="authHelpBtn">Info Akun</button>
+                </div>
+                <p class="auth-field-hint">Masuk memakai email terdaftar. Akun lama tetap bisa memakai username-nya.</p>
+
+                <button class="button button-primary button-full auth-submit-btn" id="loginSubmitBtn" type="submit">
+                    <i data-lucide="log-in" aria-hidden="true"></i>
+                    <span>Masuk ke Akun Saku</span>
+                </button>
+
+                <p class="auth-switch-prompt">Belum punya akun? <button type="button" class="auth-link-btn" id="switchToRegBtn">Daftar Akun Baru di sini →</button></p>
+            </form>
+
+            <!-- FORM 2: DAFTAR AKUN BARU (REGISTER) -->
+            <form id="registerForm" class="auth-form" novalidate hidden>
+                <label class="form-label" for="regFullName">
+                    <span>Nama Lengkap / Panggilan</span>
+                    <div class="auth-input-wrap">
+                        <i data-lucide="id-card" class="auth-input-icon" aria-hidden="true"></i>
+                        <input id="regFullName" name="fullName" type="text" placeholder="Contoh: Andriadi" required>
+                    </div>
+                </label>
+
+                <label class="form-label" for="regEmail">
+                    <span>Email Aktif (untuk masuk)</span>
+                    <div class="auth-input-wrap">
+                        <i data-lucide="mail" class="auth-input-icon" aria-hidden="true"></i>
+                        <input id="regEmail" name="email" type="email" inputmode="email" autocomplete="email" placeholder="nama@email.com" required>
+                    </div>
+                </label>
+                <p class="auth-field-hint">Email menjadi identitas akunmu. Setiap email punya data keuangan yang terpisah.</p>
+
+                <div class="form-label">
+                    <span>Pilih Maskot Profil Kamu</span>
+                    <div class="auth-avatar-picker" role="radiogroup" aria-label="Pilih Avatar">
+                        <label class="auth-avatar-option is-selected">
+                            <input type="radio" name="regAvatar" value="🐮" checked>
+                            <span class="avatar-face">🐮</span>
+                            <span class="avatar-name">Sapi</span>
+                        </label>
+                        <label class="auth-avatar-option">
+                            <input type="radio" name="regAvatar" value="🦥">
+                            <span class="avatar-face">🦥</span>
+                            <span class="avatar-name">Sloth</span>
+                        </label>
+                        <label class="auth-avatar-option">
+                            <input type="radio" name="regAvatar" value="🦊">
+                            <span class="avatar-face">🦊</span>
+                            <span class="avatar-name">Rubah</span>
+                        </label>
+                        <label class="auth-avatar-option">
+                            <input type="radio" name="regAvatar" value="🐱">
+                            <span class="avatar-face">🐱</span>
+                            <span class="avatar-name">Kucing</span>
+                        </label>
+                        <label class="auth-avatar-option">
+                            <input type="radio" name="regAvatar" value="🐼">
+                            <span class="avatar-face">🐼</span>
+                            <span class="avatar-name">Panda</span>
+                        </label>
+                    </div>
+                </div>
+
+                <label class="form-label" for="regPassword">
+                    <div class="label-row-between">
+                        <span>Kata Sandi Baru</span>
+                        <button type="button" class="auth-toggle-pwd" id="toggleRegPwdBtn" aria-label="Lihat kata sandi">
+                            <i data-lucide="eye" aria-hidden="true"></i> <span>Tampilkan</span>
+                        </button>
+                    </div>
+                    <div class="auth-input-wrap">
+                        <i data-lucide="key-round" class="auth-input-icon" aria-hidden="true"></i>
+                        <input id="regPassword" name="password" type="password" autocomplete="new-password" placeholder="Minimal 6 karakter" required>
+                    </div>
+                </label>
+
+                <label class="form-label" for="regPasswordConfirm">
+                    <span>Konfirmasi Kata Sandi</span>
+                    <div class="auth-input-wrap">
+                        <i data-lucide="shield-check" class="auth-input-icon" aria-hidden="true"></i>
+                        <input id="regPasswordConfirm" name="passwordConfirm" type="password" autocomplete="new-password" placeholder="Ketik ulang kata sandi" required>
+                    </div>
+                </label>
+
+                <button class="button button-primary button-full auth-submit-btn" id="regSubmitBtn" type="submit">
+                    <i data-lucide="sparkles" aria-hidden="true"></i>
+                    <span>Daftar & Langsung Masuk</span>
+                </button>
+
+                <p class="auth-switch-prompt">Sudah punya akun? <button type="button" class="auth-link-btn" id="switchToLoginBtn">Masuk ke Akun Anda →</button></p>
+            </form>
+
+            <!-- Quick Demo Option -->
+            <div class="auth-divider">
+                <span>atau opsi instan</span>
+            </div>
+
+            <div class="auth-quick-actions">
+                <button type="button" class="button button-secondary button-full" id="authDemoBtn">
+                    <i data-lucide="zap" aria-hidden="true"></i>
+                    <span>⚡ Masuk Cepat (Akun Demo / Tamu)</span>
+                </button>
+                <p class="auth-demo-hint">Mode tamu menyimpan catatan hanya di perangkat ini dan tidak terhubung ke akun mana pun.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-shell" id="appShell">
         <aside class="sidebar" aria-label="Navigasi utama">
             <a class="brand" href="#overview" aria-label="Saku Harian Smart Planner, ke beranda">
                 <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
@@ -67,10 +245,15 @@
                     <p class="bot-copy">Pencet tombol 🟢 Pemasukan, 🔴 Pengeluaran, 💰 Cek Saldo, atau 🔄 Reset Saldo tanpa repot ketik!</p>
                     <a href="https://t.me/" target="_blank" rel="noreferrer" class="bot-link">Buka Telegram <span aria-hidden="true">↗</span></a>
                 </div>
-                <div class="profile">
-                    <div class="profile-avatar" aria-hidden="true">✨</div>
-                    <div><strong>Smart Financial</strong><span>Daily Planner Mode</span></div>
-                    <span class="profile-more" aria-hidden="true">···</span>
+                <div class="profile" id="userProfileCard">
+                    <div class="profile-avatar" id="userAvatar" aria-hidden="true">🐮</div>
+                    <div class="profile-meta">
+                        <strong id="userDisplayName">Smart Financial</strong>
+                        <span id="userRoleBadge">Pengguna Aktif</span>
+                    </div>
+                    <button class="profile-logout-btn" id="logoutSidebarBtn" type="button" title="Keluar dari akun" aria-label="Keluar dari akun">
+                        <i data-lucide="log-out" aria-hidden="true"></i>
+                    </button>
                 </div>
             </div>
         </aside>
@@ -109,6 +292,32 @@
                     </button>
                     <button class="icon-button" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
                     <button class="icon-button theme-button" id="themeToggle" type="button" aria-label="Ganti tema" title="Ganti tema"><i data-lucide="moon" aria-hidden="true"></i></button>
+
+                    <!-- User Menu Dropdown Button -->
+                    <div class="user-menu-wrap" id="userMenuWrap">
+                        <button class="user-pill-button" id="userTopbarBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Menu Pengguna">
+                            <span class="user-pill-avatar" id="topbarUserAvatar">🐮</span>
+                            <span class="user-pill-name" id="topbarUserName">Pengguna</span>
+                            <i data-lucide="chevron-down" aria-hidden="true"></i>
+                        </button>
+                        <div class="user-dropdown-popover" id="userDropdownPopover" hidden>
+                            <div class="user-popover-head">
+                                <div class="popover-avatar" id="popoverUserAvatar">🐮</div>
+                                <div class="popover-info">
+                                    <strong id="popoverFullName">Nama Pengguna</strong>
+                                    <span id="popoverUsername">@username</span>
+                                </div>
+                            </div>
+                            <div class="user-popover-meta">
+                                <span class="popover-badge-pill">🔒 Multi-User Aktif</span>
+                            </div>
+                            <div class="user-popover-actions">
+                                <button class="button button-danger-soft button-sm button-full" id="logoutTopbarBtn" type="button">
+                                    <i data-lucide="log-out" aria-hidden="true"></i> Keluar dari Akun
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </header>
 

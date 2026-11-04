@@ -1,11 +1,15 @@
-const API_BASE_URL = 'https://saku-sloth.vercel.app/api';
+const API_BASE_URL = (typeof window !== 'undefined' && window.location.origin.startsWith('http') && !window.location.origin.includes('github.io'))
+    ? `${window.location.origin}/api`
+    : 'https://saku-sloth.vercel.app/api';
 const TRANSACTIONS_URL = `${API_BASE_URL}/transactions`;
 const DEBTS_URL = `${API_BASE_URL}/debts`;
+const AUTH_URL = `${API_BASE_URL}/auth`;
 const VISIBLE_TRANSACTION_LIMIT = 6;
 const CATEGORY_COLORS = ['#89bd5c', '#e9756a', '#6b96d6', '#f5b942', '#9b7ede', '#57b8a6', '#e79a5a'];
 
 const STORAGE_KEYS = {
     theme: 'saku-theme',
+    userSession: 'saku-user-session-v1',
     bills: 'saku-monthly-bills-v1',
     budget: 'saku-monthly-budget-v1',
     dateOverrides: 'saku-trx-date-overrides-v1',
@@ -13,7 +17,8 @@ const STORAGE_KEYS = {
     deletedIds: 'saku-trx-deleted-ids-v1',
     localTrxCache: 'saku-local-trx-cache-v1',
     gsheetWebhook: 'saku-gsheet-webhook-v1',
-    notifiedBills: 'saku-notified-bills-session'
+    notifiedBills: 'saku-notified-bills-session',
+    debtsCache: 'saku-local-debts-cache-v1'
 };
 
 // Logo SVG Resmi dari https://github.com/hafidznoor/idn-finlogos
@@ -353,9 +358,46 @@ const elements = {
     confirmResetAllBtn: document.getElementById('confirmResetAllBtn'),
     confirmZeroBalanceBtn: document.getElementById('confirmZeroBalanceBtn'),
     confirmZeroWalletBtn: document.getElementById('confirmZeroWalletBtn'),
-    confirmZeroWalletBtnLabel: document.getElementById('confirmZeroWalletBtnLabel')
+    confirmZeroWalletBtnLabel: document.getElementById('confirmZeroWalletBtnLabel'),
+    // Auth & Multi-User Elements
+    authScreen: document.getElementById('authScreen'),
+    appShell: document.getElementById('appShell'),
+    authTabLogin: document.getElementById('authTabLogin'),
+    authTabRegister: document.getElementById('authTabRegister'),
+    loginForm: document.getElementById('loginForm'),
+    registerForm: document.getElementById('registerForm'),
+    authAlert: document.getElementById('authAlert'),
+    authAlertText: document.getElementById('authAlertText'),
+    authAlertIcon: document.getElementById('authAlertIcon'),
+    loginEmail: document.getElementById('loginEmail'),
+    loginPassword: document.getElementById('loginPassword'),
+    toggleLoginPwdBtn: document.getElementById('toggleLoginPwdBtn'),
+    loginRemember: document.getElementById('loginRemember'),
+    authTitle: document.getElementById('authTitle'),
+    authSubcopy: document.getElementById('authSubcopy'),
+    regFullName: document.getElementById('regFullName'),
+    regEmail: document.getElementById('regEmail'),
+    regPassword: document.getElementById('regPassword'),
+    regPasswordConfirm: document.getElementById('regPasswordConfirm'),
+    authDemoBtn: document.getElementById('authDemoBtn'),
+    authHelpBtn: document.getElementById('authHelpBtn'),
+    userProfileCard: document.getElementById('userProfileCard'),
+    userAvatar: document.getElementById('userAvatar'),
+    userDisplayName: document.getElementById('userDisplayName'),
+    userRoleBadge: document.getElementById('userRoleBadge'),
+    logoutSidebarBtn: document.getElementById('logoutSidebarBtn'),
+    userMenuWrap: document.getElementById('userMenuWrap'),
+    userTopbarBtn: document.getElementById('userTopbarBtn'),
+    topbarUserAvatar: document.getElementById('topbarUserAvatar'),
+    topbarUserName: document.getElementById('topbarUserName'),
+    userDropdownPopover: document.getElementById('userDropdownPopover'),
+    popoverUserAvatar: document.getElementById('popoverUserAvatar'),
+    popoverFullName: document.getElementById('popoverFullName'),
+    popoverUsername: document.getElementById('popoverUsername'),
+    logoutTopbarBtn: document.getElementById('logoutTopbarBtn')
 };
 
+let currentUser = null;
 let transactions = [];
 let debts = [];
 let bills = loadBills();
@@ -1842,6 +1884,17 @@ function renderDashboard() {
     renderIcons();
 }
 
+function getAuthHeaders(extraHeaders = {}) {
+    const headers = {
+        'Accept': 'application/json',
+        ...extraHeaders
+    };
+    if (currentUser?.token) {
+        headers['Authorization'] = `Bearer ${currentUser.token}`;
+    }
+    return headers;
+}
+
 async function loadTransactions() {
     elements.transactionList.hidden = false;
     elements.emptyState.hidden = true;
@@ -1855,7 +1908,7 @@ async function loadTransactions() {
 
     try {
         const response = await fetch(TRANSACTIONS_URL, {
-            headers: { Accept: 'application/json' }
+            headers: getAuthHeaders()
         });
         if (!response.ok) throw new Error(`Server merespons ${response.status}`);
 
@@ -1907,7 +1960,7 @@ async function loadDebts() {
     elements.debtsList.replaceChildren(loadingState);
 
     try {
-        const response = await fetch(DEBTS_URL, { headers: { Accept: 'application/json' } });
+        const response = await fetch(DEBTS_URL, { headers: getAuthHeaders() });
         if (!response.ok) throw new Error(`Server merespons ${response.status}`);
         const data = await response.json();
         if (!Array.isArray(data)) throw new Error('Format data utang/piutang tidak sesuai.');
@@ -1937,7 +1990,7 @@ async function createNewDebt({ type, desc, amount, dueDate, status, paidAmount }
     try {
         const response = await fetch(DEBTS_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({
                 type,
                 desc,
@@ -1981,7 +2034,7 @@ async function updateDebt(debtId, updates) {
         if (!String(debtId).startsWith('local-')) {
             const response = await fetch(`${DEBTS_URL}/${debtId}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify(updates)
             });
             if (response.ok) {
@@ -2014,7 +2067,7 @@ async function deleteDebt(debtId) {
     if (!confirm('Yakin ingin menghapus catatan utang/piutang ini?')) return false;
     try {
         if (!String(debtId).startsWith('local-')) {
-            await fetch(`${DEBTS_URL}/${debtId}`, { method: 'DELETE' });
+            await fetch(`${DEBTS_URL}/${debtId}`, { method: 'DELETE', headers: getAuthHeaders() });
         }
     } catch (error) {
         console.warn('Hapus utang/piutang dari server gagal, menghapus dari lokal:', error);
@@ -2276,10 +2329,9 @@ async function createNewTransaction({ desc, amount, type, category, wallet, date
     try {
         const response = await fetch(TRANSACTIONS_URL, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json'
-            },
+            headers: getAuthHeaders({
+                'Content-Type': 'application/json'
+            }),
             body: JSON.stringify({ desc, amount, type, category, wallet: cleanWallet, date: chosenDateIso })
         });
 
@@ -2353,10 +2405,9 @@ async function updateExistingTransaction(id, { desc, amount, type, category, wal
     try {
         const response = await fetch(`${TRANSACTIONS_URL}/${encodeURIComponent(id)}`, {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                Accept: 'application/json'
-            },
+            headers: getAuthHeaders({
+                'Content-Type': 'application/json'
+            }),
             body: JSON.stringify(patch)
         });
         if (response.ok) {
@@ -2388,7 +2439,8 @@ async function deleteTransactionById(id) {
 
     try {
         await fetch(`${TRANSACTIONS_URL}/${encodeURIComponent(id)}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: getAuthHeaders()
         });
     } catch {
         // sudah terhapus di tampilan & cache lokal
@@ -2459,11 +2511,11 @@ async function executeResetBalance(mode = 'all') {
             try {
                 const res = await fetch(`${TRANSACTIONS_URL}/reset`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({ mode: 'all' })
                 });
                 if (!res.ok) {
-                    await fetch(TRANSACTIONS_URL, { method: 'DELETE' });
+                    await fetch(TRANSACTIONS_URL, { method: 'DELETE', headers: getAuthHeaders() });
                 }
             } catch {
                 // fallback offline sudah dikosongkan
@@ -3091,6 +3143,397 @@ function initializeMascot() {
     switchMascot(currentMascot, false);
 }
 
+// ================= SISTEM AUTENTIKASI & MULTI-USER (HALLMARK HUM) =================
+
+function showAuthAlert(message, type = 'error') {
+    if (!elements.authAlert || !elements.authAlertText) return;
+    elements.authAlertText.textContent = message;
+    elements.authAlert.className = `auth-alert is-${type}`;
+    if (elements.authAlertIcon) {
+        elements.authAlertIcon.textContent = type === 'success' ? '🐮✅' : '🐮⚠️';
+    }
+    elements.authAlert.hidden = false;
+}
+
+function hideAuthAlert() {
+    if (elements.authAlert) elements.authAlert.hidden = true;
+}
+
+function switchAuthTab(tab) {
+    hideAuthAlert();
+    const isLogin = tab === 'login';
+    if (elements.authTabLogin) {
+        elements.authTabLogin.classList.toggle('is-active', isLogin);
+        elements.authTabLogin.setAttribute('aria-selected', isLogin ? 'true' : 'false');
+    }
+    if (elements.authTabRegister) {
+        elements.authTabRegister.classList.toggle('is-active', !isLogin);
+        elements.authTabRegister.setAttribute('aria-selected', !isLogin ? 'true' : 'false');
+    }
+
+    if (elements.loginForm) {
+        if (isLogin) {
+            elements.loginForm.removeAttribute('hidden');
+            elements.loginForm.classList.add('is-active');
+            elements.loginForm.style.display = 'grid';
+        } else {
+            elements.loginForm.setAttribute('hidden', '');
+            elements.loginForm.classList.remove('is-active');
+            elements.loginForm.style.display = 'none';
+        }
+    }
+    if (elements.registerForm) {
+        if (!isLogin) {
+            elements.registerForm.removeAttribute('hidden');
+            elements.registerForm.classList.add('is-active');
+            elements.registerForm.style.display = 'grid';
+        } else {
+            elements.registerForm.setAttribute('hidden', '');
+            elements.registerForm.classList.remove('is-active');
+            elements.registerForm.style.display = 'none';
+        }
+    }
+
+    if (elements.authTitle) {
+        elements.authTitle.textContent = isLogin ? 'Masuk ke Saku Harian' : 'Daftar Akun Saku Baru';
+    }
+    if (elements.authSubcopy) {
+        elements.authSubcopy.textContent = isLogin
+            ? 'Masuk dengan email terdaftar. Setiap akun punya data keuangan yang terpisah dan privat.'
+            : 'Daftar dengan email aktif dan dapatkan ruang keuangan pribadi: transaksi, kalender, dan utang terpisah.';
+    }
+    renderIcons();
+}
+
+// Cache lokal bersifat per akun; bersihkan saat berganti pengguna agar data tidak tercampur.
+function clearUserScopedStorage() {
+    [STORAGE_KEYS.localTrxCache, STORAGE_KEYS.trxEdits, STORAGE_KEYS.deletedIds,
+     STORAGE_KEYS.dateOverrides, STORAGE_KEYS.debtsCache].forEach((key) => {
+        try { localStorage.removeItem(key); } catch {}
+    });
+    transactions = [];
+    debts = [];
+}
+
+function setCurrentUser(user, token, persist = true) {
+    currentUser = {
+        id: user.id || 1,
+        username: user.username || 'pengguna',
+        email: user.email || '',
+        fullName: user.fullName || user.full_name || user.username || 'Sahabat Saku',
+        avatar: user.avatar || '🐮',
+        role: user.role || 'user',
+        token: token || ''
+    };
+
+    if (persist) {
+        try {
+            localStorage.setItem(STORAGE_KEYS.userSession, JSON.stringify({
+                user: currentUser,
+                token: currentUser.token
+            }));
+        } catch {}
+    }
+
+    // Update Sidebar Profile Card
+    if (elements.userAvatar) elements.userAvatar.textContent = currentUser.avatar;
+    if (elements.userDisplayName) elements.userDisplayName.textContent = currentUser.fullName;
+    if (elements.userRoleBadge) elements.userRoleBadge.textContent = `@${currentUser.username}`;
+
+    // Update Topbar User Pill
+    if (elements.topbarUserAvatar) elements.topbarUserAvatar.textContent = currentUser.avatar;
+    if (elements.topbarUserName) elements.topbarUserName.textContent = currentUser.fullName;
+
+    // Update User Dropdown Popover
+    if (elements.popoverUserAvatar) elements.popoverUserAvatar.textContent = currentUser.avatar;
+    if (elements.popoverFullName) elements.popoverFullName.textContent = currentUser.fullName;
+    if (elements.popoverUsername) elements.popoverUsername.textContent = currentUser.email || `@${currentUser.username}`;
+
+    // Tampilkan App Shell dan sembunyikan Layar Login
+    if (elements.authScreen) elements.authScreen.hidden = true;
+    if (elements.appShell) elements.appShell.hidden = false;
+
+    renderIcons();
+    loadTransactions();
+    loadDebts();
+}
+
+async function handleLogout() {
+    const confirmLogout = window.confirm('Apakah Anda yakin ingin keluar dari akun Saku Harian?');
+    if (!confirmLogout) return;
+
+    try {
+        if (currentUser?.token) {
+            await fetch(`${AUTH_URL}/logout`, {
+                method: 'POST',
+                headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ token: currentUser.token })
+            }).catch(() => {});
+        }
+    } catch {}
+
+    currentUser = null;
+    localStorage.removeItem(STORAGE_KEYS.userSession);
+    clearUserScopedStorage();
+
+    if (elements.userDropdownPopover) elements.userDropdownPopover.hidden = true;
+    if (elements.appShell) elements.appShell.hidden = true;
+    if (elements.authScreen) elements.authScreen.hidden = false;
+
+    switchAuthTab('login');
+    showAuthAlert('Anda telah berhasil keluar. Silakan masuk kembali kapan saja.', 'success');
+    renderIcons();
+}
+
+async function handleLoginSubmit(event) {
+    event.preventDefault();
+    hideAuthAlert();
+
+    const identifier = String(elements.loginEmail?.value || '').trim();
+    const password = String(elements.loginPassword?.value || '');
+
+    if (!identifier || !password) {
+        showAuthAlert('Mohon lengkapi email dan kata sandi Anda.', 'error');
+        return;
+    }
+    if (identifier.includes('@') && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(identifier)) {
+        showAuthAlert('Format email belum benar. Contoh: nama@email.com.', 'error');
+        return;
+    }
+
+    const submitBtn = document.getElementById('loginSubmitBtn');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Memeriksa akun...';
+    }
+
+    try {
+        const response = await fetch(`${AUTH_URL}/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ identifier, email: identifier, password })
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Email atau kata sandi tidak sesuai.');
+        }
+
+        const remember = Boolean(elements.loginRemember?.checked);
+        clearUserScopedStorage();
+        setCurrentUser(data.user, data.token, remember);
+        triggerCartoonCelebration();
+        setNotice(`Selamat datang kembali, ${data.user.fullName || data.user.username}! 🐮✨`);
+    } catch (err) {
+        showAuthAlert(err.message || 'Gagal masuk akun. Periksa koneksi internet Anda.', 'error');
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i data-lucide="log-in" aria-hidden="true"></i><span>Masuk ke Akun Saku</span>';
+            renderIcons();
+        }
+    }
+}
+
+async function handleRegisterSubmit(event) {
+    event.preventDefault();
+    hideAuthAlert();
+
+    const fullName = String(elements.regFullName?.value || '').trim();
+    const email = String(elements.regEmail?.value || '').trim().toLowerCase();
+    const password = String(elements.regPassword?.value || '');
+    const confirm = String(elements.regPasswordConfirm?.value || '');
+    const selectedAvatarEl = document.querySelector('input[name="regAvatar"]:checked');
+    const avatar = selectedAvatarEl?.value || '🐮';
+
+    if (!fullName) {
+        showAuthAlert('Mohon isi nama lengkap atau panggilan Anda.', 'error');
+        return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) {
+        showAuthAlert('Mohon isi email yang valid. Contoh: nama@email.com.', 'error');
+        return;
+    }
+    if (password.length < 6) {
+        showAuthAlert('Kata sandi minimal 6 karakter demi keamanan akun Anda.', 'error');
+        return;
+    }
+    if (password !== confirm) {
+        showAuthAlert('Konfirmasi kata sandi tidak cocok. Silakan ketik ulang.', 'error');
+        return;
+    }
+
+    const submitBtn = document.getElementById('regSubmitBtn');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Mendaftarkan akun...';
+    }
+
+    try {
+        const response = await fetch(`${AUTH_URL}/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ fullName, email, password, avatar })
+        });
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Gagal mendaftarkan akun baru.');
+        }
+
+        clearUserScopedStorage();
+        setCurrentUser(data.user, data.token, true);
+        triggerCartoonCelebration();
+        setNotice(`Akun ${email} berhasil dibuat! Selamat datang di Saku Harian. 🎉`);
+    } catch (err) {
+        showAuthAlert(err.message || 'Gagal mendaftarkan akun. Periksa koneksi internet Anda.', 'error');
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i data-lucide="sparkles" aria-hidden="true"></i><span>Daftar & Langsung Masuk</span>';
+            renderIcons();
+        }
+    }
+}
+
+function handleQuickDemo() {
+    hideAuthAlert();
+    const demoUser = {
+        id: 1,
+        username: 'tamu',
+        fullName: 'Pengguna Tamu (Demo)',
+        avatar: '🐮',
+        role: 'guest'
+    };
+    clearUserScopedStorage();
+    setCurrentUser(demoUser, 'demo-token-guest', true);
+    triggerCartoonCelebration();
+    setNotice('Masuk dalam Mode Demo / Tamu. Semua fitur aktif! 🐮✨');
+}
+
+async function initializeAuth() {
+    // 1. Periksa sesi yang tersimpan di localStorage
+    const savedSessionRaw = localStorage.getItem(STORAGE_KEYS.userSession);
+    if (savedSessionRaw) {
+        try {
+            const parsed = JSON.parse(savedSessionRaw);
+            if (parsed && parsed.user) {
+                currentUser = parsed.user;
+                currentUser.token = parsed.token || '';
+
+                // Verifikasi validasi sesi di backend secara diam-diam jika online
+                const sessionToken = currentUser.token;
+                const isGuestSession = currentUser.role === 'guest';
+                fetch(`${AUTH_URL}/me`, {
+                    headers: getAuthHeaders()
+                })
+                    .then(async (res) => {
+                        if (res.ok) return res.json();
+                        if (res.status === 401 && !isGuestSession) {
+                            currentUser = null;
+                            localStorage.removeItem(STORAGE_KEYS.userSession);
+                            clearUserScopedStorage();
+                            if (elements.appShell) elements.appShell.hidden = true;
+                            if (elements.authScreen) elements.authScreen.hidden = false;
+                            switchAuthTab('login');
+                            showAuthAlert('Sesi Anda telah berakhir. Silakan masuk kembali dengan email.', 'error');
+                            renderIcons();
+                        }
+                        return null;
+                    })
+                    .then((data) => {
+                        if (data?.ok && data?.user) {
+                            setCurrentUser(data.user, sessionToken, false);
+                        }
+                    })
+                    .catch(() => {});
+
+                // Aktifkan tampilan langsung menggunakan sesi tersimpan
+                setCurrentUser(currentUser, currentUser.token, false);
+                return;
+            }
+        } catch {
+            localStorage.removeItem(STORAGE_KEYS.userSession);
+        }
+    }
+
+    // 2. Jika belum ada sesi, tampilkan layar login Hallmark Hum
+    currentUser = null;
+    if (elements.appShell) elements.appShell.hidden = true;
+    if (elements.authScreen) elements.authScreen.hidden = false;
+    switchAuthTab('login');
+    renderIcons();
+}
+
+function setupAuthEventListeners() {
+    elements.authTabLogin?.addEventListener('click', () => switchAuthTab('login'));
+    elements.authTabRegister?.addEventListener('click', () => switchAuthTab('register'));
+
+    // In-form quick switch links
+    document.getElementById('switchToRegBtn')?.addEventListener('click', () => switchAuthTab('register'));
+    document.getElementById('switchToLoginBtn')?.addEventListener('click', () => switchAuthTab('login'));
+
+    elements.loginForm?.addEventListener('submit', handleLoginSubmit);
+    elements.registerForm?.addEventListener('submit', handleRegisterSubmit);
+    elements.authDemoBtn?.addEventListener('click', handleQuickDemo);
+
+    elements.authHelpBtn?.addEventListener('click', () => {
+        showAuthAlert('💡 Masuk dengan email terdaftar. Akun admin bawaan: admin@sakuharian.app / admin123. Kamu juga bisa membuat akun baru dengan emailmu sendiri.', 'success');
+    });
+
+    // Login password visibility toggle
+    elements.toggleLoginPwdBtn?.addEventListener('click', () => {
+        if (!elements.loginPassword) return;
+        const isPwd = elements.loginPassword.type === 'password';
+        elements.loginPassword.type = isPwd ? 'text' : 'password';
+        const labelSpan = elements.toggleLoginPwdBtn.querySelector('span');
+        if (labelSpan) labelSpan.textContent = isPwd ? 'Sembunyikan' : 'Tampilkan';
+    });
+
+    // Register password visibility toggle
+    document.getElementById('toggleRegPwdBtn')?.addEventListener('click', () => {
+        const pwdInput = document.getElementById('regPassword');
+        const confirmInput = document.getElementById('regPasswordConfirm');
+        const toggleBtn = document.getElementById('toggleRegPwdBtn');
+        if (!pwdInput) return;
+        const isPwd = pwdInput.type === 'password';
+        pwdInput.type = isPwd ? 'text' : 'password';
+        if (confirmInput) confirmInput.type = isPwd ? 'text' : 'password';
+        const labelSpan = toggleBtn?.querySelector('span');
+        if (labelSpan) labelSpan.textContent = isPwd ? 'Sembunyikan' : 'Tampilkan';
+    });
+
+    // Avatar picker radio visual highlight
+    document.querySelectorAll('.auth-avatar-option input[type="radio"]').forEach((radio) => {
+        radio.addEventListener('change', () => {
+            document.querySelectorAll('.auth-avatar-option').forEach((opt) => opt.classList.remove('is-selected'));
+            radio.closest('.auth-avatar-option')?.classList.add('is-selected');
+        });
+    });
+
+    // Logout triggers
+    elements.logoutSidebarBtn?.addEventListener('click', handleLogout);
+    elements.logoutTopbarBtn?.addEventListener('click', handleLogout);
+
+    // Topbar user dropdown toggle
+    elements.userTopbarBtn?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (elements.userDropdownPopover) {
+            elements.userDropdownPopover.hidden = !elements.userDropdownPopover.hidden;
+        }
+    });
+
+    document.addEventListener('click', (event) => {
+        if (elements.userDropdownPopover && !elements.userDropdownPopover.hidden) {
+            if (!elements.userMenuWrap?.contains(event.target)) {
+                elements.userDropdownPopover.hidden = true;
+            }
+        }
+    });
+}
+
 // Search & Refresh
 elements.search.addEventListener('input', () => {
     showAllTransactions = true;
@@ -3100,7 +3543,10 @@ document.getElementById('showAllTransactions').addEventListener('click', () => {
     showAllTransactions = !showAllTransactions;
     renderTransactions();
 });
-document.getElementById('refreshButton').addEventListener('click', loadTransactions);
+document.getElementById('refreshButton').addEventListener('click', () => {
+    loadTransactions();
+    loadDebts();
+});
 
 [elements.dialog, elements.billDialog, elements.budgetDialog, elements.gsheetDialog, elements.resetBalanceDialog].forEach((dlg) => {
     dlg?.addEventListener('click', (event) => {
@@ -3112,9 +3558,9 @@ initializeTheme();
 initializeMascot();
 initializeCalendarViewTabs();
 initializeNavigation();
+setupAuthEventListeners();
+initializeAuth();
 renderIcons();
-loadTransactions();
-loadDebts();
 
 // Sinkronisasi otomatis menu & webhook Telegram di latar belakang
 fetch(`${API_BASE_URL}/setup-telegram-menu`)

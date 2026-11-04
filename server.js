@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const { Pool } = require('pg');
 const cors = require('cors');
 require('dotenv').config();
@@ -165,7 +166,78 @@ async function ensureDatabaseReady() {
                 ALTER TABLE debts
                 ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'
             `);
-            console.log("Berhasil terhubung ke Neon PostgreSQL & sinkronisasi skema Wallet/Menu! 🐘");
+
+            // --- TABEL MULTI-USER & SESI AUTENTIKASI ---
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(50) UNIQUE NOT NULL,
+                    email VARCHAR(160),
+                    password_hash TEXT NOT NULL,
+                    full_name VARCHAR(100),
+                    avatar VARCHAR(50) DEFAULT '🐮',
+                    role VARCHAR(20) DEFAULT 'user',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            await pool.query(`
+                ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS email VARCHAR(160)
+            `);
+            await pool.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx
+                ON users (LOWER(email))
+                WHERE email IS NOT NULL
+            `);
+            // Akun admin lama (belum punya email) diberi email default agar bisa masuk via email.
+            await pool.query(`
+                UPDATE users SET email = 'admin@sakuharian.app'
+                WHERE LOWER(username) = 'admin' AND email IS NULL
+            `).catch(() => {});
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS user_sessions (
+                    token VARCHAR(64) PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP
+                )
+            `);
+            await pool.query(`
+                ALTER TABLE transactions
+                ADD COLUMN IF NOT EXISTS user_id INTEGER
+            `);
+            await pool.query(`
+                ALTER TABLE debts
+                ADD COLUMN IF NOT EXISTS user_id INTEGER
+            `);
+
+            // Seed Akun Default (Admin / Demo) bila tabel pengguna masih kosong
+            const userCountRes = await pool.query('SELECT COUNT(*) AS count FROM users');
+            if (Number(userCountRes.rows[0]?.count || 0) === 0) {
+                const defaultSalt = crypto.randomBytes(16).toString('hex');
+                const defaultHash = crypto.pbkdf2Sync('admin123', defaultSalt, 1000, 64, 'sha512').toString('hex');
+                const initUserRes = await pool.query(
+                    `INSERT INTO users (username, email, password_hash, full_name, avatar, role)
+                     VALUES ($1, $2, $3, $4, $5, $6)
+                     RETURNING id`,
+                    ['admin', 'admin@sakuharian.app', `${defaultSalt}:${defaultHash}`, 'Pemilik Saku', '🐮', 'admin']
+                );
+                const adminId = initUserRes.rows[0]?.id;
+                if (adminId) {
+                    await pool.query('UPDATE transactions SET user_id = $1 WHERE user_id IS NULL', [adminId]).catch(() => {});
+                    await pool.query('UPDATE debts SET user_id = $1 WHERE user_id IS NULL', [adminId]).catch(() => {});
+                }
+            }
+
+            // Data lama tanpa pemilik diwariskan ke akun pertama (admin) agar tidak terlihat oleh pengguna lain.
+            const ownerRes = await pool.query('SELECT id FROM users ORDER BY id ASC LIMIT 1');
+            const legacyOwnerId = ownerRes.rows[0]?.id;
+            if (legacyOwnerId) {
+                await pool.query('UPDATE transactions SET user_id = $1 WHERE user_id IS NULL', [legacyOwnerId]).catch(() => {});
+                await pool.query('UPDATE debts SET user_id = $1 WHERE user_id IS NULL', [legacyOwnerId]).catch(() => {});
+            }
+
+            console.log("Berhasil terhubung ke Neon PostgreSQL & sinkronisasi skema Multi-User/Wallet/Menu! 🐘");
             setupTelegramBotCommands(false).catch(() => {});
             return true;
         } catch (err) {
@@ -178,6 +250,91 @@ async function ensureDatabaseReady() {
 }
 
 ensureDatabaseReady();
+
+// ================= HELPER AUTENTIKASI & KEAMANAN MULTI-USER =================
+function hashPassword(password) {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.pbkdf2Sync(String(password), salt, 1000, 64, 'sha512').toString('hex');
+    return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, stored) {
+    if (!stored) return false;
+    const cleanStored = String(stored).trim();
+    if (!cleanStored.includes(':')) {
+        const hash = crypto.createHash('sha256').update(String(password)).digest('hex');
+        return hash === cleanStored;
+    }
+    const [salt, origHash] = cleanStored.split(':');
+    const hash = crypto.pbkdf2Sync(String(password), salt, 1000, 64, 'sha512').toString('hex');
+    return hash === origHash;
+}
+
+function generateSessionToken() {
+    return crypto.randomBytes(32).toString('hex');
+}
+
+function normalizeEmail(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(normalizeEmail(value));
+}
+
+function slugifyUsername(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_.-]/g, '')
+        .replace(/^[._-]+|[._-]+$/g, '')
+        .slice(0, 40);
+}
+
+async function generateUniqueUsername(base) {
+    const safeBase = slugifyUsername(base) || 'pengguna';
+    let candidate = safeBase;
+    let counter = 1;
+    while (true) {
+        const exists = await pool.query('SELECT id FROM users WHERE LOWER(username) = $1', [candidate]);
+        if (exists.rows.length === 0) return candidate;
+        candidate = `${safeBase}${counter++}`.slice(0, 50);
+    }
+}
+
+async function resolveAuthUser(req) {
+    try {
+        const authHeader = req.headers?.authorization || '';
+        let token = '';
+        if (authHeader.startsWith('Bearer ')) {
+            token = authHeader.slice(7).trim();
+        } else if (req.headers?.['x-session-token']) {
+            token = String(req.headers['x-session-token']).trim();
+        } else if (req.query?.auth_token) {
+            token = String(req.query.auth_token).trim();
+        }
+
+        if (!token) return null;
+
+        const sessionRes = await pool.query(
+            `SELECT u.id, u.username, u.email, u.full_name, u.avatar, u.role
+             FROM user_sessions s
+             JOIN users u ON s.user_id = u.id
+             WHERE s.token = $1 AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)`,
+            [token]
+        );
+        return sessionRes.rows[0] || null;
+    } catch {
+        return null;
+    }
+}
+
+// Admin tetap dapat melihat data global (mis. hasil Telegram bot), pengguna biasa hanya miliknya sendiri.
+function buildUserScope(user) {
+    if (user?.role === 'admin') {
+        return { clause: '(user_id = $1 OR user_id IS NULL)', params: [user.id] };
+    }
+    return { clause: 'user_id = $1', params: [user.id] };
+}
 
 const POPULAR_WALLETS = [
     { id: 'GoPay', label: '💚 GoPay' },
@@ -940,6 +1097,172 @@ ${financialAdvice}
 
 // ================= REST API UNTUK WEB APP =================
 
+// ================= REST API AUTENTIKASI (MULTI-USER) =================
+
+// API: Registrasi Pengguna Baru
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const { email, username, password, fullName, avatar } = req.body || {};
+        const cleanEmail = normalizeEmail(email);
+        if (!cleanEmail) {
+            return res.status(400).json({ error: 'Email wajib diisi untuk membuat akun.' });
+        }
+        if (!isValidEmail(cleanEmail)) {
+            return res.status(400).json({ error: 'Format email tidak valid. Contoh: nama@email.com.' });
+        }
+        if (!password || String(password).length < 6) {
+            return res.status(400).json({ error: 'Kata sandi minimal 6 karakter.' });
+        }
+
+        const existingEmail = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
+        if (existingEmail.rows.length > 0) {
+            return res.status(409).json({ error: 'Email ini sudah terdaftar. Silakan masuk dengan email tersebut.' });
+        }
+
+        let cleanUsername = slugifyUsername(username);
+        if (cleanUsername) {
+            if (cleanUsername.length < 3) {
+                return res.status(400).json({ error: 'Username minimal 3 karakter (huruf, angka, titik, strip, underscore).' });
+            }
+            const existingUsername = await pool.query('SELECT id FROM users WHERE LOWER(username) = $1', [cleanUsername]);
+            if (existingUsername.rows.length > 0) {
+                return res.status(409).json({ error: 'Username sudah digunakan. Silakan pilih username lain.' });
+            }
+        } else {
+            cleanUsername = await generateUniqueUsername(cleanEmail.split('@')[0]);
+        }
+
+        const pHash = hashPassword(String(password));
+        const finalName = String(fullName || cleanUsername).trim() || cleanUsername;
+        const finalAvatar = String(avatar || '🐮').slice(0, 10);
+
+        const insertRes = await pool.query(
+            `INSERT INTO users (username, email, password_hash, full_name, avatar, role)
+             VALUES ($1, $2, $3, $4, $5, 'user')
+             RETURNING id, username, email, full_name, avatar, role, created_at`,
+            [cleanUsername, cleanEmail, pHash, finalName, finalAvatar]
+        );
+        const newUser = insertRes.rows[0];
+
+        const token = generateSessionToken();
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await pool.query(
+            'INSERT INTO user_sessions (token, user_id, expires_at) VALUES ($1, $2, $3)',
+            [token, newUser.id, expiresAt]
+        );
+
+        res.status(201).json({
+            ok: true,
+            message: 'Pendaftaran akun berhasil! Selamat datang di Saku Harian. 🐮✨',
+            user: {
+                id: newUser.id,
+                username: newUser.username,
+                email: newUser.email,
+                fullName: newUser.full_name,
+                avatar: newUser.avatar,
+                role: newUser.role
+            },
+            token
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Gagal mendaftarkan akun.' });
+    }
+});
+
+// API: Masuk Akun (Login via email, tetap mendukung username lama)
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const { email, username, identifier, password } = req.body || {};
+        const rawIdentifier = String(identifier || email || username || '').trim();
+        if (!rawIdentifier || !password) {
+            return res.status(400).json({ error: 'Email dan kata sandi harus diisi.' });
+        }
+
+        const isEmailLogin = rawIdentifier.includes('@');
+        const userRes = isEmailLogin
+            ? await pool.query(
+                'SELECT id, username, email, password_hash, full_name, avatar, role FROM users WHERE LOWER(email) = $1',
+                [normalizeEmail(rawIdentifier)]
+            )
+            : await pool.query(
+                'SELECT id, username, email, password_hash, full_name, avatar, role FROM users WHERE LOWER(username) = $1',
+                [rawIdentifier.toLowerCase()]
+            );
+        if (userRes.rows.length === 0) {
+            return res.status(401).json({ error: 'Email atau kata sandi tidak cocok.' });
+        }
+        const user = userRes.rows[0];
+        const isValid = verifyPassword(String(password), user.password_hash);
+        if (!isValid) {
+            return res.status(401).json({ error: 'Email atau kata sandi tidak cocok.' });
+        }
+
+        const token = generateSessionToken();
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await pool.query(
+            'INSERT INTO user_sessions (token, user_id, expires_at) VALUES ($1, $2, $3)',
+            [token, user.id, expiresAt]
+        );
+
+        res.json({
+            ok: true,
+            message: 'Berhasil masuk ke Saku Harian! 🐮✨',
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                fullName: user.full_name,
+                avatar: user.avatar,
+                role: user.role
+            },
+            token
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message || 'Gagal memproses login.' });
+    }
+});
+
+// API: Cek Sesi Pengguna Aktif
+app.get('/api/auth/me', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) {
+            return res.status(401).json({ ok: false, error: 'Sesi tidak valid atau telah berakhir.' });
+        }
+        res.json({
+            ok: true,
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                fullName: user.full_name,
+                avatar: user.avatar,
+                role: user.role
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// API: Keluar (Logout)
+app.post('/api/auth/logout', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const authHeader = req.headers?.authorization || '';
+        const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : (req.body?.token || '');
+        if (token) {
+            await pool.query('DELETE FROM user_sessions WHERE token = $1', [token]).catch(() => {});
+        }
+        res.json({ ok: true, message: 'Berhasil keluar.' });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // API: Setup / Sinkronisasi Menu Komando & Webhook Telegram
 app.get('/api/setup-telegram-menu', async (req, res) => {
     try {
@@ -959,7 +1282,15 @@ app.get('/api/setup-telegram-menu', async (req, res) => {
 app.get('/api/transactions', async (req, res) => {
     try {
         await ensureDatabaseReady();
-        const result = await pool.query('SELECT * FROM transactions ORDER BY date DESC, id DESC');
+        const user = await resolveAuthUser(req);
+        if (!user) {
+            return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        }
+        const scope = buildUserScope(user);
+        const result = await pool.query(
+            `SELECT * FROM transactions WHERE ${scope.clause} ORDER BY date DESC, id DESC`,
+            scope.params
+        );
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -970,10 +1301,14 @@ app.get('/api/transactions', async (req, res) => {
 app.post('/api/transactions', async (req, res) => {
     try {
         await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) {
+            return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        }
         const { desc, amount, type, category, wallet, date } = req.body;
         const parsedDate = date && !Number.isNaN(new Date(date).getTime()) ? new Date(date) : new Date();
-        const query = `INSERT INTO transactions ("desc", amount, type, category, wallet, date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`;
-        const values = [desc, amount, type, category || 'Umum', wallet || 'Tunai', parsedDate];
+        const query = `INSERT INTO transactions ("desc", amount, type, category, wallet, date, user_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`;
+        const values = [desc, amount, type, category || 'Umum', wallet || 'Tunai', parsedDate, user.id];
         const result = await pool.query(query, values);
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -985,18 +1320,25 @@ app.post('/api/transactions', async (req, res) => {
 app.post('/api/transactions/reset', async (req, res) => {
     try {
         await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) {
+            return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        }
+        const scope = buildUserScope(user);
         const mode = String(req.body?.mode || 'all').toLowerCase();
         const targetWallet = String(req.body?.wallet || '').trim();
 
         if (mode === 'all') {
-            await pool.query('DELETE FROM transactions');
-            memoryEditSessions.clear();
-            await pool.query('DELETE FROM telegram_edit_sessions').catch(() => {});
+            await pool.query(`DELETE FROM transactions WHERE ${scope.clause}`, scope.params);
+            if (user.role === 'admin') {
+                memoryEditSessions.clear();
+                await pool.query('DELETE FROM telegram_edit_sessions').catch(() => {});
+            }
             return res.json({
                 success: true,
                 mode: 'all',
                 balance: 0,
-                message: 'Seluruh transaksi telah dihapus dan saldo berhasil direset kembali ke semula (Rp 0).'
+                message: 'Seluruh transaksi Anda telah dihapus dan saldo direset kembali ke Rp 0.'
             });
         }
 
@@ -1004,8 +1346,8 @@ app.post('/api/transactions/reset', async (req, res) => {
             const wRes = await pool.query(
                 `SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0) AS net
                  FROM transactions
-                 WHERE LOWER(COALESCE(wallet, 'Tunai')) = LOWER($1)`,
-                [targetWallet]
+                 WHERE ${scope.clause} AND LOWER(COALESCE(wallet, 'Tunai')) = LOWER($2)`,
+                [...scope.params, targetWallet]
             );
             const walletNet = Number(wRes.rows[0]?.net || 0);
             if (walletNet === 0) {
@@ -1021,10 +1363,10 @@ app.post('/api/transactions/reset', async (req, res) => {
             const adjType = walletNet > 0 ? 'expense' : 'income';
             const adjAmount = Math.abs(walletNet);
             const ins = await pool.query(
-                `INSERT INTO transactions ("desc", amount, type, category, wallet, date)
-                 VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+                `INSERT INTO transactions ("desc", amount, type, category, wallet, date, user_id)
+                 VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)
                  RETURNING *`,
-                [`Penyesuaian Hapus Saldo ${targetWallet} (Rp 0)`, adjAmount, adjType, 'Umum', targetWallet]
+                [`Penyesuaian Hapus Saldo ${targetWallet} (Rp 0)`, adjAmount, adjType, 'Umum', targetWallet, user.id]
             );
             return res.json({
                 success: true,
@@ -1037,7 +1379,12 @@ app.post('/api/transactions/reset', async (req, res) => {
         }
 
         // Default mode === 'zero': Nolkan Saldo Berjalan tanpa menghapus riwayat transaksi
-        const { balance } = await getRunningBalanceSummary();
+        const balanceRes = await pool.query(
+            `SELECT COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE -amount END), 0) AS balance
+             FROM transactions WHERE ${scope.clause}`,
+            scope.params
+        );
+        const balance = Number(balanceRes.rows[0]?.balance || 0);
         if (balance === 0) {
             return res.json({
                 success: true,
@@ -1051,10 +1398,10 @@ app.post('/api/transactions/reset', async (req, res) => {
         const adjType = balance > 0 ? 'expense' : 'income';
         const adjAmount = Math.abs(balance);
         const ins = await pool.query(
-            `INSERT INTO transactions ("desc", amount, type, category, wallet, date)
-             VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+            `INSERT INTO transactions ("desc", amount, type, category, wallet, date, user_id)
+             VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)
              RETURNING *`,
-            ['Penyesuaian Hapus Saldo Berjalan (Rp 0)', adjAmount, adjType, 'Umum', 'Tunai']
+            ['Penyesuaian Hapus Saldo Berjalan (Rp 0)', adjAmount, adjType, 'Umum', 'Tunai', user.id]
         );
         return res.json({
             success: true,
@@ -1072,10 +1419,15 @@ app.post('/api/transactions/reset', async (req, res) => {
 app.delete('/api/transactions', async (req, res) => {
     try {
         await ensureDatabaseReady();
-        await pool.query('DELETE FROM transactions');
-        memoryEditSessions.clear();
-        await pool.query('DELETE FROM telegram_edit_sessions').catch(() => {});
-        res.json({ success: true, mode: 'all', balance: 0, message: 'Semua transaksi berhasil direset kembali ke semula (Rp 0).' });
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const scope = buildUserScope(user);
+        await pool.query(`DELETE FROM transactions WHERE ${scope.clause}`, scope.params);
+        if (user.role === 'admin') {
+            memoryEditSessions.clear();
+            await pool.query('DELETE FROM telegram_edit_sessions').catch(() => {});
+        }
+        res.json({ success: true, mode: 'all', balance: 0, message: 'Semua transaksi Anda berhasil direset kembali ke Rp 0.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -1085,10 +1437,16 @@ app.delete('/api/transactions', async (req, res) => {
 app.put('/api/transactions/:id', async (req, res) => {
     try {
         await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const scope = buildUserScope(user);
         const trxId = Number(req.params.id);
         if (!Number.isFinite(trxId)) return res.status(400).json({ error: 'ID transaksi tidak valid.' });
 
-        const existingRes = await pool.query('SELECT * FROM transactions WHERE id = $1', [trxId]);
+        const existingRes = await pool.query(
+            `SELECT * FROM transactions WHERE id = $2 AND ${scope.clause}`,
+            [...scope.params, trxId]
+        );
         if (existingRes.rows.length === 0) {
             return res.status(404).json({ error: 'Transaksi tidak ditemukan di server.' });
         }
@@ -1129,9 +1487,15 @@ app.put('/api/transactions/:id', async (req, res) => {
 app.delete('/api/transactions/:id', async (req, res) => {
     try {
         await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const scope = buildUserScope(user);
         const trxId = Number(req.params.id);
         if (!Number.isFinite(trxId)) return res.status(400).json({ error: 'ID transaksi tidak valid.' });
-        await pool.query('DELETE FROM transactions WHERE id = $1', [trxId]);
+        await pool.query(
+            `DELETE FROM transactions WHERE id = $2 AND ${scope.clause}`,
+            [...scope.params, trxId]
+        );
         res.json({ success: true, id: trxId });
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -1142,7 +1506,13 @@ app.delete('/api/transactions/:id', async (req, res) => {
 app.get('/api/export-googlesheet', async (req, res) => {
     try {
         await ensureDatabaseReady();
-        const result = await pool.query('SELECT id, "desc", amount, type, category, wallet, date FROM transactions ORDER BY date DESC');
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const scope = buildUserScope(user);
+        const result = await pool.query(
+            `SELECT id, "desc", amount, type, category, wallet, date FROM transactions WHERE ${scope.clause} ORDER BY date DESC`,
+            scope.params
+        );
         let csvContent = "\uFEFFID,Keterangan,Nominal,Tipe,Kategori,Kantong Dana,Tanggal\n";
         result.rows.forEach(row => {
             const desc = `"${String(row.desc || '').replace(/"/g, '""')}"`;
@@ -1160,7 +1530,13 @@ app.get('/api/export-googlesheet', async (req, res) => {
 app.get('/api/export-excel', async (req, res) => {
     try {
         await ensureDatabaseReady();
-        const result = await pool.query('SELECT id, "desc", amount, type, category, wallet, date FROM transactions ORDER BY date DESC');
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const scope = buildUserScope(user);
+        const result = await pool.query(
+            `SELECT id, "desc", amount, type, category, wallet, date FROM transactions WHERE ${scope.clause} ORDER BY date DESC`,
+            scope.params
+        );
         let csvContent = "ID,Keterangan,Nominal,Tipe,Kategori,Kantong Dana,Tanggal\n";
         result.rows.forEach(row => {
             const desc = `"${String(row.desc || '').replace(/"/g, '""')}"`;
@@ -1180,7 +1556,13 @@ app.get('/api/export-excel', async (req, res) => {
 app.get('/api/debts', async (req, res) => {
     try {
         await ensureDatabaseReady();
-        const result = await pool.query('SELECT * FROM debts ORDER BY created_at DESC, id DESC');
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const scope = buildUserScope(user);
+        const result = await pool.query(
+            `SELECT * FROM debts WHERE ${scope.clause} ORDER BY created_at DESC, id DESC`,
+            scope.params
+        );
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1191,12 +1573,13 @@ app.get('/api/debts', async (req, res) => {
 app.get('/api/debts/summary', async (req, res) => {
     try {
         await ensureDatabaseReady();
-        const piutang = await pool.query(
-            `SELECT COALESCE(SUM(amount), 0) AS total, COALESCE(SUM(paid_amount), 0) AS paid FROM debts WHERE type = 'piutang'`
-        );
-        const utang = await pool.query(
-            `SELECT COALESCE(SUM(amount), 0) AS total, COALESCE(SUM(paid_amount), 0) AS paid FROM debts WHERE type = 'utang'`
-        );
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const scope = buildUserScope(user);
+        const pQuery = `SELECT COALESCE(SUM(amount), 0) AS total, COALESCE(SUM(paid_amount), 0) AS paid FROM debts WHERE type = 'piutang' AND ${scope.clause}`;
+        const uQuery = `SELECT COALESCE(SUM(amount), 0) AS total, COALESCE(SUM(paid_amount), 0) AS paid FROM debts WHERE type = 'utang' AND ${scope.clause}`;
+        const piutang = await pool.query(pQuery, scope.params);
+        const utang = await pool.query(uQuery, scope.params);
         const pTotal = Number(piutang.rows[0]?.total || 0);
         const pPaid = Number(piutang.rows[0]?.paid || 0);
         const uTotal = Number(utang.rows[0]?.total || 0);
@@ -1215,6 +1598,8 @@ app.get('/api/debts/summary', async (req, res) => {
 app.post('/api/debts', async (req, res) => {
     try {
         await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
         const { type, desc, amount, due_date, status, paid_amount } = req.body;
         if (!type || !['piutang', 'utang'].includes(type)) {
             return res.status(400).json({ error: "Type harus 'piutang' atau 'utang'" });
@@ -1229,11 +1614,11 @@ app.post('/api/debts', async (req, res) => {
             finalStatus = numPaid >= numAmount ? 'paid' : numPaid > 0 ? 'partial' : 'pending';
         }
         const query = `
-            INSERT INTO debts (type, "desc", amount, due_date, status, paid_amount)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO debts (type, "desc", amount, due_date, status, paid_amount, user_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             RETURNING *
         `;
-        const result = await pool.query(query, [type, desc.trim(), numAmount, due_date || null, finalStatus, numPaid]);
+        const result = await pool.query(query, [type, desc.trim(), numAmount, due_date || null, finalStatus, numPaid, user.id]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -1244,8 +1629,16 @@ app.post('/api/debts', async (req, res) => {
 app.put('/api/debts/:id', async (req, res) => {
     try {
         await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
         const debtId = Number(req.params.id);
         if (!Number.isFinite(debtId)) return res.status(400).json({ error: 'ID utang/piutang tidak valid.' });
+        const scope = buildUserScope(user);
+        const owned = await pool.query(
+            `SELECT id FROM debts WHERE id = $2 AND ${scope.clause}`,
+            [...scope.params, debtId]
+        );
+        if (owned.rows.length === 0) return res.status(404).json({ error: 'Data utang/piutang tidak ditemukan.' });
         const { type, desc, amount, due_date, status, paid_amount } = req.body;
         const updateFields = [];
         const values = [];
@@ -1296,9 +1689,15 @@ app.put('/api/debts/:id', async (req, res) => {
 app.delete('/api/debts/:id', async (req, res) => {
     try {
         await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
         const debtId = Number(req.params.id);
         if (!Number.isFinite(debtId)) return res.status(400).json({ error: 'ID utang/piutang tidak valid.' });
-        await pool.query('DELETE FROM debts WHERE id = $1', [debtId]);
+        const scope = buildUserScope(user);
+        await pool.query(
+            `DELETE FROM debts WHERE id = $2 AND ${scope.clause}`,
+            [...scope.params, debtId]
+        );
         res.json({ success: true, id: debtId });
     } catch (err) {
         res.status(500).json({ error: err.message });
