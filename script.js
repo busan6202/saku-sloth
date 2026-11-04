@@ -280,6 +280,7 @@ const elements = {
     billPaidCount: document.getElementById('billPaidCount'),
     notifBadge: document.getElementById('notifBadge'),
     navBillBadge: document.getElementById('navBillBadge'),
+    navDebtBadge: document.getElementById('navDebtBadge'),
     // Piutang & Utang Elements
     debtsList: document.getElementById('debtsList'),
     debtsEmptyState: document.getElementById('debtsEmptyState'),
@@ -295,6 +296,8 @@ const elements = {
     editingDebtId: document.getElementById('editingDebtId'),
     debtDialogTitle: document.getElementById('debtDialogTitle'),
     debtFormError: document.getElementById('debtFormError'),
+    debtTypeHint: document.getElementById('debtTypeHint'),
+    saveDebtBtn: document.getElementById('saveDebtBtn'),
     debtTypeFilter: document.getElementById('debtTypeFilter'),
     debtStatusFilter: document.getElementById('debtStatusFilter'),
     debtSearch: document.getElementById('debtSearch'),
@@ -302,6 +305,19 @@ const elements = {
     closeDebtDialog: document.getElementById('closeDebtDialog'),
     cancelDebtBtn: document.getElementById('cancelDebtBtn'),
     openAddDebtFromEmpty: document.getElementById('openAddDebtFromEmpty'),
+    // Debt Quick Pay Dialog
+    debtPayDialog: document.getElementById('debtPayDialog'),
+    debtPayForm: document.getElementById('debtPayForm'),
+    payDebtId: document.getElementById('payDebtId'),
+    closeDebtPayDialog: document.getElementById('closeDebtPayDialog'),
+    cancelDebtPayBtn: document.getElementById('cancelDebtPayBtn'),
+    debtPayTargetInfo: document.getElementById('debtPayTargetInfo'),
+    payBoxTotal: document.getElementById('payBoxTotal'),
+    payBoxPaid: document.getElementById('payBoxPaid'),
+    payBoxRemaining: document.getElementById('payBoxRemaining'),
+    debtPayInput: document.getElementById('debtPayInput'),
+    payFullPresetBtn: document.getElementById('payFullPresetBtn'),
+    debtPayError: document.getElementById('debtPayError'),
     notifPopover: document.getElementById('notifPopover'),
     notifList: document.getElementById('notifList'),
     urgentBillBanner: document.getElementById('urgentBillBanner'),
@@ -503,18 +519,43 @@ function saveBills() {
 }
 
 function getCategoryIcon(category, type) {
-    if (type === 'income') return { name: 'arrow-down-left', tone: 'income', emoji: '🐮💰' };
+    if (type === 'income') {
+        const normalized = String(category || '').toLocaleLowerCase('id-ID');
+        if (/gaji|salary|honor|fee|bonus|thr|proyek|kerja/.test(normalized)) {
+            return { name: 'briefcase-business', tone: 'income', emoji: '💼' };
+        }
+        return { name: 'arrow-down-left', tone: 'income', emoji: '💰' };
+    }
 
     const normalized = String(category || '').toLocaleLowerCase('id-ID');
-    if (/makan|minum|kuliner|resto|kopi|jajan/.test(normalized)) return { name: 'utensils', tone: 'food', emoji: '🐮🍜' };
-    if (/transport|bensin|kendaraan|ojek|parkir/.test(normalized)) return { name: 'car-front', tone: 'transport', emoji: '🐮🛵' };
-    if (/belanja|shop|lifestyle|hiburan/.test(normalized)) return { name: 'shopping-bag', tone: 'shopping', emoji: '🐮🛒' };
-    if (/tagihan|listrik|utilitas|air|cicilan|kredit/.test(normalized)) return { name: 'zap', tone: 'bills', emoji: '🐮⚡' };
-    if (/kesehatan|obat|medis|bpjs/.test(normalized)) return { name: 'heart-pulse', tone: 'health', emoji: '🐮💊' };
-    if (/gaji|salary|kerja|bonus/.test(normalized)) return { name: 'briefcase-business', tone: 'income', emoji: '🐮💼' };
-    if (/rumah|sewa|hunian|kost|kpr/.test(normalized)) return { name: 'house', tone: 'home', emoji: '🐮🏠' };
-    if (/langganan|digital|internet|wifi|streaming/.test(normalized)) return { name: 'monitor-play', tone: 'digital', emoji: '🐮📱' };
-    return { name: 'receipt-text', tone: 'other', emoji: '🐮🧾' };
+    if (/makan|minum|kuliner|resto|kopi|cafe|jajan|snack|katering|warung|indomie|bakso|ayam/.test(normalized)) {
+        return { name: 'utensils', tone: 'food', emoji: '🍜' };
+    }
+    if (/transport|bensin|spbu|pertamina|pertalite|kendaraan|motor|mobil|ojek|gojek|grab|parkir|tol|kereta|busway/.test(normalized)) {
+        return { name: 'car-front', tone: 'transport', emoji: '🛵' };
+    }
+    if (/belanja|shop|supermarket|alfamart|indomaret|mall|olshop|shopee|tokopedia|lazada|beli|fashion|baju|lifestyle/.test(normalized)) {
+        return { name: 'shopping-bag', tone: 'shopping', emoji: '🛒' };
+    }
+    if (/tagihan|listrik|pln|pdam|air|utilitas|cicilan|kredit|kartu kredit|iuran/.test(normalized)) {
+        return { name: 'zap', tone: 'bills', emoji: '⚡' };
+    }
+    if (/kesehatan|obat|apotek|dokter|klinik|rumah sakit|medis|vitamin|bpjs/.test(normalized)) {
+        return { name: 'heart-pulse', tone: 'health', emoji: '💊' };
+    }
+    if (/rumah|sewa|hunian|kost|kos|kontrakan|kpr|furnitur/.test(normalized)) {
+        return { name: 'house', tone: 'home', emoji: '🏠' };
+    }
+    if (/langganan|digital|internet|wifi|netflix|spotify|youtube|cloud|hosting/.test(normalized)) {
+        return { name: 'monitor-play', tone: 'digital', emoji: '📱' };
+    }
+    if (/pendidikan|sekolah|kuliah|kursus|buku|les|spp/.test(normalized)) {
+        return { name: 'graduation-cap', tone: 'education', emoji: '🎓' };
+    }
+    if (/hiburan|game|bioskop|liburan|travel|hobi|rekreasi/.test(normalized)) {
+        return { name: 'gamepad-2', tone: 'entertainment', emoji: '🎮' };
+    }
+    return { name: 'receipt-text', tone: 'other', emoji: '🧾' };
 }
 
 function classifyExpenseBucket(category, desc) {
@@ -1681,20 +1722,11 @@ function createTransactionRow(transaction) {
     const iconDetails = getCategoryIcon(transaction.category, transaction.type);
     icon.className = `transaction-icon icon-${iconDetails.tone}`;
     icon.setAttribute('aria-hidden', 'true');
-    icon.title = iconDetails.emoji;
+    icon.title = `${transaction.category || 'Transaksi'} (${transaction.type === 'income' ? 'Pemasukan' : 'Pengeluaran'})`;
 
-    // Ikon emoji sapi lucu sebagai ikon utama
-    const emojiSpan = document.createElement('span');
-    emojiSpan.className = 'trx-icon-emoji';
-    emojiSpan.textContent = iconDetails.emoji;
-    emojiSpan.setAttribute('aria-hidden', 'true');
-
-    // Ikon lucide sebagai aksen dekoratif di belakang
     const iconElement = document.createElement('i');
     iconElement.dataset.lucide = iconDetails.name;
-    iconElement.className = 'trx-icon-lucide';
-
-    icon.append(emojiSpan, iconElement);
+    icon.append(iconElement);
 
     const details = document.createElement('div');
     details.style.minWidth = '0';
@@ -1737,8 +1769,8 @@ function createTransactionRow(transaction) {
     const editBtn = document.createElement('button');
     editBtn.type = 'button';
     editBtn.className = 'trx-btn';
-    editBtn.title = 'Edit transaksi ini kapan saja';
-    editBtn.innerHTML = '✏️ <span>Edit</span>';
+    editBtn.title = 'Edit transaksi ini';
+    editBtn.innerHTML = '<i data-lucide="pencil" aria-hidden="true"></i> <span>Edit</span>';
     editBtn.addEventListener('click', () => openEditTransactionDialog(transaction));
 
     const delBtn = document.createElement('button');
@@ -1746,7 +1778,8 @@ function createTransactionRow(transaction) {
     delBtn.className = 'trx-btn delete';
     delBtn.title = 'Hapus transaksi';
     delBtn.setAttribute('aria-label', `Hapus ${transaction.desc || 'transaksi'}`);
-    delBtn.textContent = '🗑️';
+    delBtn.innerHTML = '<i data-lucide="trash-2" aria-hidden="true"></i>';
+    delBtn.addEventListener('click', () => deleteTransactionById(transaction.id));
     delBtn.addEventListener('click', () => deleteTransactionById(transaction.id));
 
     actions.append(editBtn, delBtn);
@@ -1846,9 +1879,25 @@ async function loadTransactions() {
 
 /* ================= PIUTANG & UTANG ================= */
 
+function formatCurrencyId(amount) {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(Number(amount || 0));
+}
+
+function formatDebtDate(dateStr) {
+    if (!dateStr) return '-';
+    try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return String(dateStr);
+        return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch {
+        return String(dateStr);
+    }
+}
+
 async function loadDebts() {
+    if (!elements.debtsList) return;
     elements.debtsList.hidden = false;
-    elements.debtsEmptyState.hidden = true;
+    if (elements.debtsEmptyState) elements.debtsEmptyState.hidden = true;
     const loadingState = document.createElement('div');
     loadingState.className = 'loading-state';
     const spinner = document.createElement('span');
@@ -1866,7 +1915,7 @@ async function loadDebts() {
         renderDebtsSummary(debts);
         renderDebtsList(debts);
     } catch (error) {
-        console.warn('Gagal memuat utang/piutang dari server:', error);
+        console.warn('Gagal memuat utang/piutang dari server, beralih ke cache lokal:', error);
         const cached = JSON.parse(localStorage.getItem('saku-local-debts-cache-v1') || '[]');
         debts = Array.isArray(cached) ? cached : [];
         renderDebtsSummary(debts);
@@ -1875,15 +1924,28 @@ async function loadDebts() {
 }
 
 async function saveDebtLocalCache() {
-    try { localStorage.setItem('saku-local-debts-cache-v1', JSON.stringify(debts)); } catch {}
+    try {
+        localStorage.setItem('saku-local-debts-cache-v1', JSON.stringify(debts));
+    } catch {}
 }
 
 async function createNewDebt({ type, desc, amount, dueDate, status, paidAmount }) {
+    const numAmount = Number(amount);
+    const numPaid = Math.max(0, Number(paidAmount) || 0);
+    const initialStatus = status || (numPaid >= numAmount ? 'paid' : numPaid > 0 ? 'partial' : 'pending');
+
     try {
         const response = await fetch(DEBTS_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify({ type, desc, amount: Number(amount), due_date: dueDate || null, status, paid_amount: Number(paidAmount) || 0 })
+            body: JSON.stringify({
+                type,
+                desc,
+                amount: numAmount,
+                due_date: dueDate || null,
+                status: initialStatus,
+                paid_amount: numPaid
+            })
         });
         if (!response.ok) {
             const errorBody = await response.json().catch(() => ({}));
@@ -1891,162 +1953,321 @@ async function createNewDebt({ type, desc, amount, dueDate, status, paidAmount }
         }
         const savedDebt = await response.json();
         debts.unshift(savedDebt);
-        await saveDebtLocalCache();
-        renderDebtsSummary(debts);
-        renderDebtsList(debts);
-        setNotice(`Berhasil mencatat ${type === 'piutang' ? 'piutang' : 'utang'} baru!`);
-        return true;
     } catch (error) {
-        console.error('Gagal menyimpan utang/piutang:', error);
-        setNotice('Gagal menyimpan utang/piutang. Coba lagi nanti.');
-        return false;
+        console.warn('Simpan utang/piutang ke server gagal, menyimpan ke offline lokal:', error);
+        const localDebt = {
+            id: 'local-' + Date.now(),
+            type,
+            desc,
+            amount: numAmount,
+            due_date: dueDate || null,
+            status: initialStatus,
+            paid_amount: numPaid,
+            created_at: new Date().toISOString()
+        };
+        debts.unshift(localDebt);
     }
+
+    await saveDebtLocalCache();
+    renderDebtsSummary(debts);
+    renderDebtsList(debts);
+    triggerCartoonCelebration(8);
+    setNotice(`Berhasil mencatat ${type === 'piutang' ? 'piutang' : 'utang'} baru! ✨`);
+    return true;
 }
 
 async function updateDebt(debtId, updates) {
     try {
-        const response = await fetch(`${DEBTS_URL}/${debtId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            body: JSON.stringify(updates)
-        });
-        if (!response.ok) throw new Error(`Server merespons ${response.status}`);
-        const updated = await response.json();
-        const idx = debts.findIndex((d) => d.id === debtId);
-        if (idx !== -1) debts[idx] = updated;
+        if (!String(debtId).startsWith('local-')) {
+            const response = await fetch(`${DEBTS_URL}/${debtId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify(updates)
+            });
+            if (response.ok) {
+                const updated = await response.json();
+                const idx = debts.findIndex((d) => String(d.id) === String(debtId));
+                if (idx !== -1) debts[idx] = updated;
+                await saveDebtLocalCache();
+                renderDebtsSummary(debts);
+                renderDebtsList(debts);
+                return true;
+            }
+        }
+    } catch (error) {
+        console.warn('Update utang/piutang di server gagal, memperbarui cache lokal:', error);
+    }
+
+    // Local fallback update
+    const idx = debts.findIndex((d) => String(d.id) === String(debtId));
+    if (idx !== -1) {
+        debts[idx] = { ...debts[idx], ...updates };
         await saveDebtLocalCache();
         renderDebtsSummary(debts);
         renderDebtsList(debts);
         return true;
-    } catch (error) {
-        console.error('Gagal memperbarui utang/piutang:', error);
-        setNotice('Gagal memperbarui status utang/piutang.');
-        return false;
     }
+    return false;
 }
 
 async function deleteDebt(debtId) {
-    if (!confirm('Yakin ingin menghapus data utang/piutang ini?')) return false;
+    if (!confirm('Yakin ingin menghapus catatan utang/piutang ini?')) return false;
     try {
-        const response = await fetch(`${DEBTS_URL}/${debtId}`, { method: 'DELETE' });
-        if (!response.ok) throw new Error(`Server merespons ${response.status}`);
-        debts = debts.filter((d) => d.id !== debtId);
-        await saveDebtLocalCache();
-        renderDebtsSummary(debts);
-        renderDebtsList(debts);
-        setNotice('Data utang/piutang berhasil dihapus.');
-        return true;
+        if (!String(debtId).startsWith('local-')) {
+            await fetch(`${DEBTS_URL}/${debtId}`, { method: 'DELETE' });
+        }
     } catch (error) {
-        console.error('Gagal menghapus utang/piutang:', error);
-        setNotice('Gagal menghapus data utang/piutang.');
-        return false;
+        console.warn('Hapus utang/piutang dari server gagal, menghapus dari lokal:', error);
     }
+
+    debts = debts.filter((d) => String(d.id) !== String(debtId));
+    await saveDebtLocalCache();
+    renderDebtsSummary(debts);
+    renderDebtsList(debts);
+    setNotice('Catatan utang/piutang berhasil dihapus.');
+    return true;
 }
 
-function formatDebtStatusBadge(status) {
-    const config = { pending: { label: 'Belum Lunas', color: '#e9756a' }, paid: { label: 'Sudah Lunas', color: '#89bd5c' }, partial: { label: 'Sebagian Lunas', color: '#f5b942' } };
-    const c = config[status] || config.pending;
-    return `<span class="debt-status-badge" style="background: color-mix(in srgb, ${c.color} 15%, transparent); color: ${c.color}; border: 1px solid ${c.color};">${c.label}</span>`;
+function openAddDebtDialog() {
+    elements.debtForm.reset();
+    elements.editingDebtId.value = '';
+    elements.debtDialogTitle.textContent = 'Tambah Catatan Piutang / Utang';
+    elements.saveDebtBtn.textContent = 'Simpan Catatan';
+    const piutangRadio = document.querySelector('input[name="debtType"][value="piutang"]');
+    if (piutangRadio) piutangRadio.checked = true;
+    if (elements.debtTypeHint) {
+        elements.debtTypeHint.textContent = '🐮💸 Piutang: Orang lain berhutang kepada Anda (uang yang akan Anda terima).';
+    }
+    elements.debtPaidAmount.value = 0;
+    elements.debtStatus.value = 'pending';
+    elements.debtFormError.hidden = true;
+    elements.debtDialog.showModal();
 }
 
-function formatCurrencyId(amount) {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(Number(amount || 0));
+function openEditDebtDialog(debt) {
+    elements.debtForm.reset();
+    elements.editingDebtId.value = debt.id;
+    elements.debtDialogTitle.textContent = 'Edit Catatan Piutang / Utang';
+    elements.saveDebtBtn.textContent = 'Perbarui Catatan';
+
+    const typeRadio = document.querySelector(`input[name="debtType"][value="${debt.type}"]`);
+    if (typeRadio) typeRadio.checked = true;
+    if (elements.debtTypeHint) {
+        elements.debtTypeHint.textContent = debt.type === 'piutang'
+            ? '🐮💸 Piutang: Orang lain berhutang kepada Anda (uang yang akan Anda terima).'
+            : '🐮💰 Utang: Anda berhutang kepada pihak lain (uang yang harus Anda bayar).';
+    }
+
+    elements.debtDescription.value = debt.desc || '';
+    elements.debtAmount.value = debt.amount || '';
+    elements.debtDueDate.value = debt.due_date ? String(debt.due_date).slice(0, 10) : '';
+    elements.debtStatus.value = debt.status || 'pending';
+    elements.debtPaidAmount.value = debt.paid_amount || 0;
+    elements.debtFormError.hidden = true;
+    elements.debtDialog.showModal();
+}
+
+function openPayDebtDialog(debt) {
+    const total = Number(debt.amount || 0);
+    const paid = Number(debt.paid_amount || 0);
+    const remaining = Math.max(0, total - paid);
+
+    elements.payDebtId.value = debt.id;
+    elements.payBoxTotal.textContent = formatCurrencyId(total);
+    elements.payBoxPaid.textContent = formatCurrencyId(paid);
+    elements.payBoxRemaining.textContent = formatCurrencyId(remaining);
+    elements.debtPayTargetInfo.textContent = `${debt.type === 'piutang' ? 'Piutang dari' : 'Utang kepada'}: ${debt.desc}`;
+    elements.debtPayInput.value = remaining > 0 ? remaining : '';
+    elements.debtPayError.hidden = true;
+
+    // Preset button
+    elements.payFullPresetBtn.onclick = () => {
+        elements.debtPayInput.value = remaining;
+    };
+
+    elements.debtPayDialog.showModal();
 }
 
 function renderDebtsSummary(debtsList) {
     const piutang = debtsList.filter((d) => d.type === 'piutang');
     const utang = debtsList.filter((d) => d.type === 'utang');
+
     const piutangTotal = piutang.reduce((sum, d) => sum + Number(d.amount || 0), 0);
     const piutangPaid = piutang.reduce((sum, d) => sum + Number(d.paid_amount || 0), 0);
-    const piutangOutstanding = piutangTotal - piutangPaid;
+    const piutangOutstanding = Math.max(0, piutangTotal - piutangPaid);
+
     const utangTotal = utang.reduce((sum, d) => sum + Number(d.amount || 0), 0);
     const utangPaid = utang.reduce((sum, d) => sum + Number(d.paid_amount || 0), 0);
-    const utangOutstanding = utangTotal - utangPaid;
+    const utangOutstanding = Math.max(0, utangTotal - utangPaid);
+
     const net = piutangOutstanding - utangOutstanding;
-    elements.piutangTotal.textContent = formatCurrencyId(piutangTotal);
-    elements.piutangOutstanding.textContent = `Belum lunas: ${formatCurrencyId(piutangOutstanding)}`;
-    elements.utangTotal.textContent = formatCurrencyId(utangTotal);
-    elements.utangOutstanding.textContent = `Belum lunas: ${formatCurrencyId(utangOutstanding)}`;
-    elements.debtsNetValue.textContent = formatCurrencyId(net);
-    elements.debtsNetCaption.textContent = net >= 0 ? 'Piutang lebih besar dari utang' : 'Utang lebih besar dari piutang';
-    elements.debtsNetValue.style.color = net >= 0 ? '#89bd5c' : '#e9756a';
+
+    if (elements.piutangTotal) elements.piutangTotal.textContent = formatCurrencyId(piutangTotal);
+    if (elements.piutangOutstanding) elements.piutangOutstanding.textContent = `Belum lunas: ${formatCurrencyId(piutangOutstanding)}`;
+    if (elements.utangTotal) elements.utangTotal.textContent = formatCurrencyId(utangTotal);
+    if (elements.utangOutstanding) elements.utangOutstanding.textContent = `Belum lunas: ${formatCurrencyId(utangOutstanding)}`;
+
+    if (elements.debtsNetValue) {
+        elements.debtsNetValue.textContent = (net >= 0 ? '+ ' : '− ') + formatCurrencyId(Math.abs(net));
+        elements.debtsNetValue.style.color = net > 0 ? 'var(--green-ink)' : net < 0 ? '#B5453A' : 'var(--ink)';
+    }
+    if (elements.debtsNetCaption) {
+        elements.debtsNetCaption.textContent = net > 0
+            ? 'Surplus (Piutang lebih besar dari utang)'
+            : net < 0
+            ? 'Defisit (Utang lebih besar dari piutang)'
+            : 'Seimbang (Sisa piutang sama dengan utang)';
+    }
+
+    // Update Nav Debt Badge
+    const pendingCount = debtsList.filter((d) => d.status !== 'paid').length;
+    if (elements.navDebtBadge) {
+        elements.navDebtBadge.textContent = pendingCount;
+        elements.navDebtBadge.hidden = pendingCount === 0;
+    }
 }
 
 function renderDebtsList(debtsList) {
+    if (!elements.debtsList) return;
+
     const filtered = debtsList.filter((d) => {
         if (selectedDebtTypeFilter !== 'all' && d.type !== selectedDebtTypeFilter) return false;
         if (selectedDebtStatusFilter !== 'all' && d.status !== selectedDebtStatusFilter) return false;
         const q = debtSearchQuery.toLowerCase();
         return (d.desc || '').toLowerCase().includes(q);
     });
+
     elements.debtsList.replaceChildren();
+
     if (filtered.length === 0) {
         elements.debtsList.hidden = true;
-        elements.debtsEmptyState.hidden = false;
-        elements.debtsListStatus.textContent = '';
+        if (elements.debtsEmptyState) elements.debtsEmptyState.hidden = false;
+        if (elements.debtsListStatus) elements.debtsListStatus.textContent = '';
         return;
     }
+
     elements.debtsList.hidden = false;
-    elements.debtsEmptyState.hidden = true;
-    elements.debtsListStatus.textContent = `${filtered.length} data utang/piutang`;
+    if (elements.debtsEmptyState) elements.debtsEmptyState.hidden = true;
+    if (elements.debtsListStatus) {
+        elements.debtsListStatus.textContent = `Menampilkan ${filtered.length} dari ${debtsList.length} catatan piutang & utang`;
+    }
+
     filtered.forEach((debt) => {
-        const row = document.createElement('article');
-        row.className = 'debt-row';
-        row.style.animation = 'fadeIn 0.4s ease forwards';
         const isPiutang = debt.type === 'piutang';
-        const typeLabel = isPiutang ? 'PIUTANG' : 'UTANG';
-        const typeIcon = isPiutang ? '🐮💸' : '🐮💰';
-        const outstanding = Number(debt.amount || 0) - Number(debt.paid_amount || 0);
-        const typeBadge = document.createElement('span');
-        typeBadge.className = `debt-type-badge ${isPiutang ? 'piutang' : 'utang'}`;
-        typeBadge.innerHTML = `${typeIcon} ${typeLabel}`;
-        const desc = document.createElement('div');
-        desc.className = 'debt-desc';
-        desc.textContent = debt.desc || '-';
-        const meta = document.createElement('div');
-        meta.className = 'debt-meta';
+        const total = Number(debt.amount || 0);
+        const paid = Number(debt.paid_amount || 0);
+        const outstanding = Math.max(0, total - paid);
+        const isPaid = debt.status === 'paid' || outstanding === 0;
+        const isPartial = !isPaid && paid > 0;
+        const statusLabel = isPaid ? '✅ Lunas' : isPartial ? '🔄 Dicicil Sebagian' : '⏳ Belum Lunas';
+        const statusClass = isPaid ? 'paid' : isPartial ? 'partial' : 'pending';
+        const progressPct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+
+        const card = document.createElement('article');
+        card.className = `debt-card ${isPaid ? 'is-paid' : ''}`;
+
+        // Due date calculation
+        let dueDatePillHtml = '';
         if (debt.due_date) {
             const due = new Date(debt.due_date);
-            meta.innerHTML = `<span class="debt-due">${due.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>`;
-        }
-        const amount = document.createElement('div');
-        amount.className = 'debt-amount';
-        amount.textContent = formatCurrencyId(debt.amount);
-        const statusBadge = document.createElement('span');
-        statusBadge.className = 'debt-status';
-        statusBadge.innerHTML = formatDebtStatusBadge(debt.status);
-        const paidInfo = document.createElement('div');
-        paidInfo.className = 'debt-paid';
-        if (Number(debt.paid_amount || 0) > 0) {
-            paidInfo.textContent = `Terbayar: ${formatCurrencyId(debt.paid_amount)}`;
-        } else {
-            paidInfo.textContent = 'Belum dibayar';
-            paidInfo.style.color = '#e9756a';
-        }
-        const actions = document.createElement('div');
-        actions.className = 'debt-actions';
-        const payBtn = document.createElement('button');
-        payBtn.className = 'debt-btn debt-btn-pay';
-        payBtn.title = 'Tandai sebagai lunas / bayar sebagian';
-        payBtn.innerHTML = '💵 Bayar';
-        payBtn.addEventListener('click', () => {
-            const newPaid = prompt(`Masukkan jumlah yang sudah dibayar untuk "${debt.desc}"\n(Sisa belum lunas: ${formatCurrencyId(outstanding)})`, String(debt.paid_amount || 0));
-            if (newPaid !== null) {
-                const paidNum = Number(newPaid);
-                if (isNaN(paidNum) || paidNum < 0) { setNotice('Nominal tidak valid.'); return; }
-                const newStatus = paidNum >= Number(debt.amount) ? 'paid' : paidNum > 0 ? 'partial' : 'pending';
-                updateDebt(debt.id, { status: newStatus, paid_amount: paidNum });
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+            const diffDays = Math.ceil((due - now) / (1000 * 60 * 60 * 24));
+            let urgencyClass = '';
+            let dueText = `Tempo: ${formatDebtDate(debt.due_date)}`;
+            if (!isPaid) {
+                if (diffDays < 0) {
+                    urgencyClass = 'is-urgent';
+                    dueText = `⚠️ Terlambat ${Math.abs(diffDays)} hari (${formatDebtDate(debt.due_date)})`;
+                } else if (diffDays <= 3) {
+                    urgencyClass = 'is-urgent';
+                    dueText = `⏰ H-${diffDays} (${formatDebtDate(debt.due_date)})`;
+                }
             }
-        });
-        const delBtn = document.createElement('button');
-        delBtn.className = 'debt-btn debt-btn-delete';
-        delBtn.title = 'Hapus data utang/piutang';
-        delBtn.textContent = '🗑️';
-        delBtn.addEventListener('click', () => deleteDebt(debt.id));
-        actions.append(payBtn, delBtn);
-        row.append(typeBadge, desc, meta, amount, statusBadge, paidInfo, actions);
-        elements.debtsList.append(row);
+            dueDatePillHtml = `<span class="debt-due-pill ${urgencyClass}">${dueText}</span>`;
+        }
+
+        // Progress bar
+        let progressHtml = '';
+        if (isPartial) {
+            progressHtml = `
+                <div class="debt-progress-wrap">
+                    <div class="debt-progress-track">
+                        <div class="debt-progress-bar" style="width: ${progressPct}%;"></div>
+                    </div>
+                    <span class="debt-progress-pct">${progressPct}%</span>
+                </div>
+            `;
+        }
+
+        // Sub info
+        const paidText = paid > 0 ? `<span>Terbayar: <strong>${formatCurrencyId(paid)}</strong></span>` : '';
+
+        card.innerHTML = `
+            <div class="debt-card-header-bar">
+                <div class="debt-badges">
+                    <span class="debt-type-tag ${isPiutang ? 'piutang' : 'utang'}">
+                        ${isPiutang ? '🐮💸 Piutang' : '🐮💰 Utang'}
+                    </span>
+                    <span class="debt-status-tag ${statusClass}">
+                        ${statusLabel}
+                    </span>
+                </div>
+                ${dueDatePillHtml}
+            </div>
+
+            <div class="debt-card-main">
+                <div class="debt-info">
+                    <h3 class="debt-title"></h3>
+                    <div class="debt-sub-info">
+                        <span>Total: <strong>${formatCurrencyId(total)}</strong></span>
+                        ${paidText}
+                    </div>
+                </div>
+                <div class="debt-amount-col">
+                    <span class="debt-amount-label">${outstanding > 0 ? 'Sisa Belum Lunas' : 'Status'}</span>
+                    <strong class="debt-outstanding-amount ${outstanding > 0 ? (isPiutang ? 'text-income' : 'text-danger') : 'text-success'}">
+                        ${outstanding > 0 ? formatCurrencyId(outstanding) : 'LUNAS ✨'}
+                    </strong>
+                </div>
+            </div>
+
+            ${progressHtml}
+
+            <div class="debt-card-footer">
+                <div class="debt-date-info">
+                    <span>${debt.created_at ? 'Dicatat: ' + formatDebtDate(debt.created_at) : ''}</span>
+                </div>
+                <div class="debt-btn-group">
+                    <button class="trx-btn debt-pay-action-btn" type="button" title="Catat pembayaran atau pelunasan" data-debt-pay="${debt.id}">
+                        💵 <span>${isPaid ? 'Ubah Pembayaran' : 'Bayar / Cicil'}</span>
+                    </button>
+                    <button class="trx-btn" type="button" title="Edit catatan ini" data-debt-edit="${debt.id}">
+                        ✏️ <span>Edit</span>
+                    </button>
+                    <button class="trx-btn delete" type="button" title="Hapus catatan" data-debt-delete="${debt.id}">
+                        🗑️
+                    </button>
+                </div>
+            </div>
+        `;
+
+        card.querySelector('.debt-title').textContent = debt.desc || 'Tanpa keterangan';
+
+        // Event listeners
+        const payBtn = card.querySelector(`[data-debt-pay="${debt.id}"]`);
+        if (payBtn) payBtn.addEventListener('click', () => openPayDebtDialog(debt));
+
+        const editBtn = card.querySelector(`[data-debt-edit="${debt.id}"]`);
+        if (editBtn) editBtn.addEventListener('click', () => openEditDebtDialog(debt));
+
+        const delBtn = card.querySelector(`[data-debt-delete="${debt.id}"]`);
+        if (delBtn) delBtn.addEventListener('click', () => deleteDebt(debt.id));
+
+        elements.debtsList.append(card);
     });
+
+    renderIcons();
 }
 
 async function createNewTransaction({ desc, amount, type, category, wallet, dateStr }) {
@@ -2665,61 +2886,131 @@ document.getElementById('cancelBillDialog').addEventListener('click', () => elem
 elements.billForm.addEventListener('submit', submitNewBill);
 
 // Piutang & Utang Dialog Events
-document.getElementById('openAddDebtBtn').addEventListener('click', () => {
-    elements.debtForm.reset();
-    elements.editingDebtId.value = '';
-    elements.debtDialogTitle.textContent = 'Tambah Piutang / Utang';
-    document.querySelector('input[name="debtType"][value="piutang"]').checked = true;
-    elements.debtFormError.hidden = true;
-    elements.debtDialog.showModal();
-});
-document.getElementById('openAddDebtFromEmpty').addEventListener('click', () => {
-    elements.debtForm.reset();
-    elements.editingDebtId.value = '';
-    elements.debtDialogTitle.textContent = 'Tambah Piutang / Utang';
-    document.querySelector('input[name="debtType"][value="piutang"]').checked = true;
-    elements.debtFormError.hidden = true;
-    elements.debtDialog.showModal();
-});
-document.getElementById('closeDebtDialog').addEventListener('click', () => elements.debtDialog.close());
-document.getElementById('cancelDebtBtn').addEventListener('click', () => elements.debtDialog.close());
+if (elements.openAddDebtBtn) elements.openAddDebtBtn.addEventListener('click', openAddDebtDialog);
+if (elements.openAddDebtFromEmpty) elements.openAddDebtFromEmpty.addEventListener('click', openAddDebtDialog);
+if (elements.closeDebtDialog) elements.closeDebtDialog.addEventListener('click', () => elements.debtDialog.close());
+if (elements.cancelDebtBtn) elements.cancelDebtBtn.addEventListener('click', () => elements.debtDialog.close());
 
-async function submitNewDebt(event) {
+// Radio change event for dynamic type hint
+document.querySelectorAll('input[name="debtType"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+        if (!elements.debtTypeHint) return;
+        elements.debtTypeHint.textContent = radio.value === 'piutang'
+            ? '🐮💸 Piutang: Orang lain berhutang kepada Anda (uang yang akan Anda terima).'
+            : '🐮💰 Utang: Anda berhutang kepada pihak lain (uang yang harus Anda bayar).';
+    });
+});
+
+async function submitDebtForm(event) {
     event.preventDefault();
     elements.debtFormError.hidden = true;
     const formData = new FormData(elements.debtForm);
+    const editingId = String(elements.editingDebtId.value || '').trim();
     const type = String(formData.get('debtType') || 'piutang');
     const desc = String(formData.get('desc') || '').trim();
     const amount = Number(formData.get('amount'));
     const dueDate = String(formData.get('dueDate') || '').trim() || null;
     const status = String(formData.get('status') || 'pending');
     const paidAmount = Number(formData.get('paidAmount') || 0);
+
     if (!desc || !amount || amount <= 0) {
         elements.debtFormError.hidden = false;
-        elements.debtFormError.textContent = 'Nama dan nominal harus diisi dengan benar.';
+        elements.debtFormError.textContent = 'Nama dan total nominal harus diisi dengan benar.';
         return;
     }
-    const ok = await createNewDebt({ type, desc, amount, dueDate, status, paidAmount });
-    if (ok) {
-        elements.debtForm.reset();
-        elements.debtDialog.close();
+
+    if (editingId) {
+        // Edit existing debt
+        const ok = await updateDebt(editingId, {
+            type,
+            desc,
+            amount,
+            due_date: dueDate,
+            status: paidAmount >= amount ? 'paid' : status,
+            paid_amount: paidAmount
+        });
+        if (ok) {
+            elements.debtForm.reset();
+            elements.debtDialog.close();
+            setNotice('Catatan piutang / utang berhasil diperbarui! ✨');
+        } else {
+            elements.debtFormError.hidden = false;
+            elements.debtFormError.textContent = 'Gagal memperbarui catatan. Coba lagi.';
+        }
+    } else {
+        // Create new debt
+        const ok = await createNewDebt({ type, desc, amount, dueDate, status, paidAmount });
+        if (ok) {
+            elements.debtForm.reset();
+            elements.debtDialog.close();
+        }
     }
 }
-elements.debtForm.addEventListener('submit', submitNewDebt);
+if (elements.debtForm) elements.debtForm.addEventListener('submit', submitDebtForm);
+
+// Quick Pay Dialog Events
+if (elements.closeDebtPayDialog) elements.closeDebtPayDialog.addEventListener('click', () => elements.debtPayDialog.close());
+if (elements.cancelDebtPayBtn) elements.cancelDebtPayBtn.addEventListener('click', () => elements.debtPayDialog.close());
+
+async function submitDebtPayForm(event) {
+    event.preventDefault();
+    elements.debtPayError.hidden = true;
+    const debtId = elements.payDebtId.value;
+    const payNum = Number(elements.debtPayInput.value);
+
+    if (!debtId || isNaN(payNum) || payNum <= 0) {
+        elements.debtPayError.hidden = false;
+        elements.debtPayError.textContent = 'Masukkan nominal pembayaran yang valid (lebih dari 0).';
+        return;
+    }
+
+    const debt = debts.find((d) => String(d.id) === String(debtId));
+    if (!debt) {
+        elements.debtPayError.hidden = false;
+        elements.debtPayError.textContent = 'Data catatan tidak ditemukan.';
+        return;
+    }
+
+    const currentPaid = Number(debt.paid_amount || 0);
+    const newPaid = currentPaid + payNum;
+    const totalAmount = Number(debt.amount || 0);
+    const newStatus = newPaid >= totalAmount ? 'paid' : 'partial';
+
+    const ok = await updateDebt(debtId, {
+        paid_amount: newPaid,
+        status: newStatus
+    });
+
+    if (ok) {
+        elements.debtPayDialog.close();
+        triggerCartoonCelebration(12);
+        setNotice(`Pembayaran ${formatCurrencyId(payNum)} berhasil dicatat! ${newStatus === 'paid' ? '🎉 Catatan Lunas!' : '✨'}`);
+    } else {
+        elements.debtPayError.hidden = false;
+        elements.debtPayError.textContent = 'Gagal mencatat pembayaran. Coba lagi.';
+    }
+}
+if (elements.debtPayForm) elements.debtPayForm.addEventListener('submit', submitDebtPayForm);
 
 // Debt filter & search events
-elements.debtTypeFilter.addEventListener('change', () => {
-    selectedDebtTypeFilter = elements.debtTypeFilter.value;
-    renderDebtsList(debts);
-});
-elements.debtStatusFilter.addEventListener('change', () => {
-    selectedDebtStatusFilter = elements.debtStatusFilter.value;
-    renderDebtsList(debts);
-});
-elements.debtSearch.addEventListener('input', () => {
-    debtSearchQuery = elements.debtSearch.value;
-    renderDebtsList(debts);
-});
+if (elements.debtTypeFilter) {
+    elements.debtTypeFilter.addEventListener('change', () => {
+        selectedDebtTypeFilter = elements.debtTypeFilter.value;
+        renderDebtsList(debts);
+    });
+}
+if (elements.debtStatusFilter) {
+    elements.debtStatusFilter.addEventListener('change', () => {
+        selectedDebtStatusFilter = elements.debtStatusFilter.value;
+        renderDebtsList(debts);
+    });
+}
+if (elements.debtSearch) {
+    elements.debtSearch.addEventListener('input', () => {
+        debtSearchQuery = elements.debtSearch.value;
+        renderDebtsList(debts);
+    });
+}
 
 document.getElementById('testNotificationBtn').addEventListener('click', requestAndTestBrowserNotification);
 document.getElementById('enableBrowserNotifBtn').addEventListener('click', requestAndTestBrowserNotification);

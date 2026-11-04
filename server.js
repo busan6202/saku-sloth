@@ -145,9 +145,26 @@ async function ensureDatabaseReady() {
                 ALTER TABLE telegram_edit_sessions
                 ADD COLUMN IF NOT EXISTS payload TEXT DEFAULT '{}'
             `);
-            await pool.query(`\n                CREATE TABLE IF NOT EXISTS debts (\n                    id SERIAL PRIMARY KEY,\n                    type VARCHAR(20) NOT NULL,\n                    "desc" TEXT NOT NULL,\n                    amount NUMERIC NOT NULL,\n                    paid_amount NUMERIC DEFAULT 0,\n                    status VARCHAR(20) DEFAULT 'pending',\n                    due_date DATE,\n                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n                )\n            `);
-            await pool.query(`\n                ALTER TABLE debts\n                ADD COLUMN IF NOT EXISTS paid_amount NUMERIC DEFAULT 0\n            `);
-            await pool.query(`\n                ALTER TABLE debts\n                ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'\n            `);
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS debts (
+                    id SERIAL PRIMARY KEY,
+                    type VARCHAR(20) NOT NULL,
+                    "desc" TEXT NOT NULL,
+                    amount NUMERIC NOT NULL,
+                    paid_amount NUMERIC DEFAULT 0,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    due_date DATE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            await pool.query(`
+                ALTER TABLE debts
+                ADD COLUMN IF NOT EXISTS paid_amount NUMERIC DEFAULT 0
+            `);
+            await pool.query(`
+                ALTER TABLE debts
+                ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending'
+            `);
             console.log("Berhasil terhubung ke Neon PostgreSQL & sinkronisasi skema Wallet/Menu! 🐘");
             setupTelegramBotCommands(false).catch(() => {});
             return true;
@@ -1198,39 +1215,72 @@ app.get('/api/debts/summary', async (req, res) => {
 app.post('/api/debts', async (req, res) => {
     try {
         await ensureDatabaseReady();
-        const { type, desc, amount, due_date } = req.body;
+        const { type, desc, amount, due_date, status, paid_amount } = req.body;
         if (!type || !['piutang', 'utang'].includes(type)) {
             return res.status(400).json({ error: "Type harus 'piutang' atau 'utang'" });
         }
         if (!desc || !amount || Number(amount) <= 0) {
-            return res.status(400).json({ error: 'Deskripsi dan nominal harus diisi' });
+            return res.status(400).json({ error: 'Deskripsi dan nominal harus diisi dengan benar' });
         }
-        const query = `INSERT INTO debts (type, "desc", amount, due_date) VALUES ($1, $2, $3, $4) RETURNING *`;
-        const result = await pool.query(query, [type, desc, Number(amount), due_date || null]);
+        const numAmount = Number(amount);
+        const numPaid = Math.max(0, Number(paid_amount) || 0);
+        let finalStatus = status;
+        if (!finalStatus) {
+            finalStatus = numPaid >= numAmount ? 'paid' : numPaid > 0 ? 'partial' : 'pending';
+        }
+        const query = `
+            INSERT INTO debts (type, "desc", amount, due_date, status, paid_amount)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING *
+        `;
+        const result = await pool.query(query, [type, desc.trim(), numAmount, due_date || null, finalStatus, numPaid]);
         res.status(201).json(result.rows[0]);
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
 });
 
-// API: Update status / pembayaran piutang atau utang
+// API: Update data / status / pembayaran piutang atau utang
 app.put('/api/debts/:id', async (req, res) => {
     try {
         await ensureDatabaseReady();
         const debtId = Number(req.params.id);
         if (!Number.isFinite(debtId)) return res.status(400).json({ error: 'ID utang/piutang tidak valid.' });
-        const { status, paid_amount } = req.body;
+        const { type, desc, amount, due_date, status, paid_amount } = req.body;
         const updateFields = [];
         const values = [];
         let paramIdx = 1;
+
+        if (type !== undefined) {
+            if (!['piutang', 'utang'].includes(type)) return res.status(400).json({ error: "Type harus 'piutang' atau 'utang'" });
+            updateFields.push(`type = $${paramIdx++}`);
+            values.push(type);
+        }
+        if (desc !== undefined) {
+            if (!String(desc).trim()) return res.status(400).json({ error: 'Deskripsi tidak boleh kosong' });
+            updateFields.push(`"desc" = $${paramIdx++}`);
+            values.push(String(desc).trim());
+        }
+        if (amount !== undefined) {
+            const numAmount = Number(amount);
+            if (!Number.isFinite(numAmount) || numAmount <= 0) return res.status(400).json({ error: 'Nominal harus lebih dari 0' });
+            updateFields.push(`amount = $${paramIdx++}`);
+            values.push(numAmount);
+        }
+        if (due_date !== undefined) {
+            updateFields.push(`due_date = $${paramIdx++}`);
+            values.push(due_date || null);
+        }
+        if (paid_amount !== undefined) {
+            const numPaid = Math.max(0, Number(paid_amount) || 0);
+            updateFields.push(`paid_amount = $${paramIdx++}`);
+            values.push(numPaid);
+        }
         if (status !== undefined) {
             updateFields.push(`status = $${paramIdx++}`);
             values.push(status);
         }
-        if (paid_amount !== undefined) {
-            updateFields.push(`paid_amount = $${paramIdx++}`);
-            values.push(Number(paid_amount));
-        }
+
         if (updateFields.length === 0) return res.status(400).json({ error: 'Tidak ada field untuk diupdate' });
         values.push(debtId);
         const query = `UPDATE debts SET ${updateFields.join(', ')} WHERE id = $${paramIdx} RETURNING *`;
