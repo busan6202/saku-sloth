@@ -1703,6 +1703,58 @@ h1 {
 .transaction-icon.icon-home { background: #E9F5EF; color: #4D8A68; }
 .transaction-icon.icon-digital { background: #E9F1F8; color: #557F9C; }
 
+/* ================= IKON SAPI LUCU (COW THEME) ================= */
+.transaction-icon {
+    position: relative;
+    overflow: hidden;
+}
+
+/* Pola nodok sapi di latar belakang masing-masing tone */
+.transaction-icon.icon-income::before,
+.transaction-icon.icon-food::before,
+.transaction-icon.icon-transport::before,
+.transaction-icon.icon-shopping::before,
+.transaction-icon.icon-bills::before,
+.transaction-icon.icon-health::before,
+.transaction-icon.icon-home::before,
+.transaction-icon.icon-digital::before,
+.transaction-icon.icon-other::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 0;
+}
+.transaction-icon.icon-income::before { background-image: radial-gradient(#5cb85c 12%, transparent 12%), radial-gradient(#5cb85c 12%, transparent 12%); background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+.transaction-icon.icon-food::before { background-image: radial-gradient(#d4a373 12%, transparent 12%), radial-gradient(#d4a373 12%, transparent 12%); background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+.transaction-icon.icon-transport::before { background-image: radial-gradient(#5b7bd6 12%, transparent 12%), radial-gradient(#5b7bd6 12%, transparent 12%); background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+.transaction-icon.icon-shopping::before { background-image: radial-gradient(#a87dd7 12%, transparent 12%), radial-gradient(#a87dd7 12%, transparent 12%); background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+.transaction-icon.icon-bills::before { background-image: radial-gradient(#d9a441 12%, transparent 12%), radial-gradient(#d9a441 12%, transparent 12%); background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+.transaction-icon.icon-health::before { background-image: radial-gradient(#c36459 12%, transparent 12%), radial-gradient(#c36459 12%, transparent 12%); background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+.transaction-icon.icon-home::before { background-image: radial-gradient(#4d8a68 12%, transparent 12%), radial-gradient(#4d8a68 12%, transparent 12%); background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+.transaction-icon.icon-digital::before { background-image: radial-gradient(#557f9c 12%, transparent 12%), radial-gradient(#557f9c 12%, transparent 12%); background-size: 16px 16px; background-position: 0 0, 8px 8px; }
+
+/* Ikon emoji utama (sapi lucu) */
+.trx-icon-emoji {
+    font-size: 20px;
+    z-index: 1;
+    display: block;
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,0.15));
+}
+
+/* Ikon lucide aksen (kecil di belakang emoji) */
+.trx-icon-lucide {
+    position: absolute;
+    inset: 6px;
+    width: auto;
+    height: auto;
+    z-index: 1;
+    opacity: 0.55;
+    pointer-events: none;
+}
+
 .transaction-description { overflow: hidden; font-size: 13px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .transaction-category { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; color: var(--muted); font-size: 11px; }
 .wallet-badge {

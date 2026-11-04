@@ -476,18 +476,18 @@ function saveBills() {
 }
 
 function getCategoryIcon(category, type) {
-    if (type === 'income') return { name: 'arrow-down-left', tone: 'income' };
+    if (type === 'income') return { name: 'arrow-down-left', tone: 'income', emoji: '🐮💰' };
 
     const normalized = String(category || '').toLocaleLowerCase('id-ID');
-    if (/makan|minum|kuliner|resto|kopi|jajan/.test(normalized)) return { name: 'utensils', tone: 'food' };
-    if (/transport|bensin|kendaraan|ojek|parkir/.test(normalized)) return { name: 'car-front', tone: 'transport' };
-    if (/belanja|shop|lifestyle|hiburan/.test(normalized)) return { name: 'shopping-bag', tone: 'shopping' };
-    if (/tagihan|listrik|utilitas|air|cicilan|kredit/.test(normalized)) return { name: 'zap', tone: 'bills' };
-    if (/kesehatan|obat|medis|bpjs/.test(normalized)) return { name: 'heart-pulse', tone: 'health' };
-    if (/gaji|salary|kerja|bonus/.test(normalized)) return { name: 'briefcase-business', tone: 'income' };
-    if (/rumah|sewa|hunian|kost|kpr/.test(normalized)) return { name: 'house', tone: 'home' };
-    if (/langganan|digital|internet|wifi|streaming/.test(normalized)) return { name: 'monitor-play', tone: 'digital' };
-    return { name: 'receipt-text', tone: 'other' };
+    if (/makan|minum|kuliner|resto|kopi|jajan/.test(normalized)) return { name: 'utensils', tone: 'food', emoji: '🐮🍜' };
+    if (/transport|bensin|kendaraan|ojek|parkir/.test(normalized)) return { name: 'car-front', tone: 'transport', emoji: '🐮🛵' };
+    if (/belanja|shop|lifestyle|hiburan/.test(normalized)) return { name: 'shopping-bag', tone: 'shopping', emoji: '🐮🛒' };
+    if (/tagihan|listrik|utilitas|air|cicilan|kredit/.test(normalized)) return { name: 'zap', tone: 'bills', emoji: '🐮⚡' };
+    if (/kesehatan|obat|medis|bpjs/.test(normalized)) return { name: 'heart-pulse', tone: 'health', emoji: '🐮💊' };
+    if (/gaji|salary|kerja|bonus/.test(normalized)) return { name: 'briefcase-business', tone: 'income', emoji: '🐮💼' };
+    if (/rumah|sewa|hunian|kost|kpr/.test(normalized)) return { name: 'house', tone: 'home', emoji: '🐮🏠' };
+    if (/langganan|digital|internet|wifi|streaming/.test(normalized)) return { name: 'monitor-play', tone: 'digital', emoji: '🐮📱' };
+    return { name: 'receipt-text', tone: 'other', emoji: '🐮🧾' };
 }
 
 function classifyExpenseBucket(category, desc) {
@@ -1654,9 +1654,20 @@ function createTransactionRow(transaction) {
     const iconDetails = getCategoryIcon(transaction.category, transaction.type);
     icon.className = `transaction-icon icon-${iconDetails.tone}`;
     icon.setAttribute('aria-hidden', 'true');
+    icon.title = iconDetails.emoji;
+
+    // Ikon emoji sapi lucu sebagai ikon utama
+    const emojiSpan = document.createElement('span');
+    emojiSpan.className = 'trx-icon-emoji';
+    emojiSpan.textContent = iconDetails.emoji;
+    emojiSpan.setAttribute('aria-hidden', 'true');
+
+    // Ikon lucide sebagai aksen dekoratif di belakang
     const iconElement = document.createElement('i');
     iconElement.dataset.lucide = iconDetails.name;
-    icon.append(iconElement);
+    iconElement.className = 'trx-icon-lucide';
+
+    icon.append(emojiSpan, iconElement);
 
     const details = document.createElement('div');
     details.style.minWidth = '0';

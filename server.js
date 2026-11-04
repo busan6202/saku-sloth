@@ -1813,7 +1813,18 @@ ${typeKey === 'inc' ? '🟢 *CATAT PEMASUKAN*' : '🔴 *CATAT PENGELUARAN*'}
             {"desc": "Nama tempat/ringkasan", "amount": angka saja, "type": "expense", "category": "Kategori bebas", "wallet": "GoPay/DANA/OVO/ShopeePay/LinkAja/QRIS/BCA/Mandiri/BRI/BNI/Tunai"}`;
 
             const rawText = await callGeminiAPI(prompt, base64Image);
-            const parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
+            let parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
+
+            // Normalisasi kategori untuk nota Alfamart / Indomaret / supermarket / sembako
+            const lowerDesc = String(parsed.desc || '').toLowerCase();
+            if (/alfamart|indomaret|supermarket|sembako|mini market|ceriamart/.test(lowerDesc)) {
+                parsed.category = 'Belanja & Lifestyle';
+            }
+            // Fallback wallet jika Gemini tidak mengembalikan wallet yang valid
+            if (!parsed.wallet || parsed.wallet === 'Kategori bebas') {
+                parsed.wallet = 'Tunai';
+            }
+
             await saveAndNotify(parsed, chatId);
         }
         // 2. VOICE NOTE (REKAMAN SUARA)
@@ -1829,7 +1840,18 @@ ${typeKey === 'inc' ? '🟢 *CATAT PEMASUKAN*' : '🔴 *CATAT PENGELUARAN*'}
             {"desc": "Keterangan singkat", "amount": angka saja, "type": "expense" atau "income", "category": "Kategori bebas", "wallet": "GoPay/DANA/OVO/ShopeePay/LinkAja/QRIS/BCA/Mandiri/BRI/BNI/SeaBank/Bank Jago/Tunai"}`;
 
             const rawText = await callGeminiAudioAPI(prompt, base64Audio);
-            const parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
+            let parsed = JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
+
+            // Normalisasi kategori untuk nota Alfamart / Indomaret / supermarket / sembako
+            const lowerDesc = String(parsed.desc || '').toLowerCase();
+            if (/alfamart|indomaret|supermarket|sembako|mini market|ceriamart/.test(lowerDesc)) {
+                parsed.category = 'Belanja & Lifestyle';
+            }
+            // Fallback wallet jika Gemini tidak mengembalikan wallet yang valid
+            if (!parsed.wallet || parsed.wallet === 'Kategori bebas') {
+                parsed.wallet = 'Tunai';
+            }
+
             await saveAndNotify(parsed, chatId);
         }
         // 3. PESAN TEKS BEBAS (DENGAN FALLBACK PARSER LOKAL PINTAR)
