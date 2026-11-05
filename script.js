@@ -3215,7 +3215,31 @@ function clearUserScopedStorage() {
     debts = [];
 }
 
+// Akun kasir tidak boleh memakai dashboard keuangan: langsung arahkan ke layar POS.
+function redirectCashierToPos(user, token) {
+    if (!user || user.role !== 'cashier') return false;
+    try {
+        localStorage.setItem(STORAGE_KEYS.userSession, JSON.stringify({
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email || '',
+                fullName: user.fullName || user.full_name || user.username,
+                avatar: user.avatar || '🧑‍🍳',
+                role: 'cashier',
+                ownerId: user.ownerId || user.owner_id || null,
+                token: token || ''
+            },
+            token: token || ''
+        }));
+    } catch {}
+    window.location.replace('pos.html');
+    return true;
+}
+
 function setCurrentUser(user, token, persist = true) {
+    if (redirectCashierToPos(user, token)) return;
+
     currentUser = {
         id: user.id || 1,
         username: user.username || 'pengguna',
@@ -3420,6 +3444,7 @@ async function initializeAuth() {
         try {
             const parsed = JSON.parse(savedSessionRaw);
             if (parsed && parsed.user) {
+                if (redirectCashierToPos(parsed.user, parsed.token)) return;
                 currentUser = parsed.user;
                 currentUser.token = parsed.token || '';
 

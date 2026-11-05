@@ -179,7 +179,7 @@ Tidak perlu menjalankan migrasi manual. Saat server pertama kali menerima reques
 
 | Tabel | Fungsi |
 | --- | --- |
-| `users` | Akun: `username`, `email`, `password_hash`, `full_name`, `avatar`, `role` |
+| `users` | Akun: `username`, `email`, `password_hash`, `full_name`, `avatar`, `role`, `owner_id` (akun kasir menempel ke pemilik) |
 | `pos_products` | Produk POS: SKU/barcode, **kategori**, **satuan**, **`is_weighable`**, harga jual, HPP, **stok desimal `NUMERIC(10,3)`** |
 | `pos_sales` | Header penjualan: invoice, metode, total, HPP, laba, status |
 | `pos_sale_items` | Rincian item per invoice (harga jual & modal saat transaksi, **qty desimal + satuan**) |
@@ -209,6 +209,16 @@ Modul ini disiapkan untuk pedagang sayur/bumbu:
 - **Kategori** — `SAYUR_DAUN`, `BUMBU_TIMBANG`, `SEMBAKO`, `BUNGKUSAN`, `UMUM`.
 - **Kulakan pagi** — tombol 📥 **Kulakan** mencatat stok masuk sekaligus memperbarui HPP (dan harga jual bila diisi), lalu mencatat total belanja sebagai pengeluaran saku agar saldo kas ikut turun.
 - **Susut / layu** — tombol 🥀 **Susut** mengurangi stok dan mencatat kerugian modal di `pos_spoilage_logs`. Nilainya **tidak** masuk tabel `transactions` (agar saldo kas tidak dobel), tetapi muncul di laporan sebagai `spoilageLoss`, dan **laba bersih = laba kotor − susut**.
+
+### Akun kasir (akses terbatas)
+
+Pemilik toko bisa membuat **akun kasir** yang menempel ke akun utamanya:
+
+- Kasir **login dengan email & kata sandi sendiri**, tetapi seluruh data POS (produk, transaksi, laporan, pengaturan QRIS/Sheets) tetap milik akun pemilik.
+- Kasir **hanya bisa membuka halaman POS**. Semua endpoint dashboard keuangan (`/api/transactions`, `/api/debts`, `/api/summary`, dll.) menolak akun kasir dengan `403`, dan dashboard otomatis mengalihkan mereka ke `pos.html`.
+- Kasir **tidak bisa** mengubah pengaturan POS (payload QRIS & webhook Sheets) maupun mengelola akun kasir lain.
+- Setiap transaksi menyimpan `cashier_id` & `cashier_name`, sehingga laporan menampilkan siapa yang melayani.
+- Kelola akun kasir di POS → ⚙️ **Pengaturan** → bagian **Akun Kasir** (tambah, reset sandi, hapus).
 
 ### Alur transaksi
 
@@ -383,7 +393,12 @@ Semua endpoint data memerlukan header `Authorization: Bearer <token>`.
 | POST | `/api/pos/products` | Tambah produk |
 | PUT | `/api/pos/products/:id` | Update produk/harga/stok |
 | DELETE | `/api/pos/products/:id` | Nonaktifkan produk |
-| GET/PUT | `/api/pos/settings` | Payload QRIS & URL webhook Sheets |
+| GET | `/api/pos/settings` | Payload QRIS & URL webhook Sheets (kasir hanya baca) |
+| PUT | `/api/pos/settings` | Simpan pengaturan POS (khusus pemilik toko) |
+| GET | `/api/pos/cashiers` | Daftar akun kasir milik pemilik toko |
+| POST | `/api/pos/cashiers` | Buat akun kasir `{ fullName, email, password }` |
+| PUT | `/api/pos/cashiers/:id` | Ubah nama / reset kata sandi kasir |
+| DELETE | `/api/pos/cashiers/:id` | Hapus akun kasir |
 | POST | `/api/pos/checkout` | Checkout (`CASH` langsung lunas, `QRIS` pending). Item mendukung `qty` desimal dan `subtotal` (nominal manual untuk produk timbangan) |
 | GET | `/api/pos/spoilage` | Riwayat barang susut (`?from=&to=`) |
 | POST | `/api/pos/spoilage` | Catat susut `{ productId, qty, reason }` — stok berkurang, tidak menyentuh saldo kas |

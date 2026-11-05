@@ -34,7 +34,8 @@
 
     function cacheElements() {
         [
-            'posGate', 'posShell', 'gateLoginLink', 'posUserAvatar', 'posUserName',
+            'posGate', 'posShell', 'gateLoginLink', 'gateLoginForm', 'gateEmail', 'gatePassword',
+            'gateError', 'gateSubmit', 'posUserAvatar', 'posUserName',
             'posSearch', 'btnClearSearch', 'productGrid', 'productCount', 'emptyCatalog',
             'cartItems', 'cartEmpty', 'cartQty', 'cartCost', 'cartProfit', 'cartTotal',
             'btnClearCart', 'btnCheckout', 'checkoutCount',
@@ -58,6 +59,8 @@
             'reportSummary', 'reportTableBody',
             'settingsModal', 'sQrisPayload', 'sSheetsUrl', 'qrisHelp', 'sheetsHelp',
             'settingsError', 'btnSaveSettings',
+            'posBrandLink', 'cashierSection', 'cashierCount', 'cashierForm', 'cName', 'cEmail',
+            'cPassword', 'btnAddCashier', 'cashierError', 'cashierList',
             'posToast'
         ].forEach((id) => { els[id] = $(id); });
     }
@@ -135,6 +138,44 @@
         if (message) {
             const copy = els.posGate.querySelector('p');
             if (copy) copy.textContent = message;
+        }
+    }
+
+    // Login langsung dari layar kasir (dipakai akun kasir maupun pemilik toko).
+    async function handleGateLogin(event) {
+        event.preventDefault();
+        els.gateError.hidden = true;
+        els.gateSubmit.disabled = true;
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({
+                    identifier: els.gateEmail.value.trim(),
+                    email: els.gateEmail.value.trim(),
+                    password: els.gatePassword.value
+                })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.error || 'Email atau kata sandi tidak sesuai.');
+
+            const user = {
+                id: data.user.id,
+                username: data.user.username,
+                email: data.user.email || '',
+                fullName: data.user.fullName || data.user.username,
+                avatar: data.user.avatar || '🐮',
+                role: data.user.role || 'user',
+                ownerId: data.user.ownerId || null,
+                token: data.token
+            };
+            localStorage.setItem(SESSION_KEY, JSON.stringify({ user, token: data.token }));
+            window.location.reload();
+        } catch (err) {
+            els.gateError.textContent = err.message;
+            els.gateError.hidden = false;
+        } finally {
+            els.gateSubmit.disabled = false;
         }
     }
 
@@ -895,7 +936,10 @@
                 : '';
             return `
                 <tr>
-                    <td><strong>${escapeHtml(sale.invoice_no)}</strong></td>
+                    <td>
+                        <strong>${escapeHtml(sale.invoice_no)}</strong>
+                        ${sale.cashier_name ? `<br><span class="pos-product-meta">Kasir: ${escapeHtml(sale.cashier_name)}</span>` : ''}
+                    </td>
                     <td>${formatDateTime(sale.created_at)}</td>
                     <td>${escapeHtml(sale.payment_method)}</td>
                     <td class="numeric">${formatMoney(sale.total_amount)}</td>
@@ -959,6 +1003,99 @@
         }
     }
 
+    // ================= MODE KASIR =================
+
+    function isCashier() {
+        return state.user?.role === 'cashier';
+    }
+
+    // Kasir tidak boleh keluar dari modul POS: sembunyikan tautan dashboard & pengaturan.
+    function applyRoleUi() {
+        const cashier = isCashier();
+        if (els.posBrandLink) {
+            els.posBrandLink.href = cashier ? 'pos.html' : 'index.html';
+            els.posBrandLink.title = cashier ? 'Saku Kasir' : 'Kembali ke dashboard keuangan';
+        }
+        if (els.btnSettings) els.btnSettings.hidden = cashier;
+        if (els.cashierSection) els.cashierSection.hidden = cashier;
+        if (cashier) {
+            els.posUserName.textContent = `${state.user.fullName || state.user.full_name || state.user.username || 'Kasir'} · Kasir`;
+        }
+    }
+
+    async function loadCashiers() {
+        if (!els.cashierList || isCashier()) return;
+        try {
+            const rows = await api('/api/pos/cashiers');
+            els.cashierCount.textContent = `${rows.length} akun`;
+            els.cashierList.innerHTML = rows.length === 0
+                ? '<p class="pos-help">Belum ada akun kasir. Tambahkan lewat formulir di atas.</p>'
+                : rows.map((row) => `
+                    <div class="pos-cashier-row">
+                        <div>
+                            <strong>${escapeHtml(row.full_name || row.username)}</strong>
+                            <span class="pos-product-meta">${escapeHtml(row.email || row.username)}</span>
+                        </div>
+                        <div class="pos-row-actions">
+                            <button type="button" class="pos-mini-button" data-reset-cashier="${row.id}">Reset Sandi</button>
+                            <button type="button" class="pos-mini-button" data-delete-cashier="${row.id}">Hapus</button>
+                        </div>
+                    </div>
+                `).join('');
+        } catch (err) {
+            els.cashierList.innerHTML = `<p class="pos-help">${escapeHtml(err.message)}</p>`;
+        }
+    }
+
+    async function addCashier(event) {
+        event.preventDefault();
+        els.cashierError.hidden = true;
+        els.btnAddCashier.disabled = true;
+        try {
+            await api('/api/pos/cashiers', {
+                method: 'POST',
+                body: JSON.stringify({
+                    fullName: els.cName.value.trim(),
+                    email: els.cEmail.value.trim(),
+                    password: els.cPassword.value
+                })
+            });
+            els.cashierForm.reset();
+            showToast('Akun kasir dibuat. Kasir bisa masuk lewat halaman POS.');
+            await loadCashiers();
+        } catch (err) {
+            els.cashierError.textContent = err.message;
+            els.cashierError.hidden = false;
+        } finally {
+            els.btnAddCashier.disabled = false;
+        }
+    }
+
+    async function resetCashierPassword(cashierId) {
+        const password = window.prompt('Kata sandi baru untuk kasir ini (minimal 6 karakter):');
+        if (!password) return;
+        try {
+            await api(`/api/pos/cashiers/${cashierId}`, {
+                method: 'PUT',
+                body: JSON.stringify({ password })
+            });
+            showToast('Kata sandi kasir diperbarui.');
+        } catch (err) {
+            showToast(err.message, true);
+        }
+    }
+
+    async function removeCashier(cashierId) {
+        if (!window.confirm('Hapus akun kasir ini? Kasir tidak akan bisa masuk lagi.')) return;
+        try {
+            await api(`/api/pos/cashiers/${cashierId}`, { method: 'DELETE' });
+            showToast('Akun kasir dihapus.');
+            await loadCashiers();
+        } catch (err) {
+            showToast(err.message, true);
+        }
+    }
+
     // ================= PENGATURAN =================
 
     async function loadSettings() {
@@ -984,6 +1121,7 @@
         try {
             await loadSettings();
             openModal('settingsModal');
+            if (!isCashier()) loadCashiers();
         } catch (err) {
             showToast(err.message, true);
         }
@@ -1228,6 +1366,19 @@
         els.btnSaveSettings.addEventListener('click', saveSettings);
         els.btnTheme.addEventListener('click', toggleTheme);
 
+        if (els.cashierForm) els.cashierForm.addEventListener('submit', addCashier);
+        if (els.cashierList) {
+            els.cashierList.addEventListener('click', (event) => {
+                const resetButton = event.target.closest('[data-reset-cashier]');
+                if (resetButton) {
+                    resetCashierPassword(resetButton.dataset.resetCashier);
+                    return;
+                }
+                const deleteButton = event.target.closest('[data-delete-cashier]');
+                if (deleteButton) removeCashier(deleteButton.dataset.deleteCashier);
+            });
+        }
+
         document.querySelectorAll('[data-close-modal]').forEach((button) => {
             button.addEventListener('click', () => closeModal(button.dataset.closeModal));
         });
@@ -1248,9 +1399,10 @@
 
     async function init() {
         cacheElements();
+        if (els.gateLoginForm) els.gateLoginForm.addEventListener('submit', handleGateLogin);
         const session = readSession();
         if (!session) {
-            showGate('Silakan masuk ke akun Saku Harian terlebih dahulu. Sesi kasir memakai akun yang sama dengan dashboard keuangan.');
+            showGate('Masuk dengan akun kasir atau akun pemilik toko untuk mulai berjualan.');
             return;
         }
 
@@ -1264,14 +1416,20 @@
 
         bindEvents();
         applyTheme();
+        applyRoleUi();
 
         try {
             await Promise.all([loadProducts(), loadSettings()]);
+            // Server adalah sumber kebenaran untuk peran akun (kasir vs pemilik).
+            if (state.settings?.is_cashier && state.user.role !== 'cashier') {
+                state.user.role = 'cashier';
+                applyRoleUi();
+            }
             els.reportFrom.value = firstDayOfMonthValue();
             els.reportTo.value = todayInputValue();
         } catch (err) {
             if (/masuk|sesi|401/i.test(err.message)) {
-                showGate('Sesi Anda tidak valid atau sudah berakhir. Silakan masuk kembali dari dashboard.');
+                showGate('Sesi Anda tidak valid atau sudah berakhir. Silakan masuk kembali.');
             } else {
                 showToast(err.message, true);
             }

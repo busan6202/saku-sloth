@@ -10,6 +10,21 @@ app.use(express.json());
 app.use(cors());
 app.use(express.static(__dirname));
 
+// Akun kasir hanya boleh memakai modul POS. Endpoint dashboard keuangan ditolak.
+app.use(async (req, res, next) => {
+    try {
+        if (!req.path.startsWith('/api/')) return next();
+        if (req.path.startsWith('/api/pos') || req.path.startsWith('/api/auth')) return next();
+        const user = await resolveAuthUser(req);
+        if (user && user.role === 'cashier') {
+            return res.status(403).json({ error: 'Akun kasir hanya dapat mengakses modul POS.' });
+        }
+        return next();
+    } catch {
+        return next();
+    }
+});
+
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -177,12 +192,21 @@ async function ensureDatabaseReady() {
                     full_name VARCHAR(100),
                     avatar VARCHAR(50) DEFAULT '🐮',
                     role VARCHAR(20) DEFAULT 'user',
+                    owner_id INTEGER,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
             await pool.query(`
                 ALTER TABLE users
                 ADD COLUMN IF NOT EXISTS email VARCHAR(160)
+            `);
+            // Akun kasir menempel ke akun pemilik (owner) agar memakai data POS yang sama.
+            await pool.query(`
+                ALTER TABLE users
+                ADD COLUMN IF NOT EXISTS owner_id INTEGER
+            `);
+            await pool.query(`
+                CREATE INDEX IF NOT EXISTS users_owner_idx ON users (owner_id)
             `);
             await pool.query(`
                 CREATE UNIQUE INDEX IF NOT EXISTS users_email_unique_idx
@@ -259,12 +283,16 @@ async function ensureDatabaseReady() {
                     customer_name VARCHAR(120),
                     customer_phone VARCHAR(32),
                     note TEXT,
+                    cashier_id INTEGER,
+                    cashier_name VARCHAR(100),
                     sheet_synced BOOLEAN NOT NULL DEFAULT FALSE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     paid_at TIMESTAMP
                 )
             `);
             await pool.query(`CREATE INDEX IF NOT EXISTS pos_sales_user_date_idx ON pos_sales (user_id, created_at DESC)`);
+            await pool.query(`ALTER TABLE pos_sales ADD COLUMN IF NOT EXISTS cashier_id INTEGER`);
+            await pool.query(`ALTER TABLE pos_sales ADD COLUMN IF NOT EXISTS cashier_name VARCHAR(100)`);
 
             await pool.query(`
                 CREATE TABLE IF NOT EXISTS pos_sale_items (
@@ -447,7 +475,7 @@ async function resolveAuthUser(req) {
         if (!token) return null;
 
         const sessionRes = await pool.query(
-            `SELECT u.id, u.username, u.email, u.full_name, u.avatar, u.role
+            `SELECT u.id, u.username, u.email, u.full_name, u.avatar, u.role, u.owner_id
              FROM user_sessions s
              JOIN users u ON s.user_id = u.id
              WHERE s.token = $1 AND (s.expires_at IS NULL OR s.expires_at > CURRENT_TIMESTAMP)`,
@@ -465,6 +493,16 @@ function buildUserScope(user) {
         return { clause: '(user_id = $1 OR user_id IS NULL)', params: [user.id] };
     }
     return { clause: 'user_id = $1', params: [user.id] };
+}
+
+// Akun kasir hanya boleh memakai modul POS, bukan dashboard keuangan.
+function isCashier(user) {
+    return user?.role === 'cashier';
+}
+
+// Data POS selalu milik akun pemilik, sehingga kasir melihat katalog & transaksi toko yang sama.
+function posOwnerId(user) {
+    return Number(user?.owner_id) || Number(user?.id);
 }
 
 const POPULAR_WALLETS = [
@@ -1292,7 +1330,8 @@ app.post('/api/auth/register', async (req, res) => {
                 email: newUser.email,
                 fullName: newUser.full_name,
                 avatar: newUser.avatar,
-                role: newUser.role
+                role: newUser.role,
+                ownerId: null
             },
             token
         });
@@ -1314,11 +1353,11 @@ app.post('/api/auth/login', async (req, res) => {
         const isEmailLogin = rawIdentifier.includes('@');
         const userRes = isEmailLogin
             ? await pool.query(
-                'SELECT id, username, email, password_hash, full_name, avatar, role FROM users WHERE LOWER(email) = $1',
+                'SELECT id, username, email, password_hash, full_name, avatar, role, owner_id FROM users WHERE LOWER(email) = $1',
                 [normalizeEmail(rawIdentifier)]
             )
             : await pool.query(
-                'SELECT id, username, email, password_hash, full_name, avatar, role FROM users WHERE LOWER(username) = $1',
+                'SELECT id, username, email, password_hash, full_name, avatar, role, owner_id FROM users WHERE LOWER(username) = $1',
                 [rawIdentifier.toLowerCase()]
             );
         if (userRes.rows.length === 0) {
@@ -1346,7 +1385,8 @@ app.post('/api/auth/login', async (req, res) => {
                 email: user.email,
                 fullName: user.full_name,
                 avatar: user.avatar,
-                role: user.role
+                role: user.role,
+                ownerId: user.owner_id || null
             },
             token
         });
@@ -1371,7 +1411,8 @@ app.get('/api/auth/me', async (req, res) => {
                 email: user.email,
                 fullName: user.full_name,
                 avatar: user.avatar,
-                role: user.role
+                role: user.role,
+                ownerId: user.owner_id || null
             }
         });
     } catch (err) {
@@ -1854,7 +1895,7 @@ app.get('/api/pos/products', async (req, res) => {
 
         const keyword = String(req.query.q || '').trim();
         const includeInactive = String(req.query.include_inactive || '') === '1';
-        const params = [user.id];
+        const params = [posOwnerId(user)];
         let query = `SELECT * FROM pos_products WHERE user_id = $1`;
         if (!includeInactive) query += ' AND is_active = TRUE';
         if (keyword) {
@@ -1882,7 +1923,7 @@ app.get('/api/pos/products/lookup', async (req, res) => {
              WHERE user_id = $1 AND is_active = TRUE
                AND (LOWER(barcode) = LOWER($2) OR LOWER(sku) = LOWER($2))
              LIMIT 1`,
-            [user.id, code]
+            [posOwnerId(user), code]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'Produk dengan barcode tersebut tidak ditemukan.' });
         res.json(result.rows[0]);
@@ -1916,7 +1957,7 @@ app.post('/api/pos/products', async (req, res) => {
                 (user_id, sku, barcode, name, category, unit, is_weighable, price_sell, price_cost, stock, min_stock)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING *`,
-            [user.id, sku, barcode, name, category, unit, isWeighable, priceSell, priceCost, stock, minStock]
+            [posOwnerId(user), sku, barcode, name, category, unit, isWeighable, priceSell, priceCost, stock, minStock]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -1936,7 +1977,7 @@ app.put('/api/pos/products/:id', async (req, res) => {
         const productId = Number(req.params.id);
         if (!Number.isFinite(productId)) return res.status(400).json({ error: 'ID produk tidak valid.' });
 
-        const existingRes = await pool.query('SELECT * FROM pos_products WHERE id = $1 AND user_id = $2', [productId, user.id]);
+        const existingRes = await pool.query('SELECT * FROM pos_products WHERE id = $1 AND user_id = $2', [productId, posOwnerId(user)]);
         const current = existingRes.rows[0];
         if (!current) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
 
@@ -1960,7 +2001,7 @@ app.put('/api/pos/products/:id', async (req, res) => {
                  is_active = $11, updated_at = CURRENT_TIMESTAMP
              WHERE id = $12 AND user_id = $13
              RETURNING *`,
-            [sku, barcode, name, category, unit, isWeighable, priceSell, priceCost, stock, minStock, isActive, productId, user.id]
+            [sku, barcode, name, category, unit, isWeighable, priceSell, priceCost, stock, minStock, isActive, productId, posOwnerId(user)]
         );
         res.json(result.rows[0]);
     } catch (err) {
@@ -1982,7 +2023,7 @@ app.delete('/api/pos/products/:id', async (req, res) => {
         const result = await pool.query(
             `UPDATE pos_products SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
              WHERE id = $1 AND user_id = $2 RETURNING id`,
-            [productId, user.id]
+            [productId, posOwnerId(user)]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
         res.json({ success: true, id: productId });
@@ -1997,13 +2038,14 @@ app.get('/api/pos/settings', async (req, res) => {
         await ensureDatabaseReady();
         const user = await resolveAuthUser(req);
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
-        const result = await pool.query('SELECT qris_payload, sheets_webhook_url, updated_at FROM pos_settings WHERE user_id = $1', [user.id]);
+        const result = await pool.query('SELECT qris_payload, sheets_webhook_url, updated_at FROM pos_settings WHERE user_id = $1', [posOwnerId(user)]);
         res.json({
             qris_payload: result.rows[0]?.qris_payload || '',
             sheets_webhook_url: result.rows[0]?.sheets_webhook_url || '',
             env_sheets_webhook: Boolean(POS_SHEETS_WEBHOOK_URL),
             cash_wallet: POS_CASH_WALLET,
-            qris_wallet: POS_QRIS_WALLET
+            qris_wallet: POS_QRIS_WALLET,
+            is_cashier: isCashier(user)
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -2015,6 +2057,9 @@ app.put('/api/pos/settings', async (req, res) => {
         await ensureDatabaseReady();
         const user = await resolveAuthUser(req);
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        if (isCashier(user)) {
+            return res.status(403).json({ error: 'Hanya pemilik toko yang dapat mengubah pengaturan POS.' });
+        }
         const qrisPayload = String(req.body?.qris_payload || '').trim();
         const sheetsWebhook = String(req.body?.sheets_webhook_url || '').trim();
         if (sheetsWebhook && !isSafeWebhookUrl(sheetsWebhook)) {
@@ -2028,11 +2073,124 @@ app.put('/api/pos/settings', async (req, res) => {
                            sheets_webhook_url = EXCLUDED.sheets_webhook_url,
                            updated_at = CURRENT_TIMESTAMP
              RETURNING qris_payload, sheets_webhook_url, updated_at`,
-            [user.id, qrisPayload || null, sheetsWebhook || null]
+            [posOwnerId(user), qrisPayload || null, sheetsWebhook || null]
         );
         res.json(result.rows[0]);
     } catch (err) {
         res.status(400).json({ error: err.message });
+    }
+});
+
+// ================= AKUN KASIR (hanya pemilik toko) =================
+
+// API: Daftar akun kasir milik pemilik toko
+app.get('/api/pos/cashiers', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        if (isCashier(user)) return res.status(403).json({ error: 'Hanya pemilik toko yang dapat mengelola akun kasir.' });
+        const result = await pool.query(
+            `SELECT id, username, email, full_name, avatar, created_at
+             FROM users
+             WHERE owner_id = $1 AND role = 'cashier'
+             ORDER BY created_at ASC`,
+            [user.id]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Buat akun kasir baru yang menempel ke akun pemilik
+app.post('/api/pos/cashiers', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        if (isCashier(user)) return res.status(403).json({ error: 'Hanya pemilik toko yang dapat mengelola akun kasir.' });
+
+        const fullName = String(req.body?.fullName || req.body?.full_name || '').trim().slice(0, 100);
+        const cleanEmail = normalizeEmail(req.body?.email || '');
+        const password = String(req.body?.password || '');
+        if (!fullName) return res.status(400).json({ error: 'Nama kasir wajib diisi.' });
+        if (!isValidEmail(cleanEmail)) return res.status(400).json({ error: 'Format email kasir tidak valid.' });
+        if (password.length < 6) return res.status(400).json({ error: 'Kata sandi kasir minimal 6 karakter.' });
+
+        const existing = await pool.query('SELECT id FROM users WHERE LOWER(email) = $1', [cleanEmail]);
+        if (existing.rows.length > 0) {
+            return res.status(409).json({ error: 'Email ini sudah terdaftar. Gunakan email lain.' });
+        }
+
+        const baseUsername = slugifyUsername(req.body?.username || cleanEmail.split('@')[0]) || 'kasir';
+        const username = await generateUniqueUsername(baseUsername);
+        const insertRes = await pool.query(
+            `INSERT INTO users (username, email, password_hash, full_name, avatar, role, owner_id)
+             VALUES ($1, $2, $3, $4, $5, 'cashier', $6)
+             RETURNING id, username, email, full_name, avatar, created_at`,
+            [username, cleanEmail, hashPassword(password), fullName, String(req.body?.avatar || '🧑‍🍳').slice(0, 10), user.id]
+        );
+        res.status(201).json(insertRes.rows[0]);
+    } catch (err) {
+        if (err.code === '23505') return res.status(409).json({ error: 'Email atau username sudah dipakai.' });
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// API: Ubah nama / reset kata sandi kasir
+app.put('/api/pos/cashiers/:id', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        if (isCashier(user)) return res.status(403).json({ error: 'Hanya pemilik toko yang dapat mengelola akun kasir.' });
+        const cashierId = Number(req.params.id);
+        if (!Number.isFinite(cashierId)) return res.status(400).json({ error: 'ID kasir tidak valid.' });
+
+        const owned = await pool.query(
+            `SELECT id FROM users WHERE id = $1 AND owner_id = $2 AND role = 'cashier'`,
+            [cashierId, user.id]
+        );
+        if (owned.rows.length === 0) return res.status(404).json({ error: 'Akun kasir tidak ditemukan.' });
+
+        const fullName = req.body?.fullName !== undefined ? String(req.body.fullName).trim().slice(0, 100) : null;
+        const password = req.body?.password !== undefined ? String(req.body.password) : '';
+        if (password && password.length < 6) {
+            return res.status(400).json({ error: 'Kata sandi baru minimal 6 karakter.' });
+        }
+
+        const result = await pool.query(
+            `UPDATE users
+             SET full_name = COALESCE($1, full_name),
+                 password_hash = COALESCE($2, password_hash)
+             WHERE id = $3 AND owner_id = $4 AND role = 'cashier'
+             RETURNING id, username, email, full_name, avatar, created_at`,
+            [fullName || null, password ? hashPassword(password) : null, cashierId, user.id]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// API: Hapus akun kasir (sesi login kasir ikut dihapus)
+app.delete('/api/pos/cashiers/:id', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        if (isCashier(user)) return res.status(403).json({ error: 'Hanya pemilik toko yang dapat mengelola akun kasir.' });
+        const cashierId = Number(req.params.id);
+        if (!Number.isFinite(cashierId)) return res.status(400).json({ error: 'ID kasir tidak valid.' });
+        const result = await pool.query(
+            `DELETE FROM users WHERE id = $1 AND owner_id = $2 AND role = 'cashier' RETURNING id`,
+            [cashierId, user.id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Akun kasir tidak ditemukan.' });
+        res.json({ success: true, id: cashierId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -2073,7 +2231,7 @@ app.post('/api/pos/checkout', async (req, res) => {
         const productsRes = await pool.query(
             `SELECT * FROM pos_products
              WHERE user_id = $1 AND is_active = TRUE AND id = ANY($2::int[])`,
-            [user.id, productIds]
+            [posOwnerId(user), productIds]
         );
         const products = new Map(productsRes.rows.map((row) => [Number(row.id), row]));
 
@@ -2140,11 +2298,11 @@ app.post('/api/pos/checkout', async (req, res) => {
             const insertRes = await client.query(
                 `INSERT INTO pos_sales
                     (user_id, invoice_no, status, payment_method, wallet, total_amount, total_cost, gross_profit,
-                     paid_amount, change_amount, customer_name, customer_phone, note)
-                 VALUES ($1, $2, 'PENDING', $3, $4, $5, $6, $7, $8, 0, $9, $10, $11)
+                     paid_amount, change_amount, customer_name, customer_phone, note, cashier_id, cashier_name)
+                 VALUES ($1, $2, 'PENDING', $3, $4, $5, $6, $7, $8, 0, $9, $10, $11, $12, $13)
                  RETURNING *`,
                 [
-                    user.id,
+                    posOwnerId(user),
                     buildPosInvoiceNo(),
                     method,
                     posWalletFor(method),
@@ -2154,7 +2312,9 @@ app.post('/api/pos/checkout', async (req, res) => {
                     method === 'CASH' ? paidAmount : 0,
                     customerName,
                     customerPhone,
-                    note
+                    note,
+                    user.id,
+                    String(user.full_name || user.username || 'Kasir').slice(0, 100)
                 ]
             );
             sale = insertRes.rows[0];
@@ -2189,7 +2349,7 @@ app.post('/api/pos/checkout', async (req, res) => {
             await pool.query(`UPDATE pos_sales SET status = 'CANCELLED' WHERE id = $1`, [sale.id]).catch(() => {});
             return res.status(409).json({ error: 'Transaksi gagal diproses. Silakan ulangi.' });
         }
-        syncPosSaleToSheets(user.id, sale.id).catch(() => {});
+        syncPosSaleToSheets(posOwnerId(user), sale.id).catch(() => {});
         res.status(201).json({ sale: paidResult.sale, items: paidResult.items, status: 'PAID' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -2205,14 +2365,14 @@ app.post('/api/pos/sales/:id/pay', async (req, res) => {
         const saleId = Number(req.params.id);
         if (!Number.isFinite(saleId)) return res.status(400).json({ error: 'ID transaksi tidak valid.' });
 
-        const owned = await pool.query('SELECT id FROM pos_sales WHERE id = $1 AND user_id = $2', [saleId, user.id]);
+        const owned = await pool.query('SELECT id FROM pos_sales WHERE id = $1 AND user_id = $2', [saleId, posOwnerId(user)]);
         if (owned.rows.length === 0) return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
 
         const result = await markPosSalePaid(saleId);
         if (result.error === 'not_found') return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
         if (result.error) return res.status(409).json({ error: 'Transaksi tidak dapat dibayar pada status saat ini.' });
 
-        if (!result.alreadyPaid) syncPosSaleToSheets(user.id, saleId).catch(() => {});
+        if (!result.alreadyPaid) syncPosSaleToSheets(posOwnerId(user), saleId).catch(() => {});
         res.json({ sale: result.sale, items: result.items, status: 'PAID', alreadyPaid: Boolean(result.alreadyPaid) });
     } catch (err) {
         res.status(409).json({ error: err.message });
@@ -2231,7 +2391,7 @@ app.post('/api/pos/sales/:id/cancel', async (req, res) => {
             `UPDATE pos_sales SET status = 'CANCELLED'
              WHERE id = $1 AND user_id = $2 AND status = 'PENDING'
              RETURNING id, invoice_no, status`,
-            [saleId, user.id]
+            [saleId, posOwnerId(user)]
         );
         if (result.rows.length === 0) return res.status(409).json({ error: 'Hanya transaksi PENDING yang dapat dibatalkan.' });
         res.json(result.rows[0]);
@@ -2251,7 +2411,7 @@ app.get('/api/pos/sales', async (req, res) => {
         const status = String(req.query.status || '').toUpperCase();
         const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
         const conditions = ['user_id = $1', ...clauses];
-        const values = [user.id, ...params];
+        const values = [posOwnerId(user), ...params];
         if (status && ['PENDING', 'PAID', 'CANCELLED'].includes(status)) {
             values.push(status);
             conditions.push(`status = $${values.length}`);
@@ -2279,7 +2439,7 @@ app.get('/api/pos/sales/:id', async (req, res) => {
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
         const saleId = Number(req.params.id);
         if (!Number.isFinite(saleId)) return res.status(400).json({ error: 'ID transaksi tidak valid.' });
-        const saleRes = await pool.query('SELECT * FROM pos_sales WHERE id = $1 AND user_id = $2', [saleId, user.id]);
+        const saleRes = await pool.query('SELECT * FROM pos_sales WHERE id = $1 AND user_id = $2', [saleId, posOwnerId(user)]);
         if (saleRes.rows.length === 0) return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
         const itemsRes = await pool.query('SELECT * FROM pos_sale_items WHERE sale_id = $1 ORDER BY id', [saleId]);
         res.json({ sale: saleRes.rows[0], items: itemsRes.rows });
@@ -2296,9 +2456,9 @@ app.post('/api/pos/sales/:id/sync-sheet', async (req, res) => {
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
         const saleId = Number(req.params.id);
         if (!Number.isFinite(saleId)) return res.status(400).json({ error: 'ID transaksi tidak valid.' });
-        const owned = await pool.query('SELECT id FROM pos_sales WHERE id = $1 AND user_id = $2', [saleId, user.id]);
+        const owned = await pool.query('SELECT id FROM pos_sales WHERE id = $1 AND user_id = $2', [saleId, posOwnerId(user)]);
         if (owned.rows.length === 0) return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
-        const result = await syncPosSaleToSheets(user.id, saleId);
+        const result = await syncPosSaleToSheets(posOwnerId(user), saleId);
         res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -2313,7 +2473,7 @@ app.get('/api/pos/summary', async (req, res) => {
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
         const { clauses, params } = parsePosDateRange(req, 2);
         const conditions = ['user_id = $1', ...clauses];
-        const values = [user.id, ...params];
+        const values = [posOwnerId(user), ...params];
         const paidRes = await pool.query(
             `SELECT COUNT(*)::int AS transactions,
                     COALESCE(SUM(total_amount), 0) AS omzet,
@@ -2338,14 +2498,14 @@ app.get('/api/pos/summary', async (req, res) => {
             `SELECT COALESCE(SUM(loss_amount), 0) AS loss, COUNT(*)::int AS entries
              FROM pos_spoilage_logs
              WHERE user_id = $1${spoilRange.clauses.length ? ` AND ${spoilRange.clauses.join(' AND ')}` : ''}`,
-            [user.id, ...spoilRange.params]
+            [posOwnerId(user), ...spoilRange.params]
         );
         const purchaseRange = parsePosDateRange(req, 2);
         const purchaseRes = await pool.query(
             `SELECT COALESCE(SUM(total_amount), 0) AS total
              FROM pos_purchases
              WHERE user_id = $1${purchaseRange.clauses.length ? ` AND ${purchaseRange.clauses.join(' AND ')}` : ''}`,
-            [user.id, ...purchaseRange.params]
+            [posOwnerId(user), ...purchaseRange.params]
         );
         const spoilageLoss = Number(spoilRes.rows[0]?.loss || 0);
 
@@ -2382,7 +2542,7 @@ app.get('/api/pos/export-excel', async (req, res) => {
              JOIN pos_sales s ON s.id = i.sale_id
              WHERE ${conditions.join(' AND ')} AND s.status = 'PAID'
              ORDER BY s.created_at DESC, i.id ASC`,
-            [user.id, ...params]
+            [posOwnerId(user), ...params]
         );
         const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
         let csv = '\uFEFFTimestamp,ID Transaksi,Nama Produk,SKU,Satuan,Qty,Harga Satuan,Harga Modal,Subtotal,Metode Bayar,Saku Tujuan,Laba Bersih\n';
@@ -2429,7 +2589,7 @@ app.post('/api/pos/spoilage', async (req, res) => {
             await client.query('BEGIN');
             const productRes = await client.query(
                 'SELECT * FROM pos_products WHERE id = $1 AND user_id = $2 FOR UPDATE',
-                [productId, user.id]
+                [productId, posOwnerId(user)]
             );
             const product = productRes.rows[0];
             if (!product) {
@@ -2449,7 +2609,7 @@ app.post('/api/pos/spoilage', async (req, res) => {
             const logRes = await client.query(
                 `INSERT INTO pos_spoilage_logs (user_id, product_id, product_name, unit, qty_lost, loss_amount, reason)
                  VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-                [user.id, product.id, product.name, product.unit || 'PCS', qtyLost, lossAmount, reason || null]
+                [posOwnerId(user), product.id, product.name, product.unit || 'PCS', qtyLost, lossAmount, reason || null]
             );
             await client.query('COMMIT');
             res.status(201).json(logRes.rows[0]);
@@ -2475,7 +2635,7 @@ app.get('/api/pos/spoilage', async (req, res) => {
             `SELECT * FROM pos_spoilage_logs
              WHERE user_id = $1${clauses.length ? ` AND ${clauses.join(' AND ')}` : ''}
              ORDER BY created_at DESC, id DESC LIMIT 200`,
-            [user.id, ...params]
+            [posOwnerId(user), ...params]
         );
         res.json(result.rows);
     } catch (err) {
@@ -2508,7 +2668,7 @@ app.post('/api/pos/purchases', async (req, res) => {
                 if (!Number.isFinite(productId) || qty <= 0 || costPerUnit < 0) continue;
                 const productRes = await client.query(
                     'SELECT * FROM pos_products WHERE id = $1 AND user_id = $2 FOR UPDATE',
-                    [productId, user.id]
+                    [productId, posOwnerId(user)]
                 );
                 const product = productRes.rows[0];
                 if (!product) throw new Error(`Produk #${productId} tidak ditemukan.`);
@@ -2524,7 +2684,7 @@ app.post('/api/pos/purchases', async (req, res) => {
             const purchaseRes = await client.query(
                 `INSERT INTO pos_purchases (user_id, wallet, total_amount, note)
                  VALUES ($1, $2, $3, $4) RETURNING *`,
-                [user.id, wallet, totalAmount, note]
+                [posOwnerId(user), wallet, totalAmount, note]
             );
             const purchase = purchaseRes.rows[0];
 
@@ -2549,7 +2709,7 @@ app.post('/api/pos/purchases', async (req, res) => {
             await client.query(
                 `INSERT INTO transactions ("desc", amount, type, category, wallet, date, user_id)
                  VALUES ($1, $2, 'expense', 'Kulakan POS', $3, CURRENT_TIMESTAMP, $4)`,
-                [`Kulakan POS #${purchase.id}`, totalAmount, wallet, user.id]
+                [`Kulakan POS #${purchase.id}`, totalAmount, wallet, posOwnerId(user)]
             );
             await client.query('COMMIT');
             res.status(201).json({ ...purchase, items: prepared.length });

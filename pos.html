@@ -22,14 +22,26 @@
         <div class="pos-gate-card">
             <div class="pos-gate-emoji" aria-hidden="true">🦥</div>
             <h1>Halaman Kasir</h1>
-            <p>Silakan masuk ke akun Saku Harian terlebih dahulu. Sesi kasir memakai akun yang sama dengan dashboard keuangan.</p>
-            <a class="pos-button pos-button-primary" id="gateLoginLink" href="index.html">Masuk ke Dashboard</a>
+            <p>Masuk dengan akun kasir atau akun pemilik toko. Akun kasir hanya bisa membuka layar POS ini.</p>
+            <form class="pos-gate-form" id="gateLoginForm">
+                <label class="pos-field">
+                    <span>Email / Username</span>
+                    <input id="gateEmail" type="text" autocomplete="username" placeholder="kasir@toko.com" required>
+                </label>
+                <label class="pos-field">
+                    <span>Kata Sandi</span>
+                    <input id="gatePassword" type="password" autocomplete="current-password" placeholder="••••••" required>
+                </label>
+                <p class="pos-error" id="gateError" hidden></p>
+                <button type="submit" class="pos-button pos-button-primary" id="gateSubmit">Masuk ke Kasir</button>
+            </form>
+            <a class="pos-gate-link" id="gateLoginLink" href="index.html">Pemilik toko? Buka dashboard keuangan</a>
         </div>
     </div>
 
     <div class="pos-shell" id="posShell" hidden>
         <header class="pos-topbar">
-            <a class="pos-brand" href="index.html" title="Kembali ke dashboard keuangan">
+            <a class="pos-brand" id="posBrandLink" href="index.html" title="Kembali ke dashboard keuangan">
                 <span class="pos-brand-mark" aria-hidden="true">🦥</span>
                 <span class="pos-brand-copy">saku<span>kasir</span></span>
             </a>
@@ -372,6 +384,37 @@
                 <button type="button" class="pos-button pos-button-ghost" data-close-modal="settingsModal">Tutup</button>
                 <button type="button" class="pos-button pos-button-primary" id="btnSaveSettings">Simpan Pengaturan</button>
             </footer>
+
+            <!-- Akun kasir: hanya tampil untuk pemilik toko -->
+            <section class="pos-cashier-section" id="cashierSection" hidden>
+                <div class="pos-cashier-head">
+                    <div>
+                        <p class="pos-eyebrow">AKSES KASIR</p>
+                        <h3>Akun Kasir</h3>
+                    </div>
+                    <span class="pos-count-pill" id="cashierCount">0 akun</span>
+                </div>
+                <p class="pos-help">Kasir hanya bisa membuka halaman POS dan memakai katalog, transaksi, serta laporan toko ini. Dashboard keuangan tetap terkunci untuk mereka.</p>
+
+                <form class="pos-cashier-form" id="cashierForm">
+                    <label class="pos-field">
+                        <span>Nama Kasir</span>
+                        <input id="cName" type="text" maxlength="100" placeholder="Siti" required>
+                    </label>
+                    <label class="pos-field">
+                        <span>Email Login</span>
+                        <input id="cEmail" type="email" maxlength="160" placeholder="kasir@toko.com" required>
+                    </label>
+                    <label class="pos-field">
+                        <span>Kata Sandi</span>
+                        <input id="cPassword" type="password" minlength="6" placeholder="minimal 6 karakter" required>
+                    </label>
+                    <button type="submit" class="pos-button pos-button-primary" id="btnAddCashier">Tambah Kasir</button>
+                </form>
+                <p class="pos-error" id="cashierError" hidden></p>
+
+                <div class="pos-cashier-list" id="cashierList"></div>
+            </section>
         </div>
     </div>
 

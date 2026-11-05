@@ -1226,3 +1226,100 @@
         grid-column: 1 / -1;
     }
 }
+
+/* ---------- Gate login & akun kasir ---------- */
+.pos-gate-card {
+    text-align: left;
+}
+
+.pos-gate-card h1,
+.pos-gate-card > p,
+.pos-gate-emoji {
+    text-align: center;
+}
+
+.pos-gate-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.pos-gate-form .pos-button {
+    width: 100%;
+    justify-content: center;
+}
+
+.pos-gate-link {
+    display: block;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-decoration: none;
+}
+
+.pos-gate-link:hover {
+    color: var(--ink);
+    text-decoration: underline;
+}
+
+.pos-cashier-section {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+}
+
+.pos-cashier-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.pos-cashier-head h3 {
+    margin: 2px 0 0;
+    font-size: 1.05rem;
+}
+
+.pos-cashier-form {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+    gap: 8px;
+    align-items: end;
+    margin: 12px 0;
+}
+
+.pos-cashier-form .pos-button {
+    height: 42px;
+    white-space: nowrap;
+}
+
+.pos-cashier-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 30vh;
+    overflow-y: auto;
+}
+
+.pos-cashier-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: var(--surface-muted, rgba(0, 0, 0, 0.04));
+}
+
+.pos-cashier-row strong {
+    display: block;
+    font-size: 0.9rem;
+}
+
+@media (max-width: 720px) {
+    .pos-cashier-form {
+        grid-template-columns: 1fr;
+    }
+}
