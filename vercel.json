@@ -18,6 +18,18 @@
       "use": "@vercel/static"
     },
     {
+      "src": "pos.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "pos.css",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "pos.js",
+      "use": "@vercel/static"
+    },
+    {
       "src": "icons/*.svg",
       "use": "@vercel/static"
     }
@@ -38,6 +50,26 @@
     {
       "src": "/script.js",
       "dest": "/script.js"
+    },
+    {
+      "src": "/pos",
+      "dest": "/pos.html"
+    },
+    {
+      "src": "/pos.html",
+      "dest": "/pos.html"
+    },
+    {
+      "src": "/pos.css",
+      "dest": "/pos.css"
+    },
+    {
+      "src": "/pos.js",
+      "dest": "/pos.js"
+    },
+    {
+      "src": "/dashboard",
+      "dest": "/index.html"
     },
     {
       "src": "/(.*)",

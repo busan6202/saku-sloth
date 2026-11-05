@@ -68,7 +68,10 @@ saku-sloth/
 ├── index.html        # Markup UI (auth screen + app shell)
 ├── style.css         # Design system Hallmark Hum + tema terang/gelap
 ├── script.js         # Logika klien: auth, transaksi, utang, kalender, ekspor
-├── server.js         # API Express: auth, transaksi, utang, webhook Telegram
+├── pos.html          # Halaman kasir POS (full-screen, terpisah dari dashboard)
+├── pos.css           # Gaya modul POS
+├── pos.js            # Logika kasir: katalog, keranjang, bayar, struk, laporan
+├── server.js         # API Express: auth, transaksi, utang, POS, webhook Telegram
 ├── vercel.json       # Konfigurasi build & routing Vercel
 ├── package.json      # Dependensi & script start
 ├── icons/            # Ikon SVG
@@ -138,6 +141,12 @@ WEBHOOK_URL=https://domain-anda.vercel.app/api/telegram-webhook
 
 # OPSIONAL — Analisis AI
 GEMINI_API_KEY=your-gemini-api-key
+
+# OPSIONAL — Modul POS Kasir
+POS_CASH_WALLET=Tunai
+POS_QRIS_WALLET=QRIS
+POS_PAYMENT_WEBHOOK_SECRET=rahasia-webhook-qris
+GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/XXXX/exec
 ```
 
 | Variabel | Wajib | Keterangan |
@@ -147,6 +156,10 @@ GEMINI_API_KEY=your-gemini-api-key
 | `WEBHOOK_URL` | ❌ | Wajib bila ingin bot berjalan di server publik (Vercel). |
 | `GEMINI_API_KEY` | ❌ | Untuk fitur analisis AI. |
 | `PORT` | ❌ | Port lokal (default 3000). |
+| `POS_CASH_WALLET` | ❌ | Nama saku untuk pembayaran tunai (default `Tunai`). |
+| `POS_QRIS_WALLET` | ❌ | Nama saku untuk pembayaran QRIS (default `QRIS`). |
+| `POS_PAYMENT_WEBHOOK_SECRET` | ❌ | Secret header `x-pos-secret` untuk callback pembayaran QRIS. |
+| `GOOGLE_SHEETS_WEBHOOK_URL` | ❌ | URL Apps Script `doPost` default untuk sinkronisasi POS. |
 
 > ⚠️ **Jangan pernah commit file `.env`.** File ini sudah masuk `.gitignore`.
 
@@ -167,8 +180,72 @@ Tidak perlu menjalankan migrasi manual. Saat server pertama kali menerima reques
 | Tabel | Fungsi |
 | --- | --- |
 | `users` | Akun: `username`, `email`, `password_hash`, `full_name`, `avatar`, `role` |
-| `user_sessions` | Token sesi + masa berlaku |
-| `transactions` | Transaksi keuangan + `user_id` |
+| `pos_products` | Produk POS: SKU/barcode, harga jual, HPP, stok |
+| `pos_sales` | Header penjualan: invoice, metode, total, HPP, laba, status |
+| `pos_sale_items` | Rincian item per invoice (harga jual & modal saat transaksi) |
+| `pos_settings` | Payload QRIS & URL webhook Google Sheets per pengguna |
+
+Migrasi ringan (`ADD COLUMN IF NOT EXISTS`, unique index email, backfill `user_id` data lama) juga berjalan otomatis.
+
+---
+
+## 🛒 Modul POS Kasir (`/pos`)
+
+Halaman kasir terpisah dari dashboard keuangan, tetapi memakai **database, sesi login, dan API yang sama**.
+
+- `/dashboard` → perencana keuangan harian (saldo kantong, utang, laporan).
+- `/pos` → layar kasir penuh: katalog, keranjang, pembayaran, struk, dan laporan POS.
+
+### Alur transaksi
+
+1. Kasir memilih produk / scan barcode. Stok dicek sebelum masuk keranjang.
+2. Keranjang menghitung total jual, total HPP, dan laba kotor dari data produk.
+3. **Tunai** → kasir mengisi uang diterima, sistem menghitung kembalian, transaksi langsung `PAID`.
+4. **QRIS** → transaksi dibuat `PENDING`; kasir menekan **Konfirmasi Lunas**, atau payment gateway memanggil webhook.
+5. Saat `PAID`, satu fungsi backend otomatis:
+   - mengurangi stok produk,
+   - mencatat pemasukan ke tabel `transactions` pada saku `Tunai` atau `QRIS`,
+   - menyimpan total HPP & laba kotor di `pos_sales` untuk laporan laba/rugi,
+   - mengirim rincian item ke Google Sheets (bila webhook diatur).
+6. Struk bisa dicetak atau dikirim ke WhatsApp pelanggan.
+7. Tombol **Download Excel/CSV** di laporan menarik rincian item per rentang tanggal.
+
+### Callback pembayaran QRIS
+
+```bash
+curl -X POST https://domain-anda.vercel.app/api/pos/webhook/payment \
+  -H "Content-Type: application/json" \
+  -H "x-pos-secret: rahasia-webhook-qris" \
+  -d '{"invoiceNo":"POS-20261105-ABC123","status":"PAID"}'
+```
+
+Status yang didukung: `PAID`, `FAILED`, `CANCELLED`, `EXPIRED`.
+
+### Google Apps Script (`doPost`)
+
+Buat spreadsheet → **Extensions → Apps Script** → tempel kode berikut → **Deploy → New deployment → Web app** (akses: anyone) → salin URL `/exec` ke pengaturan POS (⚙️) atau `GOOGLE_SHEETS_WEBHOOK_URL`.
+
+```javascript
+function doPost(e) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('POS') ||
+                SpreadsheetApp.getActiveSpreadsheet().insertSheet('POS');
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(['Timestamp', 'ID Transaksi', 'Nama Produk', 'SKU', 'Qty',
+                     'Harga Satuan', 'Harga Modal', 'Subtotal', 'Metode Bayar',
+                     'Saku Tujuan', 'Laba Bersih']);
+  }
+  const payload = JSON.parse(e.postData.contents);
+  (payload.rows || []).forEach(function (row) {
+    sheet.appendRow([
+      row.Timestamp, row['ID Transaksi'], row['Nama Produk'], row.SKU, row.Qty,
+      row['Harga Satuan'], row['Harga Modal'], row.Subtotal,
+      row['Metode Bayar'], row['Saku Tujuan'], row['Laba Bersih']
+    ]);
+  });
+  return ContentService.createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+```
 | `debts` | Piutang/utang + `user_id` |
 | `telegram_edit_sessions` | State sementara wizard/edit bot |
 
@@ -281,6 +358,26 @@ Semua endpoint data memerlukan header `Authorization: Bearer <token>`.
 | POST | `/api/debts` | Tambah catatan |
 | PUT | `/api/debts/:id` | Update/pembayaran |
 | DELETE | `/api/debts/:id` | Hapus catatan |
+
+### POS Kasir
+
+| Method | Endpoint | Keterangan |
+| --- | --- | --- |
+| GET | `/api/pos/products` | Katalog produk (`?q=` pencarian, `?include_inactive=1`) |
+| GET | `/api/pos/products/lookup` | Cari produk via `?code=` (barcode/SKU) |
+| POST | `/api/pos/products` | Tambah produk |
+| PUT | `/api/pos/products/:id` | Update produk/harga/stok |
+| DELETE | `/api/pos/products/:id` | Nonaktifkan produk |
+| GET/PUT | `/api/pos/settings` | Payload QRIS & URL webhook Sheets |
+| POST | `/api/pos/checkout` | Checkout (`CASH` langsung lunas, `QRIS` pending) |
+| POST | `/api/pos/sales/:id/pay` | Konfirmasi pelunasan QRIS |
+| POST | `/api/pos/sales/:id/cancel` | Batalkan transaksi pending |
+| GET | `/api/pos/sales` | Riwayat transaksi (`?from=&to=&status=`) |
+| GET | `/api/pos/sales/:id` | Detail transaksi + item |
+| POST | `/api/pos/sales/:id/sync-sheet` | Kirim ulang ke Google Sheets |
+| GET | `/api/pos/summary` | Omzet, HPP, laba, tunai/QRIS, pending |
+| GET | `/api/pos/export-excel` | Unduh rincian item (CSV) |
+| POST | `/api/pos/webhook/payment` | Callback pembayaran QRIS (secret header) |
 
 ### Lain-lain
 

@@ -211,6 +211,84 @@ async function ensureDatabaseReady() {
                 ADD COLUMN IF NOT EXISTS user_id INTEGER
             `);
 
+            // --- SKEMA MODUL POS KASIR ---
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS pos_products (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    sku VARCHAR(64),
+                    barcode VARCHAR(64),
+                    name VARCHAR(160) NOT NULL,
+                    price_sell NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    price_cost NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    stock INTEGER NOT NULL DEFAULT 0,
+                    min_stock INTEGER NOT NULL DEFAULT 0,
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            await pool.query(`CREATE INDEX IF NOT EXISTS pos_products_user_idx ON pos_products (user_id)`);
+            await pool.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS pos_products_barcode_unique_idx
+                ON pos_products (user_id, LOWER(barcode))
+                WHERE barcode IS NOT NULL AND barcode <> ''
+            `);
+            await pool.query(`
+                CREATE UNIQUE INDEX IF NOT EXISTS pos_products_sku_unique_idx
+                ON pos_products (user_id, LOWER(sku))
+                WHERE sku IS NOT NULL AND sku <> ''
+            `);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS pos_sales (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    invoice_no VARCHAR(48) UNIQUE NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+                    payment_method VARCHAR(20) NOT NULL DEFAULT 'CASH',
+                    wallet VARCHAR(80) NOT NULL DEFAULT 'Tunai',
+                    total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    total_cost NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    gross_profit NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    paid_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    change_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    customer_name VARCHAR(120),
+                    customer_phone VARCHAR(32),
+                    note TEXT,
+                    sheet_synced BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    paid_at TIMESTAMP
+                )
+            `);
+            await pool.query(`CREATE INDEX IF NOT EXISTS pos_sales_user_date_idx ON pos_sales (user_id, created_at DESC)`);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS pos_sale_items (
+                    id SERIAL PRIMARY KEY,
+                    sale_id INTEGER NOT NULL REFERENCES pos_sales(id) ON DELETE CASCADE,
+                    product_id INTEGER REFERENCES pos_products(id) ON DELETE SET NULL,
+                    product_name VARCHAR(160) NOT NULL,
+                    sku VARCHAR(64),
+                    qty INTEGER NOT NULL,
+                    unit_price NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    unit_cost NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    subtotal NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    subtotal_cost NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    profit NUMERIC(14,2) NOT NULL DEFAULT 0
+                )
+            `);
+            await pool.query(`CREATE INDEX IF NOT EXISTS pos_sale_items_sale_idx ON pos_sale_items (sale_id)`);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS pos_settings (
+                    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                    qris_payload TEXT,
+                    sheets_webhook_url TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
             // Seed Akun Default (Admin / Demo) bila tabel pengguna masih kosong
             const userCountRes = await pool.query('SELECT COUNT(*) AS count FROM users');
             if (Number(userCountRes.rows[0]?.count || 0) === 0) {
@@ -1703,6 +1781,772 @@ app.delete('/api/debts/:id', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+// ================= REST API MODUL POS =================
+
+app.get('/pos', (req, res) => {
+    res.sendFile(path.join(__dirname, 'pos.html'));
+});
+
+app.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// API: Daftar produk POS (pencarian nama/SKU/barcode)
+app.get('/api/pos/products', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+
+        const keyword = String(req.query.q || '').trim();
+        const includeInactive = String(req.query.include_inactive || '') === '1';
+        const params = [user.id];
+        let query = `SELECT * FROM pos_products WHERE user_id = $1`;
+        if (!includeInactive) query += ' AND is_active = TRUE';
+        if (keyword) {
+            params.push(`%${keyword.toLowerCase()}%`);
+            query += ` AND (LOWER(name) LIKE $${params.length} OR LOWER(COALESCE(sku, '')) LIKE $${params.length} OR LOWER(COALESCE(barcode, '')) LIKE $${params.length})`;
+        }
+        query += ' ORDER BY name ASC';
+        const result = await pool.query(query, params);
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Cari satu produk lewat barcode (scan)
+app.get('/api/pos/products/lookup', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const code = String(req.query.code || '').trim();
+        if (!code) return res.status(400).json({ error: 'Barcode/SKU wajib diisi.' });
+        const result = await pool.query(
+            `SELECT * FROM pos_products
+             WHERE user_id = $1 AND is_active = TRUE
+               AND (LOWER(barcode) = LOWER($2) OR LOWER(sku) = LOWER($2))
+             LIMIT 1`,
+            [user.id, code]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Produk dengan barcode tersebut tidak ditemukan.' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Tambah produk POS
+app.post('/api/pos/products', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+
+        const name = String(req.body?.name || '').trim();
+        if (!name) return res.status(400).json({ error: 'Nama produk wajib diisi.' });
+
+        const sku = String(req.body?.sku || '').trim() || null;
+        const barcode = String(req.body?.barcode || '').trim() || null;
+        const priceSell = toMoney(req.body?.price_sell);
+        const priceCost = toMoney(req.body?.price_cost);
+        const stock = Math.max(0, Math.round(Number(req.body?.stock) || 0));
+        const minStock = Math.max(0, Math.round(Number(req.body?.min_stock) || 0));
+
+        const result = await pool.query(
+            `INSERT INTO pos_products (user_id, sku, barcode, name, price_sell, price_cost, stock, min_stock)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             RETURNING *`,
+            [user.id, sku, barcode, name, priceSell, priceCost, stock, minStock]
+        );
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        if (err.code === '23505') {
+            return res.status(409).json({ error: 'SKU atau barcode sudah dipakai produk lain.' });
+        }
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// API: Ubah produk POS (termasuk stok)
+app.put('/api/pos/products/:id', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const productId = Number(req.params.id);
+        if (!Number.isFinite(productId)) return res.status(400).json({ error: 'ID produk tidak valid.' });
+
+        const existingRes = await pool.query('SELECT * FROM pos_products WHERE id = $1 AND user_id = $2', [productId, user.id]);
+        const current = existingRes.rows[0];
+        if (!current) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
+
+        const name = req.body?.name !== undefined ? String(req.body.name).trim() : current.name;
+        if (!name) return res.status(400).json({ error: 'Nama produk wajib diisi.' });
+        const sku = req.body?.sku !== undefined ? (String(req.body.sku).trim() || null) : current.sku;
+        const barcode = req.body?.barcode !== undefined ? (String(req.body.barcode).trim() || null) : current.barcode;
+        const priceSell = req.body?.price_sell !== undefined ? toMoney(req.body.price_sell) : Number(current.price_sell);
+        const priceCost = req.body?.price_cost !== undefined ? toMoney(req.body.price_cost) : Number(current.price_cost);
+        const stock = req.body?.stock !== undefined ? Math.max(0, Math.round(Number(req.body.stock) || 0)) : current.stock;
+        const minStock = req.body?.min_stock !== undefined ? Math.max(0, Math.round(Number(req.body.min_stock) || 0)) : current.min_stock;
+        const isActive = req.body?.is_active !== undefined ? Boolean(req.body.is_active) : current.is_active;
+
+        const result = await pool.query(
+            `UPDATE pos_products
+             SET sku = $1, barcode = $2, name = $3, price_sell = $4, price_cost = $5,
+                 stock = $6, min_stock = $7, is_active = $8, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $9 AND user_id = $10
+             RETURNING *`,
+            [sku, barcode, name, priceSell, priceCost, stock, minStock, isActive, productId, user.id]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        if (err.code === '23505') {
+            return res.status(409).json({ error: 'SKU atau barcode sudah dipakai produk lain.' });
+        }
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// API: Nonaktifkan produk POS (riwayat penjualan tetap tersimpan)
+app.delete('/api/pos/products/:id', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const productId = Number(req.params.id);
+        if (!Number.isFinite(productId)) return res.status(400).json({ error: 'ID produk tidak valid.' });
+        const result = await pool.query(
+            `UPDATE pos_products SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1 AND user_id = $2 RETURNING id`,
+            [productId, user.id]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
+        res.json({ success: true, id: productId });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Pengaturan POS (payload QRIS & webhook Google Sheets)
+app.get('/api/pos/settings', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const result = await pool.query('SELECT qris_payload, sheets_webhook_url, updated_at FROM pos_settings WHERE user_id = $1', [user.id]);
+        res.json({
+            qris_payload: result.rows[0]?.qris_payload || '',
+            sheets_webhook_url: result.rows[0]?.sheets_webhook_url || '',
+            env_sheets_webhook: Boolean(POS_SHEETS_WEBHOOK_URL),
+            cash_wallet: POS_CASH_WALLET,
+            qris_wallet: POS_QRIS_WALLET
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/pos/settings', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const qrisPayload = String(req.body?.qris_payload || '').trim();
+        const sheetsWebhook = String(req.body?.sheets_webhook_url || '').trim();
+        if (sheetsWebhook && !isSafeWebhookUrl(sheetsWebhook)) {
+            return res.status(400).json({ error: 'URL webhook tidak valid atau mengarah ke jaringan privat.' });
+        }
+        const result = await pool.query(
+            `INSERT INTO pos_settings (user_id, qris_payload, sheets_webhook_url, updated_at)
+             VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+             ON CONFLICT (user_id)
+             DO UPDATE SET qris_payload = EXCLUDED.qris_payload,
+                           sheets_webhook_url = EXCLUDED.sheets_webhook_url,
+                           updated_at = CURRENT_TIMESTAMP
+             RETURNING qris_payload, sheets_webhook_url, updated_at`,
+            [user.id, qrisPayload || null, sheetsWebhook || null]
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// API: Checkout kasir (CASH langsung lunas, QRIS menunggu konfirmasi)
+app.post('/api/pos/checkout', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+
+        const method = String(req.body?.paymentMethod || 'CASH').toUpperCase() === 'QRIS' ? 'QRIS' : 'CASH';
+        const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+        if (rawItems.length === 0) return res.status(400).json({ error: 'Keranjang masih kosong.' });
+
+        const merged = new Map();
+        for (const raw of rawItems) {
+            const productId = Number(raw?.productId ?? raw?.product_id);
+            const qty = toQty(raw?.qty);
+            if (!Number.isFinite(productId) || qty <= 0) continue;
+            merged.set(productId, (merged.get(productId) || 0) + qty);
+        }
+        if (merged.size === 0) return res.status(400).json({ error: 'Item keranjang tidak valid.' });
+
+        const productIds = [...merged.keys()];
+        const productsRes = await pool.query(
+            `SELECT * FROM pos_products
+             WHERE user_id = $1 AND is_active = TRUE AND id = ANY($2::int[])`,
+            [user.id, productIds]
+        );
+        const products = new Map(productsRes.rows.map((row) => [Number(row.id), row]));
+
+        const saleItems = [];
+        let totalAmount = 0;
+        let totalCost = 0;
+        for (const [productId, qty] of merged.entries()) {
+            const product = products.get(productId);
+            if (!product) return res.status(400).json({ error: `Produk #${productId} tidak ditemukan atau sudah nonaktif.` });
+            if (Number(product.stock) < qty) {
+                return res.status(409).json({ error: `Stok ${product.name} tidak cukup (tersisa ${product.stock}).` });
+            }
+            const unitPrice = toMoney(product.price_sell);
+            const unitCost = toMoney(product.price_cost);
+            const subtotal = toMoney(unitPrice * qty);
+            const subtotalCost = toMoney(unitCost * qty);
+            totalAmount = toMoney(totalAmount + subtotal);
+            totalCost = toMoney(totalCost + subtotalCost);
+            saleItems.push({
+                productId,
+                productName: product.name,
+                sku: product.sku || null,
+                qty,
+                unitPrice,
+                unitCost,
+                subtotal,
+                subtotalCost,
+                profit: toMoney(subtotal - subtotalCost)
+            });
+        }
+        const grossProfit = toMoney(totalAmount - totalCost);
+
+        const paidAmount = method === 'CASH' ? toMoney(req.body?.paidAmount) : 0;
+        if (method === 'CASH' && paidAmount < totalAmount) {
+            return res.status(400).json({ error: 'Uang diterima kurang dari total belanja.' });
+        }
+
+        const customerName = String(req.body?.customerName || '').trim().slice(0, 120) || null;
+        const customerPhone = String(req.body?.customerPhone || '').trim().slice(0, 32) || null;
+        const note = String(req.body?.note || '').trim().slice(0, 500) || null;
+
+        const client = await pool.connect();
+        let sale;
+        try {
+            await client.query('BEGIN');
+            const insertRes = await client.query(
+                `INSERT INTO pos_sales
+                    (user_id, invoice_no, status, payment_method, wallet, total_amount, total_cost, gross_profit,
+                     paid_amount, change_amount, customer_name, customer_phone, note)
+                 VALUES ($1, $2, 'PENDING', $3, $4, $5, $6, $7, $8, 0, $9, $10, $11)
+                 RETURNING *`,
+                [
+                    user.id,
+                    buildPosInvoiceNo(),
+                    method,
+                    posWalletFor(method),
+                    totalAmount,
+                    totalCost,
+                    grossProfit,
+                    method === 'CASH' ? paidAmount : 0,
+                    customerName,
+                    customerPhone,
+                    note
+                ]
+            );
+            sale = insertRes.rows[0];
+            for (const item of saleItems) {
+                await client.query(
+                    `INSERT INTO pos_sale_items
+                        (sale_id, product_id, product_name, sku, qty, unit_price, unit_cost, subtotal, subtotal_cost, profit)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+                    [sale.id, item.productId, item.productName, item.sku, item.qty, item.unitPrice, item.unitCost, item.subtotal, item.subtotalCost, item.profit]
+                );
+            }
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw err;
+        } finally {
+            client.release();
+        }
+
+        if (method === 'QRIS') {
+            return res.status(201).json({ sale, items: saleItems, status: 'PENDING' });
+        }
+
+        let paidResult;
+        try {
+            paidResult = await markPosSalePaid(sale.id);
+        } catch (err) {
+            await pool.query(`UPDATE pos_sales SET status = 'CANCELLED' WHERE id = $1`, [sale.id]).catch(() => {});
+            return res.status(409).json({ error: err.message });
+        }
+        if (paidResult.error) {
+            await pool.query(`UPDATE pos_sales SET status = 'CANCELLED' WHERE id = $1`, [sale.id]).catch(() => {});
+            return res.status(409).json({ error: 'Transaksi gagal diproses. Silakan ulangi.' });
+        }
+        syncPosSaleToSheets(user.id, sale.id).catch(() => {});
+        res.status(201).json({ sale: paidResult.sale, items: paidResult.items, status: 'PAID' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Konfirmasi pembayaran QRIS (manual dari layar kasir)
+app.post('/api/pos/sales/:id/pay', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const saleId = Number(req.params.id);
+        if (!Number.isFinite(saleId)) return res.status(400).json({ error: 'ID transaksi tidak valid.' });
+
+        const owned = await pool.query('SELECT id FROM pos_sales WHERE id = $1 AND user_id = $2', [saleId, user.id]);
+        if (owned.rows.length === 0) return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
+
+        const result = await markPosSalePaid(saleId);
+        if (result.error === 'not_found') return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
+        if (result.error) return res.status(409).json({ error: 'Transaksi tidak dapat dibayar pada status saat ini.' });
+
+        if (!result.alreadyPaid) syncPosSaleToSheets(user.id, saleId).catch(() => {});
+        res.json({ sale: result.sale, items: result.items, status: 'PAID', alreadyPaid: Boolean(result.alreadyPaid) });
+    } catch (err) {
+        res.status(409).json({ error: err.message });
+    }
+});
+
+// API: Batalkan transaksi yang belum lunas
+app.post('/api/pos/sales/:id/cancel', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const saleId = Number(req.params.id);
+        if (!Number.isFinite(saleId)) return res.status(400).json({ error: 'ID transaksi tidak valid.' });
+        const result = await pool.query(
+            `UPDATE pos_sales SET status = 'CANCELLED'
+             WHERE id = $1 AND user_id = $2 AND status = 'PENDING'
+             RETURNING id, invoice_no, status`,
+            [saleId, user.id]
+        );
+        if (result.rows.length === 0) return res.status(409).json({ error: 'Hanya transaksi PENDING yang dapat dibatalkan.' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Riwayat transaksi POS
+app.get('/api/pos/sales', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+
+        const { clauses, params } = parsePosDateRange(req, 2);
+        const status = String(req.query.status || '').toUpperCase();
+        const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+        const conditions = ['user_id = $1', ...clauses];
+        const values = [user.id, ...params];
+        if (status && ['PENDING', 'PAID', 'CANCELLED'].includes(status)) {
+            values.push(status);
+            conditions.push(`status = $${values.length}`);
+        }
+        values.push(limit);
+        const result = await pool.query(
+            `SELECT s.*, (SELECT COUNT(*) FROM pos_sale_items i WHERE i.sale_id = s.id)::int AS item_count
+             FROM pos_sales s
+             WHERE ${conditions.join(' AND ')}
+             ORDER BY s.created_at DESC, s.id DESC
+             LIMIT $${values.length}`,
+            values
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Detail transaksi POS + rincian item
+app.get('/api/pos/sales/:id', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const saleId = Number(req.params.id);
+        if (!Number.isFinite(saleId)) return res.status(400).json({ error: 'ID transaksi tidak valid.' });
+        const saleRes = await pool.query('SELECT * FROM pos_sales WHERE id = $1 AND user_id = $2', [saleId, user.id]);
+        if (saleRes.rows.length === 0) return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
+        const itemsRes = await pool.query('SELECT * FROM pos_sale_items WHERE sale_id = $1 ORDER BY id', [saleId]);
+        res.json({ sale: saleRes.rows[0], items: itemsRes.rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Kirim ulang transaksi ke Google Sheets
+app.post('/api/pos/sales/:id/sync-sheet', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const saleId = Number(req.params.id);
+        if (!Number.isFinite(saleId)) return res.status(400).json({ error: 'ID transaksi tidak valid.' });
+        const owned = await pool.query('SELECT id FROM pos_sales WHERE id = $1 AND user_id = $2', [saleId, user.id]);
+        if (owned.rows.length === 0) return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
+        const result = await syncPosSaleToSheets(user.id, saleId);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Ringkasan penjualan POS (omzet, HPP, laba)
+app.get('/api/pos/summary', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const { clauses, params } = parsePosDateRange(req, 2);
+        const conditions = ['user_id = $1', ...clauses];
+        const values = [user.id, ...params];
+        const paidRes = await pool.query(
+            `SELECT COUNT(*)::int AS transactions,
+                    COALESCE(SUM(total_amount), 0) AS omzet,
+                    COALESCE(SUM(total_cost), 0) AS hpp,
+                    COALESCE(SUM(gross_profit), 0) AS laba,
+                    COALESCE(SUM(CASE WHEN payment_method = 'CASH' THEN total_amount ELSE 0 END), 0) AS cash_total,
+                    COALESCE(SUM(CASE WHEN payment_method = 'QRIS' THEN total_amount ELSE 0 END), 0) AS qris_total
+             FROM pos_sales
+             WHERE ${conditions.join(' AND ')} AND status = 'PAID'`,
+            values
+        );
+        const pendingRes = await pool.query(
+            `SELECT COUNT(*)::int AS pending FROM pos_sales WHERE ${conditions.join(' AND ')} AND status = 'PENDING'`,
+            values
+        );
+        const row = paidRes.rows[0] || {};
+        res.json({
+            transactions: Number(row.transactions || 0),
+            omzet: Number(row.omzet || 0),
+            hpp: Number(row.hpp || 0),
+            laba: Number(row.laba || 0),
+            cashTotal: Number(row.cash_total || 0),
+            qrisTotal: Number(row.qris_total || 0),
+            pending: Number(pendingRes.rows[0]?.pending || 0)
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Ekspor rincian POS ke Excel/CSV
+app.get('/api/pos/export-excel', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const { clauses, params } = parsePosDateRange(req, 2);
+        const conditions = ['s.user_id = $1', ...clauses.map((c) => `s.${c}`)];
+        const result = await pool.query(
+            `SELECT s.invoice_no, s.created_at, s.payment_method, s.wallet,
+                    i.product_name, i.sku, i.qty, i.unit_price, i.unit_cost, i.subtotal, i.profit
+             FROM pos_sale_items i
+             JOIN pos_sales s ON s.id = i.sale_id
+             WHERE ${conditions.join(' AND ')} AND s.status = 'PAID'
+             ORDER BY s.created_at DESC, i.id ASC`,
+            [user.id, ...params]
+        );
+        const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+        let csv = '\uFEFFTimestamp,ID Transaksi,Nama Produk,SKU,Qty,Harga Satuan,Harga Modal,Subtotal,Metode Bayar,Saku Tujuan,Laba Bersih\n';
+        result.rows.forEach((row) => {
+            csv += [
+                escapeCsv(new Date(row.created_at).toISOString()),
+                escapeCsv(row.invoice_no),
+                escapeCsv(row.product_name),
+                escapeCsv(row.sku),
+                row.qty,
+                row.unit_price,
+                row.unit_cost,
+                row.subtotal,
+                escapeCsv(row.payment_method),
+                escapeCsv(row.wallet),
+                row.profit
+            ].join(',') + '\n';
+        });
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="laporan-pos-saku-harian.csv"');
+        res.status(200).send(csv);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Webhook callback pembayaran QRIS (dari penyedia payment gateway)
+app.post('/api/pos/webhook/payment', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const secret = req.headers['x-pos-secret'] || req.headers['x-webhook-secret'] || req.query.secret;
+        if (!POS_PAYMENT_WEBHOOK_SECRET) {
+            return res.status(503).json({ error: 'Webhook pembayaran belum dikonfigurasi di server.' });
+        }
+        if (!safeSecretEquals(secret, POS_PAYMENT_WEBHOOK_SECRET)) {
+            return res.status(401).json({ error: 'Secret webhook tidak valid.' });
+        }
+
+        const invoiceNo = String(req.body?.invoiceNo || req.body?.invoice_no || '').trim();
+        if (!invoiceNo) return res.status(400).json({ error: 'invoiceNo wajib diisi.' });
+        const status = String(req.body?.status || 'PAID').toUpperCase();
+
+        const saleRes = await pool.query('SELECT * FROM pos_sales WHERE invoice_no = $1', [invoiceNo]);
+        const sale = saleRes.rows[0];
+        if (!sale) return res.status(404).json({ error: 'Invoice tidak ditemukan.' });
+
+        if (status === 'PAID') {
+            const result = await markPosSalePaid(sale.id);
+            if (result.error) return res.status(409).json({ error: 'Transaksi tidak dapat dilunasi pada status saat ini.' });
+            if (!result.alreadyPaid) syncPosSaleToSheets(sale.user_id, sale.id).catch(() => {});
+            return res.json({ success: true, invoiceNo, status: 'PAID', alreadyPaid: Boolean(result.alreadyPaid) });
+        }
+
+        if (['FAILED', 'CANCELLED', 'EXPIRED'].includes(status)) {
+            await pool.query(
+                `UPDATE pos_sales SET status = 'CANCELLED' WHERE id = $1 AND status = 'PENDING'`,
+                [sale.id]
+            );
+            return res.json({ success: true, invoiceNo, status: 'CANCELLED' });
+        }
+
+        res.status(400).json({ error: 'Status webhook tidak dikenali.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ================= MODUL POS KASIR =================
+const POS_CASH_WALLET = (process.env.POS_CASH_WALLET || 'Tunai').trim();
+const POS_QRIS_WALLET = (process.env.POS_QRIS_WALLET || 'QRIS').trim();
+const POS_PAYMENT_WEBHOOK_SECRET = (process.env.POS_PAYMENT_WEBHOOK_SECRET || '').trim();
+const POS_SHEETS_WEBHOOK_URL = (process.env.GOOGLE_SHEETS_WEBHOOK_URL || '').trim();
+
+function toMoney(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return 0;
+    return Math.round(num * 100) / 100;
+}
+
+function toQty(value) {
+    const num = Math.round(Number(value));
+    return Number.isFinite(num) && num > 0 ? num : 0;
+}
+
+function buildPosInvoiceNo() {
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    return `POS-${stamp}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+}
+
+function posWalletFor(method) {
+    return method === 'QRIS' ? POS_QRIS_WALLET : POS_CASH_WALLET;
+}
+
+function safeSecretEquals(input, expected) {
+    if (!input || !expected) return false;
+    const a = Buffer.from(String(input));
+    const b = Buffer.from(String(expected));
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+}
+
+// Rentang tanggal laporan: `to` dibuat inklusif sampai akhir hari.
+function parsePosDateRange(req, startIndex = 1) {
+    const clauses = [];
+    const params = [];
+    const fromRaw = req.query?.from;
+    const toRaw = req.query?.to;
+    if (fromRaw && !Number.isNaN(new Date(fromRaw).getTime())) {
+        params.push(new Date(fromRaw));
+        clauses.push(`created_at >= $${startIndex + params.length - 1}`);
+    }
+    if (toRaw && !Number.isNaN(new Date(toRaw).getTime())) {
+        const end = new Date(toRaw);
+        end.setHours(23, 59, 59, 999);
+        params.push(end);
+        clauses.push(`created_at <= $${startIndex + params.length - 1}`);
+    }
+    return { clauses, params };
+}
+
+// Cegah SSRF: hanya URL publik http(s) yang boleh dipanggil server.
+function isSafeWebhookUrl(rawUrl) {
+    try {
+        const url = new URL(String(rawUrl));
+        if (!['http:', 'https:'].includes(url.protocol)) return false;
+        const host = url.hostname.toLowerCase();
+        if (host === 'localhost' || host === '::1' || host.endsWith('.local')) return false;
+        if (/^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^169\.254\./.test(host)) return false;
+        const private172 = host.match(/^172\.(\d+)\./);
+        if (private172 && Number(private172[1]) >= 16 && Number(private172[1]) <= 31) return false;
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function getPosSheetsWebhookUrl(userId) {
+    try {
+        const res = await pool.query('SELECT sheets_webhook_url FROM pos_settings WHERE user_id = $1', [userId]);
+        const perUser = String(res.rows[0]?.sheets_webhook_url || '').trim();
+        return perUser || POS_SHEETS_WEBHOOK_URL;
+    } catch {
+        return POS_SHEETS_WEBHOOK_URL;
+    }
+}
+
+// Kirim rincian item ke Google Apps Script (doPost). Kegagalan tidak boleh membatalkan transaksi.
+async function syncPosSaleToSheets(userId, saleId) {
+    try {
+        const webhookUrl = await getPosSheetsWebhookUrl(userId);
+        if (!webhookUrl) return { synced: false, reason: 'no_webhook' };
+        if (!isSafeWebhookUrl(webhookUrl)) return { synced: false, reason: 'unsafe_url' };
+
+        const saleRes = await pool.query('SELECT * FROM pos_sales WHERE id = $1 AND user_id = $2', [saleId, userId]);
+        const sale = saleRes.rows[0];
+        if (!sale || sale.status !== 'PAID') return { synced: false, reason: 'not_paid' };
+
+        const itemsRes = await pool.query(
+            'SELECT product_name, sku, qty, unit_price, unit_cost, subtotal, subtotal_cost, profit FROM pos_sale_items WHERE sale_id = $1 ORDER BY id',
+            [saleId]
+        );
+
+        const payload = {
+            timestamp: sale.paid_at || sale.created_at,
+            invoiceNo: sale.invoice_no,
+            status: sale.status,
+            paymentMethod: sale.payment_method,
+            wallet: sale.wallet,
+            totalAmount: Number(sale.total_amount),
+            totalCost: Number(sale.total_cost),
+            grossProfit: Number(sale.gross_profit),
+            paidAmount: Number(sale.paid_amount),
+            changeAmount: Number(sale.change_amount),
+            customerName: sale.customer_name || '',
+            rows: itemsRes.rows.map((item) => ({
+                Timestamp: sale.paid_at || sale.created_at,
+                'ID Transaksi': sale.invoice_no,
+                'Nama Produk': item.product_name,
+                SKU: item.sku || '',
+                Qty: Number(item.qty),
+                'Harga Satuan': Number(item.unit_price),
+                'Harga Modal': Number(item.unit_cost),
+                Subtotal: Number(item.subtotal),
+                'Metode Bayar': sale.payment_method,
+                'Saku Tujuan': sale.wallet,
+                'Laba Bersih': Number(item.profit)
+            }))
+        };
+
+        const response = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(8000) : undefined
+        });
+        const synced = response.ok;
+        await pool.query('UPDATE pos_sales SET sheet_synced = $1 WHERE id = $2', [synced, saleId]).catch(() => {});
+        return { synced };
+    } catch (err) {
+        console.warn('Sinkronisasi Google Sheets POS gagal:', err.message);
+        return { synced: false, reason: 'request_failed' };
+    }
+}
+
+// Finalisasi transaksi: kurangi stok, catat pemasukan ke saku, ubah status menjadi PAID.
+async function markPosSalePaid(saleId) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const saleRes = await client.query('SELECT * FROM pos_sales WHERE id = $1 FOR UPDATE', [saleId]);
+        if (saleRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return { error: 'not_found' };
+        }
+        const sale = saleRes.rows[0];
+        const itemsRes = await client.query('SELECT * FROM pos_sale_items WHERE sale_id = $1 ORDER BY id', [saleId]);
+
+        if (sale.status === 'PAID') {
+            await client.query('COMMIT');
+            return { sale, items: itemsRes.rows, alreadyPaid: true };
+        }
+        if (sale.status !== 'PENDING') {
+            await client.query('ROLLBACK');
+            return { error: 'invalid_status', sale };
+        }
+
+        for (const item of itemsRes.rows) {
+            if (!item.product_id) continue;
+            const productRes = await client.query(
+                'SELECT id, name, stock FROM pos_products WHERE id = $1 AND user_id = $2 FOR UPDATE',
+                [item.product_id, sale.user_id]
+            );
+            if (productRes.rows.length === 0) {
+                throw new Error(`Produk ${item.product_name} sudah tidak tersedia.`);
+            }
+            if (Number(productRes.rows[0].stock) < Number(item.qty)) {
+                throw new Error(`Stok ${productRes.rows[0].name} tidak cukup (tersisa ${productRes.rows[0].stock}).`);
+            }
+        }
+
+        for (const item of itemsRes.rows) {
+            if (!item.product_id) continue;
+            await client.query(
+                'UPDATE pos_products SET stock = stock - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                [Number(item.qty), item.product_id]
+            );
+        }
+
+        const paidAmount = sale.payment_method === 'CASH'
+            ? toMoney(sale.paid_amount || 0)
+            : toMoney(sale.total_amount);
+        const changeAmount = sale.payment_method === 'CASH'
+            ? Math.max(0, toMoney(paidAmount - Number(sale.total_amount || 0)))
+            : 0;
+
+        const updatedRes = await client.query(
+            `UPDATE pos_sales
+             SET status = 'PAID', paid_at = CURRENT_TIMESTAMP, paid_amount = $1, change_amount = $2
+             WHERE id = $3
+             RETURNING *`,
+            [paidAmount, changeAmount, saleId]
+        );
+
+        await client.query(
+            `INSERT INTO transactions ("desc", amount, type, category, wallet, date, user_id)
+             VALUES ($1, $2, 'income', $3, $4, CURRENT_TIMESTAMP, $5)`,
+            [`Penjualan POS ${sale.invoice_no}`, Number(sale.total_amount), 'Penjualan POS', sale.wallet, sale.user_id]
+        );
+
+        await client.query('COMMIT');
+        return { sale: updatedRes.rows[0], items: itemsRes.rows };
+    } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+    } finally {
+        client.release();
+    }
+}
 
 // ================= WEBHOOK TELEGRAM BOT =================
 app.post(`/api/telegram-webhook`, async (req, res) => {

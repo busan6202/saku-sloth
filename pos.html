@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f5f6f2">
+    <meta name="description" content="Saku Kasir — modul POS terpisah untuk mencatat penjualan, stok, dan laba otomatis ke Saku Harian.">
+    <title>Saku Kasir — POS Penjualan</title>
+    <link rel="preconnect" href="https://api.fontshare.com">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://api.fontshare.com/v2/css?f[]=chillax@500,600,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="pos.css">
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js" defer></script>
+    <script src="pos.js" defer></script>
+</head>
+<body class="pos-body">
+    <!-- Gerbang login: POS memakai sesi akun Saku Harian yang sama -->
+    <div class="pos-gate" id="posGate" hidden>
+        <div class="pos-gate-card">
+            <div class="pos-gate-emoji" aria-hidden="true">🦥</div>
+            <h1>Halaman Kasir</h1>
+            <p>Silakan masuk ke akun Saku Harian terlebih dahulu. Sesi kasir memakai akun yang sama dengan dashboard keuangan.</p>
+            <a class="pos-button pos-button-primary" id="gateLoginLink" href="/">Masuk ke Dashboard</a>
+        </div>
+    </div>
+
+    <div class="pos-shell" id="posShell" hidden>
+        <header class="pos-topbar">
+            <a class="pos-brand" href="/" title="Kembali ke dashboard keuangan">
+                <span class="pos-brand-mark" aria-hidden="true">🦥</span>
+                <span class="pos-brand-copy">saku<span>kasir</span></span>
+            </a>
+
+            <div class="pos-search">
+                <span class="pos-search-icon" aria-hidden="true">🔍</span>
+                <input id="posSearch" type="search" placeholder="Cari produk, SKU, atau scan barcode…" autocomplete="off" aria-label="Cari produk atau barcode">
+                <button type="button" class="pos-icon-button" id="btnClearSearch" title="Bersihkan pencarian" aria-label="Bersihkan pencarian">✕</button>
+            </div>
+
+            <nav class="pos-topbar-actions" aria-label="Menu kasir">
+                <button type="button" class="pos-button pos-button-ghost" id="btnManageProducts">📦 Produk</button>
+                <button type="button" class="pos-button pos-button-ghost" id="btnReports">📊 Laporan</button>
+                <button type="button" class="pos-button pos-button-ghost" id="btnSettings" title="Pengaturan QRIS & Google Sheets">⚙️</button>
+                <button type="button" class="pos-button pos-button-ghost" id="btnTheme" title="Ganti tema terang/gelap">🌙</button>
+                <div class="pos-user" id="posUserInfo">
+                    <span class="pos-user-avatar" id="posUserAvatar">🐮</span>
+                    <span class="pos-user-name" id="posUserName">Kasir</span>
+                </div>
+            </nav>
+        </header>
+
+        <main class="pos-main">
+            <section class="pos-catalog" aria-label="Katalog produk">
+                <div class="pos-section-head">
+                    <div>
+                        <p class="pos-eyebrow">KATALOG PRODUK</p>
+                        <h1>Pilih Barang</h1>
+                    </div>
+                    <span class="pos-count-pill" id="productCount">0 produk</span>
+                </div>
+                <div class="pos-product-grid" id="productGrid"></div>
+                <div class="pos-empty" id="emptyCatalog" hidden>
+                    <p class="pos-empty-emoji" aria-hidden="true">📦</p>
+                    <h3>Belum ada produk</h3>
+                    <p>Tambahkan produk, harga jual, HPP, dan stok lewat tombol <strong>Produk</strong>.</p>
+                </div>
+            </section>
+
+            <aside class="pos-cart" aria-label="Keranjang belanja">
+                <div class="pos-cart-head">
+                    <div>
+                        <p class="pos-eyebrow">KERANJANG</p>
+                        <h2><span id="cartQty">0</span> item</h2>
+                    </div>
+                    <button type="button" class="pos-link-button" id="btnClearCart">Kosongkan</button>
+                </div>
+
+                <div class="pos-cart-items" id="cartItems"></div>
+                <div class="pos-cart-empty" id="cartEmpty">
+                    <p aria-hidden="true">🧺</p>
+                    <span>Keranjang masih kosong.<br>Klik produk untuk menambahkan.</span>
+                </div>
+
+                <div class="pos-cart-totals">
+                    <div class="pos-total-row">
+                        <span>Total HPP</span>
+                        <strong id="cartCost">Rp 0</strong>
+                    </div>
+                    <div class="pos-total-row">
+                        <span>Laba Kotor</span>
+                        <strong class="pos-profit" id="cartProfit">Rp 0</strong>
+                    </div>
+                    <div class="pos-total-row pos-total-grand">
+                        <span>Total Bayar</span>
+                        <strong id="cartTotal">Rp 0</strong>
+                    </div>
+                </div>
+
+                <button type="button" class="pos-button pos-button-primary pos-checkout-btn" id="btnCheckout" disabled>
+                    Bayar <span id="checkoutCount"></span>
+                </button>
+            </aside>
+        </main>
+    </div>
+
+    <!-- MODAL PEMBAYARAN -->
+    <div class="pos-modal" id="checkoutModal" hidden>
+        <div class="pos-modal-card pos-modal-checkout" role="dialog" aria-modal="true" aria-labelledby="checkoutTitle">
+            <header class="pos-modal-head">
+                <div>
+                    <p class="pos-eyebrow">PEMBAYARAN</p>
+                    <h2 id="checkoutTitle">Selesaikan Transaksi</h2>
+                </div>
+                <button type="button" class="pos-icon-button" data-close-modal="checkoutModal" aria-label="Tutup">✕</button>
+            </header>
+
+            <div class="pos-checkout-total">
+                <span>Total Belanja</span>
+                <strong id="checkoutTotal">Rp 0</strong>
+            </div>
+
+            <div class="pos-pay-tabs" role="tablist" aria-label="Metode pembayaran">
+                <button type="button" class="pos-pay-tab is-active" id="payMethodCash" role="tab" aria-selected="true">💵 Tunai</button>
+                <button type="button" class="pos-pay-tab" id="payMethodQris" role="tab" aria-selected="false">📱 QRIS</button>
+            </div>
+
+            <div class="pos-pay-pane" id="cashPane">
+                <label class="pos-field">
+                    <span>Uang Diterima</span>
+                    <input id="cashInput" type="number" min="0" step="500" inputmode="numeric" placeholder="0">
+                </label>
+                <div class="pos-quick-cash" id="quickCash"></div>
+                <div class="pos-change-row">
+                    <span>Kembalian</span>
+                    <strong id="changeText">Rp 0</strong>
+                </div>
+            </div>
+
+            <div class="pos-pay-pane" id="qrisPane" hidden>
+                <div class="pos-qris-box">
+                    <canvas id="qrisCanvas" width="240" height="240" aria-label="Kode QRIS"></canvas>
+                    <p class="pos-qris-fallback" id="qrisFallback"></p>
+                    <p class="pos-qris-hint" id="qrisHint">Minta pelanggan memindai kode QRIS, lalu tekan <strong>Konfirmasi Lunas</strong> setelah pembayaran terverifikasi.</p>
+                </div>
+            </div>
+
+            <div class="pos-checkout-fields">
+                <label class="pos-field">
+                    <span>Nama Pelanggan <em>(opsional)</em></span>
+                    <input id="customerName" type="text" maxlength="120" placeholder="Contoh: Budi">
+                </label>
+                <label class="pos-field">
+                    <span>Nomor WhatsApp <em>(opsional)</em></span>
+                    <input id="customerPhone" type="tel" maxlength="32" placeholder="08xxxxxxxxxx">
+                </label>
+            </div>
+
+            <p class="pos-error" id="checkoutError" hidden></p>
+
+            <footer class="pos-modal-actions">
+                <button type="button" class="pos-button pos-button-ghost" data-close-modal="checkoutModal">Batal</button>
+                <button type="button" class="pos-button pos-button-primary" id="btnConfirmPayment">Selesaikan</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- MODAL STRUK -->
+    <div class="pos-modal" id="receiptModal" hidden>
+        <div class="pos-modal-card pos-modal-receipt" role="dialog" aria-modal="true" aria-labelledby="receiptTitle">
+            <header class="pos-modal-head pos-no-print">
+                <div>
+                    <p class="pos-eyebrow">NOTA PENJUALAN</p>
+                    <h2 id="receiptTitle">Transaksi Berhasil</h2>
+                </div>
+                <button type="button" class="pos-icon-button" data-close-modal="receiptModal" aria-label="Tutup">✕</button>
+            </header>
+
+            <div class="pos-receipt-print" id="receiptContent"></div>
+
+            <div class="pos-receipt-wa pos-no-print">
+                <label class="pos-field">
+                    <span>Kirim nota ke WhatsApp <em>(opsional)</em></span>
+                    <input id="waPhone" type="tel" maxlength="32" placeholder="08xxxxxxxxxx">
+                </label>
+            </div>
+
+            <footer class="pos-modal-actions pos-no-print">
+                <button type="button" class="pos-button pos-button-ghost" data-close-modal="receiptModal">Tutup</button>
+                <button type="button" class="pos-button pos-button-ghost" id="btnSendWa">💬 Kirim WA</button>
+                <button type="button" class="pos-button pos-button-primary" id="btnPrintReceipt">🖨️ Cetak Struk</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- MODAL PRODUK -->
+    <div class="pos-modal" id="productsModal" hidden>
+        <div class="pos-modal-card pos-modal-wide" role="dialog" aria-modal="true" aria-labelledby="productsTitle">
+            <header class="pos-modal-head">
+                <div>
+                    <p class="pos-eyebrow">MASTER DATA</p>
+                    <h2 id="productsTitle">Kelola Produk</h2>
+                </div>
+                <button type="button" class="pos-icon-button" data-close-modal="productsModal" aria-label="Tutup">✕</button>
+            </header>
+
+            <div class="pos-products-layout">
+                <form class="pos-product-form" id="productForm">
+                    <h3 id="productFormTitle">Tambah Produk</h3>
+                    <input type="hidden" id="productId">
+                    <label class="pos-field">
+                        <span>Nama Produk</span>
+                        <input id="pName" type="text" maxlength="160" required placeholder="Contoh: Kopi Susu 250ml">
+                    </label>
+                    <div class="pos-field-row">
+                        <label class="pos-field">
+                            <span>SKU</span>
+                            <input id="pSku" type="text" maxlength="64" placeholder="KP-001">
+                        </label>
+                        <label class="pos-field">
+                            <span>Barcode</span>
+                            <input id="pBarcode" type="text" maxlength="64" placeholder="899xxxx">
+                        </label>
+                    </div>
+                    <div class="pos-field-row">
+                        <label class="pos-field">
+                            <span>Harga Jual</span>
+                            <input id="pSell" type="number" min="0" step="100" required placeholder="15000">
+                        </label>
+                        <label class="pos-field">
+                            <span>HPP (Harga Modal)</span>
+                            <input id="pCost" type="number" min="0" step="100" required placeholder="8000">
+                        </label>
+                    </div>
+                    <div class="pos-field-row">
+                        <label class="pos-field">
+                            <span>Stok</span>
+                            <input id="pStock" type="number" min="0" step="1" required placeholder="20">
+                        </label>
+                        <label class="pos-field">
+                            <span>Stok Minimum</span>
+                            <input id="pMinStock" type="number" min="0" step="1" placeholder="3">
+                        </label>
+                    </div>
+                    <p class="pos-error" id="productError" hidden></p>
+                    <div class="pos-form-actions">
+                        <button type="button" class="pos-button pos-button-ghost" id="btnResetProduct">Reset</button>
+                        <button type="submit" class="pos-button pos-button-primary" id="btnSaveProduct">Simpan Produk</button>
+                    </div>
+                </form>
+
+                <div class="pos-product-table-wrap">
+                    <table class="pos-table">
+                        <thead>
+                            <tr>
+                                <th>Produk</th>
+                                <th>Harga</th>
+                                <th>HPP</th>
+                                <th>Stok</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="productList"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL LAPORAN -->
+    <div class="pos-modal" id="reportsModal" hidden>
+        <div class="pos-modal-card pos-modal-wide" role="dialog" aria-modal="true" aria-labelledby="reportsTitle">
+            <header class="pos-modal-head">
+                <div>
+                    <p class="pos-eyebrow">LAPORAN POS</p>
+                    <h2 id="reportsTitle">Riwayat & Laba</h2>
+                </div>
+                <button type="button" class="pos-icon-button" data-close-modal="reportsModal" aria-label="Tutup">✕</button>
+            </header>
+
+            <div class="pos-report-toolbar">
+                <label class="pos-field">
+                    <span>Dari Tanggal</span>
+                    <input id="reportFrom" type="date">
+                </label>
+                <label class="pos-field">
+                    <span>Sampai Tanggal</span>
+                    <input id="reportTo" type="date">
+                </label>
+                <button type="button" class="pos-button pos-button-primary" id="btnLoadReport">Tampilkan</button>
+                <button type="button" class="pos-button pos-button-ghost" id="btnExportCsv">⬇️ Download Excel/CSV</button>
+            </div>
+
+            <div class="pos-report-summary" id="reportSummary"></div>
+
+            <div class="pos-report-table-wrap">
+                <table class="pos-table">
+                    <thead>
+                        <tr>
+                            <th>Invoice</th>
+                            <th>Waktu</th>
+                            <th>Metode</th>
+                            <th>Total</th>
+                            <th>Laba</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PENGATURAN -->
+    <div class="pos-modal" id="settingsModal" hidden>
+        <div class="pos-modal-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+            <header class="pos-modal-head">
+                <div>
+                    <p class="pos-eyebrow">INTEGRASI</p>
+                    <h2 id="settingsTitle">Pengaturan POS</h2>
+                </div>
+                <button type="button" class="pos-icon-button" data-close-modal="settingsModal" aria-label="Tutup">✕</button>
+            </header>
+
+            <label class="pos-field">
+                <span>Payload QRIS <em>(string dari merchant/PJSP)</em></span>
+                <textarea id="sQrisPayload" rows="4" placeholder="00020101021126..."></textarea>
+            </label>
+            <p class="pos-help" id="qrisHelp"></p>
+
+            <label class="pos-field">
+                <span>URL Webhook Google Apps Script</span>
+                <input id="sSheetsUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec">
+            </label>
+            <p class="pos-help" id="sheetsHelp"></p>
+
+            <p class="pos-error" id="settingsError" hidden></p>
+
+            <footer class="pos-modal-actions">
+                <button type="button" class="pos-button pos-button-ghost" data-close-modal="settingsModal">Tutup</button>
+                <button type="button" class="pos-button pos-button-primary" id="btnSaveSettings">Simpan Pengaturan</button>
+            </footer>
+        </div>
+    </div>
+
+    <div class="pos-toast" id="posToast" hidden role="status"></div>
+</body>
+</html>
