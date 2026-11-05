@@ -6,6 +6,10 @@
 
     const SESSION_KEY = 'saku-user-session-v1';
     const THEME_KEY = 'saku-theme';
+    // GitHub Pages tidak menjalankan backend Express, jadi panggilan API diarahkan ke server Vercel.
+    const API_BASE_URL = (typeof window !== 'undefined' && window.location.origin.startsWith('http') && !window.location.origin.includes('github.io'))
+        ? `${window.location.origin}/api`
+        : 'https://saku-sloth.vercel.app/api';
     const rupiah = new Intl.NumberFormat('id-ID', {
         style: 'currency',
         currency: 'IDR',
@@ -130,7 +134,7 @@
     async function api(path, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
         if (state.token) headers.Authorization = `Bearer ${state.token}`;
-        const response = await fetch(path, { ...options, headers });
+        const response = await fetch(`${API_BASE_URL}${path.replace(/^\/api/, '')}`, { ...options, headers });
         let data = null;
         try {
             data = await response.json();
@@ -661,7 +665,7 @@
     async function exportReportCsv() {
         try {
             const query = reportQuery();
-            const response = await fetch(`/api/pos/export-excel${query ? `?${query}` : ''}`, {
+            const response = await fetch(`${API_BASE_URL}/pos/export-excel${query ? `?${query}` : ''}`, {
                 headers: { Authorization: `Bearer ${state.token}` }
             });
             if (!response.ok) {

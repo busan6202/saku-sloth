@@ -56,6 +56,10 @@
       "dest": "/pos.html"
     },
     {
+      "src": "/pos/",
+      "dest": "/pos.html"
+    },
+    {
       "src": "/pos.html",
       "dest": "/pos.html"
     },
