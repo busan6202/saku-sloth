@@ -1100,3 +1100,129 @@
         font-size: 12px;
     }
 }
+
+/* ---------- Produk timbangan & satuan ---------- */
+.pos-product-price small {
+    font-size: 0.65em;
+    font-weight: 500;
+    opacity: 0.7;
+}
+
+.pos-weigh-product {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    border-radius: 16px;
+    background: var(--surface-muted, rgba(0, 0, 0, 0.04));
+}
+
+.pos-weigh-product span {
+    font-family: var(--font-outlier);
+    font-size: 0.85rem;
+    opacity: 0.75;
+}
+
+.pos-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: var(--surface-muted, rgba(0, 0, 0, 0.04));
+    font-size: 0.85rem;
+    line-height: 1.35;
+    cursor: pointer;
+}
+
+.pos-check input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--color-accent);
+    cursor: pointer;
+}
+
+.pos-field select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+    background: var(--surface, #fff);
+}
+
+/* ---------- Kulakan ---------- */
+.pos-modal-wide {
+    max-width: 760px;
+}
+
+.pos-purchase-list {
+    max-height: 46vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.pos-purchase-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 0.7fr));
+    gap: 8px;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 14px;
+    background: var(--surface-muted, rgba(0, 0, 0, 0.04));
+}
+
+.pos-purchase-name {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.pos-purchase-name strong {
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pos-purchase-row input {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+    background: var(--surface, #fff);
+    font-family: var(--font-outlier);
+    font-size: 0.82rem;
+}
+
+.pos-purchase-total {
+    margin-top: 12px;
+    text-align: right;
+    font-size: 0.95rem;
+}
+
+.pos-purchase-total strong {
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+}
+
+.pos-error {
+    margin: 10px 0 0;
+    color: var(--danger, #c0392b);
+    font-size: 0.85rem;
+}
+
+@media (max-width: 720px) {
+    .pos-purchase-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .pos-purchase-name {
+        grid-column: 1 / -1;
+    }
+}

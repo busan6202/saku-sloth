@@ -45,8 +45,15 @@
             'checkoutError', 'btnConfirmPayment',
             'receiptModal', 'receiptContent', 'btnPrintReceipt', 'btnSendWa', 'waPhone',
             'productsModal', 'productForm', 'productId', 'productFormTitle', 'pName', 'pSku',
-            'pBarcode', 'pSell', 'pCost', 'pStock', 'pMinStock', 'productError',
-            'btnResetProduct', 'btnSaveProduct', 'productList',
+            'pBarcode', 'pSell', 'pCost', 'pStock', 'pMinStock', 'pCategory', 'pUnit', 'pWeighable',
+            'productError', 'btnResetProduct', 'btnSaveProduct', 'productList',
+            'weighModal', 'weighTitle', 'weighProductName', 'weighProductPrice', 'weighModeQty',
+            'weighModeRupiah', 'weighPaneQty', 'weighPaneRupiah', 'weighQtyInput', 'weighRupiahInput',
+            'weighEstimate', 'weighError', 'btnAddWeigh',
+            'btnPurchase', 'purchaseModal', 'purchaseWallet', 'purchaseNote', 'purchaseList',
+            'purchaseTotal', 'purchaseError', 'btnSavePurchase',
+            'btnSpoilage', 'spoilageModal', 'spoilProduct', 'spoilQty', 'spoilReason',
+            'spoilEstimate', 'spoilError', 'btnSaveSpoilage',
             'reportsModal', 'reportFrom', 'reportTo', 'btnLoadReport', 'btnExportCsv',
             'reportSummary', 'reportTableBody',
             'settingsModal', 'sQrisPayload', 'sSheetsUrl', 'qrisHelp', 'sheetsHelp',
@@ -175,9 +182,9 @@
 
     async function loadProducts() {
         state.products = await api('/api/pos/products?include_inactive=1');
-        for (const id of [...state.cart.keys()]) {
-            if (!state.products.some((product) => Number(product.id) === id)) {
-                state.cart.delete(id);
+        for (const [key, line] of [...state.cart.entries()]) {
+            if (!state.products.some((product) => Number(product.id) === Number(line.productId))) {
+                state.cart.delete(key);
             }
         }
         renderCatalog();
@@ -187,11 +194,20 @@
 
     function productEmoji(product) {
         const name = String(product.name || '').toLowerCase();
+        const category = String(product.category || '').toUpperCase();
+        if (category === 'SAYUR_DAUN' || /kangkung|bayam|sawi|caisim|selada|seledri|daun/.test(name)) return '🥬';
+        if (category === 'BUMBU_TIMBANG' || /cabai|cabe|bawang|jahe|kencur|kunyit|lengkuas|kemiri|tomat/.test(name)) return '🌶️';
+        if (category === 'SEMBAKO' || /beras|gula|minyak|telur|tepung/.test(name)) return '🍚';
+        if (category === 'BUNGKUSAN' || /bungkus|sachet|kemasan/.test(name)) return '🛍️';
         if (/kopi|teh|minum|susu|jus|es/.test(name)) return '🥤';
         if (/roti|kue|snack|makan|nasi|mie/.test(name)) return '🍞';
-        if (/sabun|tisu|bersih/.test(name)) return '🧼';
         if (/pulsa|kuota|token/.test(name)) return '📱';
         return '📦';
+    }
+
+    function stockLabel(product) {
+        const stock = Number(product.stock) || 0;
+        return `${formatQty(stock)} ${product.unit || 'PCS'}`;
     }
 
     function stockClass(product) {
@@ -220,9 +236,9 @@
                 <button type="button" class="pos-product-card" data-product-id="${product.id}" ${stock <= 0 ? 'disabled' : ''}>
                     <span class="pos-product-icon" aria-hidden="true">${productEmoji(product)}</span>
                     <span class="pos-product-name">${escapeHtml(product.name)}</span>
-                    <span class="pos-product-meta">${escapeHtml(product.sku || product.barcode || 'Tanpa SKU')}</span>
-                    <span class="pos-product-price">${formatMoney(product.price_sell)}</span>
-                    <span class="pos-stock-pill ${stockClass(product)}">${stock <= 0 ? 'Stok habis' : `Stok ${stock}`}</span>
+                    <span class="pos-product-meta">${escapeHtml(product.category || 'UMUM')} · ${escapeHtml(product.sku || product.barcode || 'Tanpa SKU')}</span>
+                    <span class="pos-product-price">${formatMoney(product.price_sell)}<small> / ${escapeHtml(product.unit || 'PCS')}</small></span>
+                    <span class="pos-stock-pill ${stockClass(product)}">${stock <= 0 ? 'Stok habis' : `Stok ${escapeHtml(stockLabel(product))}`}${product.is_weighable ? ' ⚖️' : ''}</span>
                 </button>
             `;
         }).join('');
@@ -240,9 +256,9 @@
                     <strong>${escapeHtml(product.name)}</strong><br>
                     <span class="pos-product-meta">${escapeHtml(product.sku || '-')} · ${escapeHtml(product.barcode || 'tanpa barcode')}${product.is_active ? '' : ' · nonaktif'}</span>
                 </td>
-                <td class="numeric">${formatMoney(product.price_sell)}</td>
+                <td class="numeric">${formatMoney(product.price_sell)}<br><span class="pos-product-meta">per ${escapeHtml(product.unit || 'PCS')}</span></td>
                 <td class="numeric">${formatMoney(product.price_cost)}</td>
-                <td class="numeric">${Number(product.stock) || 0}</td>
+                <td class="numeric">${escapeHtml(stockLabel(product))}</td>
                 <td>
                     <div class="pos-row-actions">
                         <button type="button" class="pos-mini-button" data-edit-product="${product.id}">Edit</button>
@@ -259,45 +275,87 @@
         return state.products.find((product) => Number(product.id) === Number(productId));
     }
 
+    function formatQty(qty) {
+        const num = Number(qty) || 0;
+        return String(Number(num.toFixed(3)));
+    }
+
+    function cartStep(product) {
+        return product?.is_weighable ? 0.1 : 1;
+    }
+
     function cartTotals() {
         let qty = 0;
         let total = 0;
         let cost = 0;
-        for (const [productId, amount] of state.cart.entries()) {
-            const product = findProduct(productId);
+        for (const line of state.cart.values()) {
+            const product = findProduct(line.productId);
             if (!product) continue;
-            qty += amount;
-            total += Number(product.price_sell) * amount;
-            cost += Number(product.price_cost) * amount;
+            const subtotal = line.subtotal != null ? line.subtotal : Number(product.price_sell) * line.qty;
+            const unitCost = Number(product.price_cost) || 0;
+            qty += line.qty;
+            total += subtotal;
+            cost += unitCost * line.qty;
         }
         return { qty, total, cost, profit: total - cost };
+    }
+
+    function cartStockUsed(productId, ignoreKey = null) {
+        let used = 0;
+        for (const [key, line] of state.cart.entries()) {
+            if (key === ignoreKey) continue;
+            if (Number(line.productId) === Number(productId)) used += line.qty;
+        }
+        return used;
+    }
+
+    // Tambah baris keranjang. `subtotal` diisi untuk mode nominal rupiah (produk timbangan).
+    function pushCartLine(product, qty, subtotal = null) {
+        const stock = Number(product.stock) || 0;
+        const used = cartStockUsed(product.id);
+        if (qty <= 0) return;
+        if (used + qty > stock + 1e-9) {
+            showToast(`Stok ${product.name} hanya ${formatQty(stock)} ${product.unit || ''}.`, true);
+            return;
+        }
+        const key = subtotal != null ? `c-${product.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` : `p-${product.id}`;
+        const existing = state.cart.get(key);
+        if (existing && subtotal == null) {
+            existing.qty = Number((existing.qty + qty).toFixed(3));
+        } else {
+            state.cart.set(key, { productId: Number(product.id), qty: Number(qty.toFixed(3)), subtotal });
+        }
+        renderCart();
     }
 
     function addToCart(productId) {
         const product = findProduct(productId);
         if (!product || !product.is_active) return;
-        const current = state.cart.get(Number(product.id)) || 0;
-        const stock = Number(product.stock) || 0;
-        if (current + 1 > stock) {
-            showToast(`Stok ${product.name} hanya ${stock}.`, true);
+        if (product.is_weighable) {
+            openWeighModal(product);
             return;
         }
-        state.cart.set(Number(product.id), current + 1);
-        renderCart();
+        pushCartLine(product, 1);
     }
 
-    function changeQty(productId, delta) {
-        const id = Number(productId);
-        const product = findProduct(id);
+    function changeQty(cartKey, direction) {
+        const line = state.cart.get(cartKey);
+        if (!line) return;
+        const product = findProduct(line.productId);
         if (!product) return;
-        const next = (state.cart.get(id) || 0) + delta;
+        if (direction > 0 && line.subtotal != null) {
+            // Baris nominal manual: naikkan nominal sebesar harga satuan setara berat minimum.
+            showToast('Baris nominal manual tidak bisa ditambah. Hapus lalu tambahkan lagi.', true);
+            return;
+        }
+        const next = Number((line.qty + cartStep(product) * direction).toFixed(3));
         if (next <= 0) {
-            state.cart.delete(id);
-        } else if (next > Number(product.stock || 0)) {
-            showToast(`Stok ${product.name} hanya ${product.stock}.`, true);
+            state.cart.delete(cartKey);
+        } else if (cartStockUsed(product.id, cartKey) + next > Number(product.stock || 0) + 1e-9) {
+            showToast(`Stok ${product.name} hanya ${formatQty(product.stock)} ${product.unit || ''}.`, true);
             return;
         } else {
-            state.cart.set(id, next);
+            line.qty = next;
         }
         renderCart();
     }
@@ -307,35 +365,246 @@
         renderCart();
     }
 
+    function cartPayloadItems() {
+        return [...state.cart.values()].map((line) => (
+            line.subtotal != null
+                ? { productId: line.productId, qty: line.qty, subtotal: line.subtotal }
+                : { productId: line.productId, qty: line.qty }
+        ));
+    }
+
     function renderCart() {
         const totals = cartTotals();
-        els.cartQty.textContent = String(totals.qty);
+        els.cartQty.textContent = formatQty(totals.qty);
         els.cartCost.textContent = formatMoney(totals.cost);
         els.cartProfit.textContent = formatMoney(totals.profit);
         els.cartTotal.textContent = formatMoney(totals.total);
         els.cartEmpty.hidden = state.cart.size > 0;
         els.btnCheckout.disabled = state.cart.size === 0;
-        els.checkoutCount.textContent = state.cart.size > 0 ? `(${totals.qty})` : '';
+        els.checkoutCount.textContent = state.cart.size > 0 ? `(${formatQty(totals.qty)})` : '';
 
-        els.cartItems.innerHTML = [...state.cart.entries()].map(([productId, qty]) => {
-            const product = findProduct(productId);
+        els.cartItems.innerHTML = [...state.cart.entries()].map(([key, line]) => {
+            const product = findProduct(line.productId);
             if (!product) return '';
-            const subtotal = Number(product.price_sell) * qty;
+            const unit = product.unit || 'PCS';
+            const subtotal = line.subtotal != null ? line.subtotal : Number(product.price_sell) * line.qty;
+            const priceLabel = line.subtotal != null
+                ? `Nominal manual · ± ${formatQty(line.qty)} ${unit}`
+                : `${formatMoney(product.price_sell)} / ${unit}`;
             return `
                 <div class="pos-cart-item">
                     <div>
                         <div class="pos-cart-item-name">${escapeHtml(product.name)}</div>
-                        <div class="pos-cart-item-price">${formatMoney(product.price_sell)} × ${qty}</div>
+                        <div class="pos-cart-item-price">${priceLabel}</div>
                     </div>
                     <div class="pos-cart-item-total">${formatMoney(subtotal)}</div>
-                    <div class="pos-qty-control">
-                        <button type="button" data-cart-action="dec" data-id="${productId}" aria-label="Kurangi ${escapeHtml(product.name)}">−</button>
-                        <span>${qty}</span>
-                        <button type="button" data-cart-action="inc" data-id="${productId}" aria-label="Tambah ${escapeHtml(product.name)}">+</button>
-                    </div>
+                    ${line.subtotal != null
+                        ? `<div class="pos-qty-control"><button type="button" data-cart-action="dec" data-cart-key="${key}" aria-label="Hapus ${escapeHtml(product.name)}">✕</button></div>`
+                        : `<div class="pos-qty-control">
+                        <button type="button" data-cart-action="dec" data-cart-key="${key}" aria-label="Kurangi ${escapeHtml(product.name)}">−</button>
+                        <span>${formatQty(line.qty)} ${escapeHtml(unit)}</span>
+                        <button type="button" data-cart-action="inc" data-cart-key="${key}" aria-label="Tambah ${escapeHtml(product.name)}">+</button>
+                    </div>`}
                 </div>
             `;
         }).join('');
+    }
+
+    // ================= TIMBANGAN & NOMINAL MANUAL =================
+
+    const weighState = { product: null, mode: 'qty' };
+
+    function openWeighModal(product) {
+        weighState.product = product;
+        weighState.mode = 'qty';
+        els.weighTitle.textContent = `Timbang ${product.name}`;
+        els.weighProductName.textContent = product.name;
+        els.weighProductPrice.textContent = `${formatMoney(product.price_sell)} / ${product.unit || 'KG'}`;
+        els.weighQtyInput.value = '';
+        els.weighRupiahInput.value = '';
+        els.weighEstimate.textContent = '';
+        els.weighError.hidden = true;
+        setWeighMode('qty');
+        openModal('weighModal');
+        setTimeout(() => els.weighQtyInput.focus(), 50);
+    }
+
+    function setWeighMode(mode) {
+        weighState.mode = mode === 'rupiah' ? 'rupiah' : 'qty';
+        const isQty = weighState.mode === 'qty';
+        els.weighModeQty.classList.toggle('is-active', isQty);
+        els.weighModeRupiah.classList.toggle('is-active', !isQty);
+        els.weighModeQty.setAttribute('aria-selected', String(isQty));
+        els.weighModeRupiah.setAttribute('aria-selected', String(!isQty));
+        els.weighPaneQty.hidden = !isQty;
+        els.weighPaneRupiah.hidden = isQty;
+        updateWeighEstimate();
+    }
+
+    function updateWeighEstimate() {
+        const product = weighState.product;
+        if (!product) return;
+        const price = Number(product.price_sell) || 0;
+        const nominal = Number(els.weighRupiahInput.value) || 0;
+        if (weighState.mode === 'rupiah' && nominal > 0 && price > 0) {
+            const estimated = Math.round((nominal / price) * 1000) / 1000;
+            els.weighEstimate.textContent = `Setara ± ${formatQty(estimated)} ${product.unit || 'KG'}`;
+        } else {
+            els.weighEstimate.textContent = '';
+        }
+    }
+
+    function confirmWeigh() {
+        const product = weighState.product;
+        if (!product) return;
+        const price = Number(product.price_sell) || 0;
+        els.weighError.hidden = true;
+
+        if (weighState.mode === 'rupiah') {
+            const nominal = Math.round(Number(els.weighRupiahInput.value) || 0);
+            if (nominal <= 0) {
+                els.weighError.textContent = 'Isi nominal rupiah terlebih dahulu.';
+                els.weighError.hidden = false;
+                return;
+            }
+            if (price <= 0) {
+                els.weighError.textContent = 'Harga produk belum diatur.';
+                els.weighError.hidden = false;
+                return;
+            }
+            const qty = Math.round((nominal / price) * 1000) / 1000;
+            pushCartLine(product, qty, nominal);
+        } else {
+            const qty = Number(els.weighQtyInput.value);
+            if (!Number.isFinite(qty) || qty <= 0) {
+                els.weighError.textContent = 'Isi berat/jumlah terlebih dahulu.';
+                els.weighError.hidden = false;
+                return;
+            }
+            pushCartLine(product, qty);
+        }
+        closeModal('weighModal');
+    }
+
+    // ================= KULAKAN (STOK MASUK) =================
+
+    function openPurchaseModal() {
+        els.purchaseError.hidden = true;
+        els.purchaseNote.value = '';
+        els.purchaseWallet.value = state.settings.cash_wallet || 'Tunai';
+        const active = state.products.filter((product) => product.is_active);
+        els.purchaseList.innerHTML = active.length === 0
+            ? '<p class="pos-help">Belum ada produk aktif.</p>'
+            : active.map((product) => `
+                <div class="pos-purchase-row" data-purchase-row="${product.id}">
+                    <div class="pos-purchase-name">
+                        <strong>${escapeHtml(product.name)}</strong>
+                        <span class="pos-product-meta">${escapeHtml(product.category || 'UMUM')} · stok ${formatQty(product.stock)} ${escapeHtml(product.unit || 'PCS')} · HPP ${formatMoney(product.price_cost)}</span>
+                    </div>
+                    <input type="number" min="0" step="0.001" placeholder="Qty" data-purchase-qty="${product.id}">
+                    <input type="number" min="0" step="100" placeholder="HPP/satuan" data-purchase-cost="${product.id}" value="${Number(product.price_cost) || ''}">
+                    <input type="number" min="0" step="100" placeholder="Harga jual" data-purchase-sell="${product.id}" value="${Number(product.price_sell) || ''}">
+                </div>
+            `).join('');
+        updatePurchaseTotal();
+        openModal('purchaseModal');
+    }
+
+    function collectPurchaseItems() {
+        return [...els.purchaseList.querySelectorAll('[data-purchase-row]')].map((row) => {
+            const id = row.dataset.purchaseRow;
+            return {
+                productId: Number(id),
+                qty: Number(els.purchaseList.querySelector(`[data-purchase-qty="${id}"]`)?.value) || 0,
+                costPerUnit: Number(els.purchaseList.querySelector(`[data-purchase-cost="${id}"]`)?.value) || 0,
+                sellPrice: els.purchaseList.querySelector(`[data-purchase-sell="${id}"]`)?.value || ''
+            };
+        }).filter((item) => item.qty > 0);
+    }
+
+    function updatePurchaseTotal() {
+        const total = collectPurchaseItems().reduce((sum, item) => sum + item.qty * item.costPerUnit, 0);
+        els.purchaseTotal.textContent = formatMoney(total);
+    }
+
+    async function savePurchase() {
+        els.purchaseError.hidden = true;
+        const items = collectPurchaseItems();
+        if (items.length === 0) {
+            els.purchaseError.textContent = 'Isi minimal satu produk yang masuk.';
+            els.purchaseError.hidden = false;
+            return;
+        }
+        els.btnSavePurchase.disabled = true;
+        try {
+            await api('/api/pos/purchases', {
+                method: 'POST',
+                body: JSON.stringify({
+                    wallet: els.purchaseWallet.value.trim(),
+                    note: els.purchaseNote.value.trim(),
+                    items
+                })
+            });
+            closeModal('purchaseModal');
+            showToast('Kulakan tersimpan. Stok & HPP diperbarui.');
+            await loadProducts();
+        } catch (err) {
+            els.purchaseError.textContent = err.message;
+            els.purchaseError.hidden = false;
+        } finally {
+            els.btnSavePurchase.disabled = false;
+        }
+    }
+
+    // ================= SUSUT / BARANG RUSAK =================
+
+    function openSpoilageModal() {
+        els.spoilError.hidden = true;
+        els.spoilQty.value = '';
+        els.spoilEstimate.textContent = '';
+        const active = state.products.filter((product) => product.is_active && Number(product.stock) > 0);
+        els.spoilProduct.innerHTML = active.length === 0
+            ? '<option value="">Tidak ada produk berstok</option>'
+            : active.map((product) => `<option value="${product.id}">${escapeHtml(product.name)} — ${formatQty(product.stock)} ${escapeHtml(product.unit || 'PCS')}</option>`).join('');
+        updateSpoilEstimate();
+        openModal('spoilageModal');
+    }
+
+    function updateSpoilEstimate() {
+        const product = findProduct(els.spoilProduct.value);
+        const qty = Number(els.spoilQty.value) || 0;
+        if (!product || qty <= 0) {
+            els.spoilEstimate.textContent = '';
+            return;
+        }
+        const loss = (Number(product.price_cost) || 0) * qty;
+        els.spoilEstimate.textContent = `Estimasi kerugian modal: ${formatMoney(loss)}`;
+    }
+
+    async function saveSpoilage() {
+        els.spoilError.hidden = true;
+        const productId = Number(els.spoilProduct.value);
+        const qty = Number(els.spoilQty.value);
+        if (!Number.isFinite(productId) || !Number.isFinite(qty) || qty <= 0) {
+            els.spoilError.textContent = 'Pilih produk dan isi jumlah susut.';
+            els.spoilError.hidden = false;
+            return;
+        }
+        els.btnSaveSpoilage.disabled = true;
+        try {
+            await api('/api/pos/spoilage', {
+                method: 'POST',
+                body: JSON.stringify({ productId, qty, reason: els.spoilReason.value })
+            });
+            closeModal('spoilageModal');
+            showToast('Susut tercatat dan stok dikurangi.');
+            await loadProducts();
+        } catch (err) {
+            els.spoilError.textContent = err.message;
+            els.spoilError.hidden = false;
+        } finally {
+            els.btnSaveSpoilage.disabled = false;
+        }
     }
 
     // ================= PEMBAYARAN =================
@@ -421,7 +690,7 @@
         const result = await api('/api/pos/checkout', {
             method: 'POST',
             body: JSON.stringify({
-                items: [...state.cart.entries()].map(([productId, qty]) => ({ productId, qty })),
+                items: cartPayloadItems(),
                 paymentMethod: 'CASH',
                 paidAmount: paid,
                 customerName: els.customerName.value.trim(),
@@ -435,7 +704,7 @@
         const result = await api('/api/pos/checkout', {
             method: 'POST',
             body: JSON.stringify({
-                items: [...state.cart.entries()].map(([productId, qty]) => ({ productId, qty })),
+                items: cartPayloadItems(),
                 paymentMethod: 'QRIS',
                 customerName: els.customerName.value.trim(),
                 customerPhone: els.customerPhone.value.trim()
@@ -496,7 +765,7 @@
             <div class="pos-receipt-item">
                 <p>${escapeHtml(item.product_name || item.productName)}</p>
                 <div class="pos-receipt-row">
-                    <span>${Number(item.qty)} × ${formatMoney(item.unit_price ?? item.unitPrice)}</span>
+                    <span>${formatQty(item.qty)} ${escapeHtml(item.unit || 'PCS')} × ${formatMoney(item.unit_price ?? item.unitPrice)}</span>
                     <span>${formatMoney(item.subtotal)}</span>
                 </div>
             </div>
@@ -538,7 +807,7 @@
             ''
         ];
         (items || []).forEach((item) => {
-            lines.push(`${item.product_name || item.productName} ${item.qty} × ${formatMoney(item.unit_price ?? item.unitPrice)} = ${formatMoney(item.subtotal)}`);
+            lines.push(`${item.product_name || item.productName} ${formatQty(item.qty)} ${item.unit || 'PCS'} × ${formatMoney(item.unit_price ?? item.unitPrice)} = ${formatMoney(item.subtotal)}`);
         });
         lines.push('', `Total: ${formatMoney(sale.total_amount)}`, `Metode: ${sale.payment_method}`, `Saku: ${sale.wallet}`);
         if (sale.payment_method === 'CASH') {
@@ -601,6 +870,9 @@
             ['Omzet', formatMoney(summary.omzet)],
             ['HPP', formatMoney(summary.hpp)],
             ['Laba Kotor', formatMoney(summary.laba)],
+            ['Susut / Layu', formatMoney(summary.spoilageLoss)],
+            ['Laba Bersih', formatMoney(summary.netProfit ?? summary.laba)],
+            ['Belanja Kulakan', formatMoney(summary.purchaseTotal)],
             ['Tunai', formatMoney(summary.cashTotal)],
             ['QRIS', formatMoney(summary.qrisTotal)],
             ['Pending', String(summary.pending)]
@@ -744,6 +1016,9 @@
     function resetProductForm() {
         els.productForm.reset();
         els.productId.value = '';
+        els.pCategory.value = 'SAYUR_DAUN';
+        els.pUnit.value = 'KG';
+        els.pWeighable.checked = true;
         els.productFormTitle.textContent = 'Tambah Produk';
         els.btnSaveProduct.textContent = 'Simpan Produk';
         els.productError.hidden = true;
@@ -760,6 +1035,9 @@
         els.pCost.value = Number(product.price_cost) || 0;
         els.pStock.value = Number(product.stock) || 0;
         els.pMinStock.value = Number(product.min_stock) || 0;
+        els.pCategory.value = product.category || 'UMUM';
+        els.pUnit.value = product.unit || 'PCS';
+        els.pWeighable.checked = Boolean(product.is_weighable);
         els.productError.hidden = true;
         els.productForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -775,8 +1053,11 @@
             barcode: els.pBarcode.value.trim(),
             price_sell: Number(els.pSell.value) || 0,
             price_cost: Number(els.pCost.value) || 0,
-            stock: Math.max(0, Math.round(Number(els.pStock.value) || 0)),
-            min_stock: Math.max(0, Math.round(Number(els.pMinStock.value) || 0))
+            stock: Math.max(0, Number(els.pStock.value) || 0),
+            min_stock: Math.max(0, Number(els.pMinStock.value) || 0),
+            category: els.pCategory.value || 'UMUM',
+            unit: els.pUnit.value || 'PCS',
+            is_weighable: els.pWeighable.checked
         };
         try {
             if (productId) {
@@ -857,7 +1138,7 @@
         els.cartItems.addEventListener('click', (event) => {
             const button = event.target.closest('[data-cart-action]');
             if (!button) return;
-            changeQty(button.dataset.id, button.dataset.cartAction === 'inc' ? 1 : -1);
+            changeQty(button.dataset.cartKey, button.dataset.cartAction === 'inc' ? 1 : -1);
         });
         els.btnClearCart.addEventListener('click', clearCart);
         els.btnCheckout.addEventListener('click', openCheckout);
@@ -881,6 +1162,42 @@
             loadProducts().catch((err) => showToast(err.message, true));
             openModal('productsModal');
         });
+
+        // Timangan / nominal manual
+        els.weighModeQty.addEventListener('click', () => setWeighMode('qty'));
+        els.weighModeRupiah.addEventListener('click', () => setWeighMode('rupiah'));
+        els.weighQtyInput.addEventListener('input', updateWeighEstimate);
+        els.weighRupiahInput.addEventListener('input', updateWeighEstimate);
+        els.weighQtyInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') { event.preventDefault(); confirmWeigh(); }
+        });
+        els.weighRupiahInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') { event.preventDefault(); confirmWeigh(); }
+        });
+        els.weighModal.addEventListener('click', (event) => {
+            const weightButton = event.target.closest('[data-weigh]');
+            if (weightButton) {
+                els.weighQtyInput.value = weightButton.dataset.weigh;
+                updateWeighEstimate();
+                return;
+            }
+            const rupiahButton = event.target.closest('[data-rupiah]');
+            if (rupiahButton) {
+                setWeighMode('rupiah');
+                els.weighRupiahInput.value = rupiahButton.dataset.rupiah;
+                updateWeighEstimate();
+            }
+        });
+        els.btnAddWeigh.addEventListener('click', confirmWeigh);
+
+        // Kulakan & susut
+        els.btnPurchase.addEventListener('click', openPurchaseModal);
+        els.purchaseList.addEventListener('input', updatePurchaseTotal);
+        els.btnSavePurchase.addEventListener('click', savePurchase);
+        els.btnSpoilage.addEventListener('click', openSpoilageModal);
+        els.spoilProduct.addEventListener('change', updateSpoilEstimate);
+        els.spoilQty.addEventListener('input', updateSpoilEstimate);
+        els.btnSaveSpoilage.addEventListener('click', saveSpoilage);
         els.btnResetProduct.addEventListener('click', resetProductForm);
         els.productForm.addEventListener('submit', saveProduct);
         els.productList.addEventListener('click', (event) => {

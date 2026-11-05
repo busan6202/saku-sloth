@@ -42,6 +42,8 @@
 
             <nav class="pos-topbar-actions" aria-label="Menu kasir">
                 <button type="button" class="pos-button pos-button-ghost" id="btnManageProducts">📦 Produk</button>
+                <button type="button" class="pos-button pos-button-ghost" id="btnPurchase">📥 Kulakan</button>
+                <button type="button" class="pos-button pos-button-ghost" id="btnSpoilage">🥀 Susut</button>
                 <button type="button" class="pos-button pos-button-ghost" id="btnReports">📊 Laporan</button>
                 <button type="button" class="pos-button pos-button-ghost" id="btnSettings" title="Pengaturan QRIS & Google Sheets">⚙️</button>
                 <button type="button" class="pos-button pos-button-ghost" id="btnTheme" title="Ganti tema terang/gelap">🌙</button>
@@ -236,12 +238,39 @@
                     </div>
                     <div class="pos-field-row">
                         <label class="pos-field">
+                            <span>Kategori</span>
+                            <select id="pCategory">
+                                <option value="SAYUR_DAUN">Sayur Daun</option>
+                                <option value="BUMBU_TIMBANG">Bumbu Timbang</option>
+                                <option value="SEMBAKO">Sembako</option>
+                                <option value="BUNGKUSAN">Bungkusan</option>
+                                <option value="UMUM">Umum</option>
+                            </select>
+                        </label>
+                        <label class="pos-field">
+                            <span>Satuan</span>
+                            <select id="pUnit">
+                                <option value="KG">KG</option>
+                                <option value="ONS">ONS</option>
+                                <option value="GRAM">GRAM</option>
+                                <option value="IKAT">IKAT</option>
+                                <option value="BUNGKUS">BUNGKUS</option>
+                                <option value="PCS">PCS</option>
+                            </select>
+                        </label>
+                    </div>
+                    <label class="pos-check">
+                        <input id="pWeighable" type="checkbox">
+                        <span>Produk timbangan (bisa dibeli desimal / nominal rupiah)</span>
+                    </label>
+                    <div class="pos-field-row">
+                        <label class="pos-field">
                             <span>Stok</span>
-                            <input id="pStock" type="number" min="0" step="1" required placeholder="20">
+                            <input id="pStock" type="number" min="0" step="0.001" required placeholder="20">
                         </label>
                         <label class="pos-field">
                             <span>Stok Minimum</span>
-                            <input id="pMinStock" type="number" min="0" step="1" placeholder="3">
+                            <input id="pMinStock" type="number" min="0" step="0.001" placeholder="1">
                         </label>
                     </div>
                     <p class="pos-error" id="productError" hidden></p>
@@ -342,6 +371,137 @@
             <footer class="pos-modal-actions">
                 <button type="button" class="pos-button pos-button-ghost" data-close-modal="settingsModal">Tutup</button>
                 <button type="button" class="pos-button pos-button-primary" id="btnSaveSettings">Simpan Pengaturan</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- MODAL TIMBANG / NOMINAL -->
+    <div class="pos-modal" id="weighModal" hidden>
+        <div class="pos-modal-card" role="dialog" aria-modal="true" aria-labelledby="weighTitle">
+            <header class="pos-modal-head">
+                <div>
+                    <p class="pos-eyebrow">PRODUK TIMBANGAN</p>
+                    <h2 id="weighTitle">Pilih Berat</h2>
+                </div>
+                <button type="button" class="pos-icon-button" data-close-modal="weighModal" aria-label="Tutup">✕</button>
+            </header>
+
+            <div class="pos-weigh-product">
+                <strong id="weighProductName">Produk</strong>
+                <span id="weighProductPrice">Rp 0 / KG</span>
+            </div>
+
+            <div class="pos-pay-tabs">
+                <button type="button" class="pos-pay-tab is-active" id="weighModeQty" aria-selected="true">⚖️ Berat</button>
+                <button type="button" class="pos-pay-tab" id="weighModeRupiah" aria-selected="false">💵 Nominal Rupiah</button>
+            </div>
+
+            <div id="weighPaneQty">
+                <div class="pos-quick-cash">
+                    <button type="button" data-weigh="0.1">1 Ons (0.1)</button>
+                    <button type="button" data-weigh="0.25">1/4 Kg</button>
+                    <button type="button" data-weigh="0.5">1/2 Kg</button>
+                    <button type="button" data-weigh="1">1 Kg</button>
+                </div>
+                <label class="pos-field">
+                    <span>Jumlah <em>(satuan produk)</em></span>
+                    <input id="weighQtyInput" type="number" min="0.001" step="0.001" placeholder="0.25">
+                </label>
+            </div>
+
+            <div id="weighPaneRupiah" hidden>
+                <div class="pos-quick-cash">
+                    <button type="button" data-rupiah="2000">Rp 2.000</button>
+                    <button type="button" data-rupiah="3000">Rp 3.000</button>
+                    <button type="button" data-rupiah="5000">Rp 5.000</button>
+                    <button type="button" data-rupiah="10000">Rp 10.000</button>
+                </div>
+                <label class="pos-field">
+                    <span>Nominal yang dibayar</span>
+                    <input id="weighRupiahInput" type="number" min="0" step="500" placeholder="5000">
+                </label>
+                <p class="pos-help" id="weighEstimate"></p>
+            </div>
+
+            <p class="pos-error" id="weighError" hidden></p>
+
+            <footer class="pos-modal-actions">
+                <button type="button" class="pos-button pos-button-ghost" data-close-modal="weighModal">Batal</button>
+                <button type="button" class="pos-button pos-button-primary" id="btnAddWeigh">Tambah ke Keranjang</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- MODAL KULAKAN -->
+    <div class="pos-modal" id="purchaseModal" hidden>
+        <div class="pos-modal-card pos-modal-wide" role="dialog" aria-modal="true" aria-labelledby="purchaseTitle">
+            <header class="pos-modal-head">
+                <div>
+                    <p class="pos-eyebrow">STOK MASUK</p>
+                    <h2 id="purchaseTitle">Kulakan Pagi</h2>
+                </div>
+                <button type="button" class="pos-icon-button" data-close-modal="purchaseModal" aria-label="Tutup">✕</button>
+            </header>
+            <p class="pos-help">Isi jumlah masuk dan HPP hari ini. HPP serta harga jual (opsional) langsung diperbarui, dan total belanja dicatat sebagai pengeluaran saku.</p>
+
+            <div class="pos-field-row">
+                <label class="pos-field">
+                    <span>Saku Pembayaran Kulakan</span>
+                    <input id="purchaseWallet" type="text" maxlength="80" placeholder="Tunai">
+                </label>
+                <label class="pos-field">
+                    <span>Catatan <em>(opsional)</em></span>
+                    <input id="purchaseNote" type="text" maxlength="500" placeholder="Pasar Induk">
+                </label>
+            </div>
+
+            <div class="pos-purchase-list" id="purchaseList"></div>
+            <p class="pos-error" id="purchaseError" hidden></p>
+            <div class="pos-purchase-total">Total kulakan: <strong id="purchaseTotal">Rp 0</strong></div>
+
+            <footer class="pos-modal-actions">
+                <button type="button" class="pos-button pos-button-ghost" data-close-modal="purchaseModal">Batal</button>
+                <button type="button" class="pos-button pos-button-primary" id="btnSavePurchase">Simpan Kulakan</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- MODAL SUSUT / BUSUK -->
+    <div class="pos-modal" id="spoilageModal" hidden>
+        <div class="pos-modal-card" role="dialog" aria-modal="true" aria-labelledby="spoilageTitle">
+            <header class="pos-modal-head">
+                <div>
+                    <p class="pos-eyebrow">BARANG RUSAK</p>
+                    <h2 id="spoilageTitle">Catat Sayur Layu / Susut</h2>
+                </div>
+                <button type="button" class="pos-icon-button" data-close-modal="spoilageModal" aria-label="Tutup">✕</button>
+            </header>
+
+            <label class="pos-field">
+                <span>Produk</span>
+                <select id="spoilProduct"></select>
+            </label>
+            <div class="pos-field-row">
+                <label class="pos-field">
+                    <span>Jumlah Dibuang</span>
+                    <input id="spoilQty" type="number" min="0.001" step="0.001" placeholder="0.5">
+                </label>
+                <label class="pos-field">
+                    <span>Alasan</span>
+                    <select id="spoilReason">
+                        <option value="Layu/Busuk">Layu / Busuk</option>
+                        <option value="Susut Timbangan">Susut Timbangan</option>
+                        <option value="Rusak Saat Kirim">Rusak Saat Kirim</option>
+                        <option value="Lainnya">Lainnya</option>
+                    </select>
+                </label>
+            </div>
+            <p class="pos-help" id="spoilEstimate"></p>
+            <p class="pos-error" id="spoilError" hidden></p>
+
+            <footer class="pos-modal-actions">
+                <button type="button" class="pos-button pos-button-ghost" data-close-modal="spoilageModal">Batal</button>
+                <button type="button" class="pos-button pos-button-primary" id="btnSaveSpoilage">Catat Susut</button>
             </footer>
         </div>
     </div>

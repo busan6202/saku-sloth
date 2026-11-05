@@ -219,10 +219,13 @@ async function ensureDatabaseReady() {
                     sku VARCHAR(64),
                     barcode VARCHAR(64),
                     name VARCHAR(160) NOT NULL,
+                    category VARCHAR(50) NOT NULL DEFAULT 'UMUM',
+                    unit VARCHAR(20) NOT NULL DEFAULT 'PCS',
+                    is_weighable BOOLEAN NOT NULL DEFAULT FALSE,
                     price_sell NUMERIC(14,2) NOT NULL DEFAULT 0,
                     price_cost NUMERIC(14,2) NOT NULL DEFAULT 0,
-                    stock INTEGER NOT NULL DEFAULT 0,
-                    min_stock INTEGER NOT NULL DEFAULT 0,
+                    stock NUMERIC(10,3) NOT NULL DEFAULT 0,
+                    min_stock NUMERIC(10,3) NOT NULL DEFAULT 0,
                     is_active BOOLEAN NOT NULL DEFAULT TRUE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -270,7 +273,8 @@ async function ensureDatabaseReady() {
                     product_id INTEGER REFERENCES pos_products(id) ON DELETE SET NULL,
                     product_name VARCHAR(160) NOT NULL,
                     sku VARCHAR(64),
-                    qty INTEGER NOT NULL,
+                    unit VARCHAR(20) NOT NULL DEFAULT 'PCS',
+                    qty NUMERIC(10,3) NOT NULL,
                     unit_price NUMERIC(14,2) NOT NULL DEFAULT 0,
                     unit_cost NUMERIC(14,2) NOT NULL DEFAULT 0,
                     subtotal NUMERIC(14,2) NOT NULL DEFAULT 0,
@@ -279,6 +283,55 @@ async function ensureDatabaseReady() {
                 )
             `);
             await pool.query(`CREATE INDEX IF NOT EXISTS pos_sale_items_sale_idx ON pos_sale_items (sale_id)`);
+
+            // Migrasi aman dari versi stok/qty integer ke desimal (timbangan kg/ons)
+            await pool.query(`ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS category VARCHAR(50) NOT NULL DEFAULT 'UMUM'`);
+            await pool.query(`ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS unit VARCHAR(20) NOT NULL DEFAULT 'PCS'`);
+            await pool.query(`ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS is_weighable BOOLEAN NOT NULL DEFAULT FALSE`);
+            await pool.query(`ALTER TABLE pos_products ALTER COLUMN stock TYPE NUMERIC(10,3) USING stock::numeric`);
+            await pool.query(`ALTER TABLE pos_products ALTER COLUMN min_stock TYPE NUMERIC(10,3) USING min_stock::numeric`);
+            await pool.query(`ALTER TABLE pos_sale_items ADD COLUMN IF NOT EXISTS unit VARCHAR(20) NOT NULL DEFAULT 'PCS'`);
+            await pool.query(`ALTER TABLE pos_sale_items ALTER COLUMN qty TYPE NUMERIC(10,3) USING qty::numeric`);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS pos_spoilage_logs (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    product_id INTEGER REFERENCES pos_products(id) ON DELETE SET NULL,
+                    product_name VARCHAR(160) NOT NULL,
+                    unit VARCHAR(20) NOT NULL DEFAULT 'KG',
+                    qty_lost NUMERIC(10,3) NOT NULL,
+                    loss_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    reason VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            await pool.query(`CREATE INDEX IF NOT EXISTS pos_spoilage_user_date_idx ON pos_spoilage_logs (user_id, created_at DESC)`);
+
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS pos_purchases (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    wallet VARCHAR(80) NOT NULL DEFAULT 'Tunai',
+                    total_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    note TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+            await pool.query(`
+                CREATE TABLE IF NOT EXISTS pos_purchase_items (
+                    id SERIAL PRIMARY KEY,
+                    purchase_id INTEGER NOT NULL REFERENCES pos_purchases(id) ON DELETE CASCADE,
+                    product_id INTEGER REFERENCES pos_products(id) ON DELETE SET NULL,
+                    product_name VARCHAR(160) NOT NULL,
+                    unit VARCHAR(20) NOT NULL DEFAULT 'KG',
+                    qty NUMERIC(10,3) NOT NULL,
+                    cost_per_unit NUMERIC(14,2) NOT NULL DEFAULT 0,
+                    sell_price NUMERIC(14,2),
+                    subtotal NUMERIC(14,2) NOT NULL DEFAULT 0
+                )
+            `);
+            await pool.query(`CREATE INDEX IF NOT EXISTS pos_purchase_items_purchase_idx ON pos_purchase_items (purchase_id)`);
 
             await pool.query(`
                 CREATE TABLE IF NOT EXISTS pos_settings (
@@ -1850,16 +1903,20 @@ app.post('/api/pos/products', async (req, res) => {
 
         const sku = String(req.body?.sku || '').trim() || null;
         const barcode = String(req.body?.barcode || '').trim() || null;
+        const category = toCategoryLabel(req.body?.category);
+        const unit = toUnitLabel(req.body?.unit);
+        const isWeighable = Boolean(req.body?.is_weighable);
         const priceSell = toMoney(req.body?.price_sell);
         const priceCost = toMoney(req.body?.price_cost);
-        const stock = Math.max(0, Math.round(Number(req.body?.stock) || 0));
-        const minStock = Math.max(0, Math.round(Number(req.body?.min_stock) || 0));
+        const stock = toQty(req.body?.stock);
+        const minStock = toQty(req.body?.min_stock) || 0;
 
         const result = await pool.query(
-            `INSERT INTO pos_products (user_id, sku, barcode, name, price_sell, price_cost, stock, min_stock)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `INSERT INTO pos_products
+                (user_id, sku, barcode, name, category, unit, is_weighable, price_sell, price_cost, stock, min_stock)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING *`,
-            [user.id, sku, barcode, name, priceSell, priceCost, stock, minStock]
+            [user.id, sku, barcode, name, category, unit, isWeighable, priceSell, priceCost, stock, minStock]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -1887,19 +1944,23 @@ app.put('/api/pos/products/:id', async (req, res) => {
         if (!name) return res.status(400).json({ error: 'Nama produk wajib diisi.' });
         const sku = req.body?.sku !== undefined ? (String(req.body.sku).trim() || null) : current.sku;
         const barcode = req.body?.barcode !== undefined ? (String(req.body.barcode).trim() || null) : current.barcode;
+        const category = req.body?.category !== undefined ? toCategoryLabel(req.body.category) : current.category;
+        const unit = req.body?.unit !== undefined ? toUnitLabel(req.body.unit) : current.unit;
+        const isWeighable = req.body?.is_weighable !== undefined ? Boolean(req.body.is_weighable) : current.is_weighable;
         const priceSell = req.body?.price_sell !== undefined ? toMoney(req.body.price_sell) : Number(current.price_sell);
         const priceCost = req.body?.price_cost !== undefined ? toMoney(req.body.price_cost) : Number(current.price_cost);
-        const stock = req.body?.stock !== undefined ? Math.max(0, Math.round(Number(req.body.stock) || 0)) : current.stock;
-        const minStock = req.body?.min_stock !== undefined ? Math.max(0, Math.round(Number(req.body.min_stock) || 0)) : current.min_stock;
+        const stock = req.body?.stock !== undefined ? toQty(req.body.stock) : current.stock;
+        const minStock = req.body?.min_stock !== undefined ? toQty(req.body.min_stock) : current.min_stock;
         const isActive = req.body?.is_active !== undefined ? Boolean(req.body.is_active) : current.is_active;
 
         const result = await pool.query(
             `UPDATE pos_products
-             SET sku = $1, barcode = $2, name = $3, price_sell = $4, price_cost = $5,
-                 stock = $6, min_stock = $7, is_active = $8, updated_at = CURRENT_TIMESTAMP
-             WHERE id = $9 AND user_id = $10
+             SET sku = $1, barcode = $2, name = $3, category = $4, unit = $5, is_weighable = $6,
+                 price_sell = $7, price_cost = $8, stock = $9, min_stock = $10,
+                 is_active = $11, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $12 AND user_id = $13
              RETURNING *`,
-            [sku, barcode, name, priceSell, priceCost, stock, minStock, isActive, productId, user.id]
+            [sku, barcode, name, category, unit, isWeighable, priceSell, priceCost, stock, minStock, isActive, productId, user.id]
         );
         res.json(result.rows[0]);
     } catch (err) {
@@ -1986,16 +2047,29 @@ app.post('/api/pos/checkout', async (req, res) => {
         const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
         if (rawItems.length === 0) return res.status(400).json({ error: 'Keranjang masih kosong.' });
 
+        // Baris dengan nominal manual (mis. "cabai Rp 5.000") tidak digabung agar harga tetap.
+        const lines = [];
         const merged = new Map();
         for (const raw of rawItems) {
             const productId = Number(raw?.productId ?? raw?.product_id);
+            if (!Number.isFinite(productId)) continue;
+            const override = raw?.subtotal !== undefined && raw?.subtotal !== null && raw?.subtotal !== ''
+                ? toMoney(raw.subtotal)
+                : null;
+            if (override !== null && override > 0) {
+                lines.push({ productId, qty: 0, override });
+                continue;
+            }
             const qty = toQty(raw?.qty);
-            if (!Number.isFinite(productId) || qty <= 0) continue;
-            merged.set(productId, (merged.get(productId) || 0) + qty);
+            if (qty <= 0) continue;
+            merged.set(productId, toQty((merged.get(productId) || 0) + qty));
         }
-        if (merged.size === 0) return res.status(400).json({ error: 'Item keranjang tidak valid.' });
+        for (const [productId, qty] of merged.entries()) {
+            lines.push({ productId, qty, override: null });
+        }
+        if (lines.length === 0) return res.status(400).json({ error: 'Item keranjang tidak valid.' });
 
-        const productIds = [...merged.keys()];
+        const productIds = [...new Set(lines.map((line) => line.productId))];
         const productsRes = await pool.query(
             `SELECT * FROM pos_products
              WHERE user_id = $1 AND is_active = TRUE AND id = ANY($2::int[])`,
@@ -2004,24 +2078,42 @@ app.post('/api/pos/checkout', async (req, res) => {
         const products = new Map(productsRes.rows.map((row) => [Number(row.id), row]));
 
         const saleItems = [];
+        const stockNeeded = new Map();
         let totalAmount = 0;
         let totalCost = 0;
-        for (const [productId, qty] of merged.entries()) {
-            const product = products.get(productId);
-            if (!product) return res.status(400).json({ error: `Produk #${productId} tidak ditemukan atau sudah nonaktif.` });
-            if (Number(product.stock) < qty) {
-                return res.status(409).json({ error: `Stok ${product.name} tidak cukup (tersisa ${product.stock}).` });
-            }
+        for (const line of lines) {
+            const product = products.get(line.productId);
+            if (!product) return res.status(400).json({ error: `Produk #${line.productId} tidak ditemukan atau sudah nonaktif.` });
+
             const unitPrice = toMoney(product.price_sell);
             const unitCost = toMoney(product.price_cost);
-            const subtotal = toMoney(unitPrice * qty);
+            let qty = line.qty;
+            let subtotal = toMoney(unitPrice * qty);
+            if (line.override !== null) {
+                if (!product.is_weighable) {
+                    return res.status(400).json({ error: `Nominal manual hanya untuk produk timbangan (${product.name}).` });
+                }
+                if (unitPrice <= 0) return res.status(400).json({ error: `Harga jual ${product.name} belum diatur.` });
+                subtotal = line.override;
+                // Berat yang didapat dihitung dari nominal yang dibayar pembeli.
+                qty = Math.round((subtotal / unitPrice) * 1000) / 1000;
+            }
+            if (qty <= 0) return res.status(400).json({ error: `Kuantitas ${product.name} tidak valid.` });
+
+            const needed = Math.round(((stockNeeded.get(line.productId) || 0) + qty) * 1000) / 1000;
+            stockNeeded.set(line.productId, needed);
+            if (Number(product.stock) < needed) {
+                return res.status(409).json({ error: `Stok ${product.name} tidak cukup (tersisa ${product.stock} ${product.unit}).` });
+            }
+
             const subtotalCost = toMoney(unitCost * qty);
             totalAmount = toMoney(totalAmount + subtotal);
             totalCost = toMoney(totalCost + subtotalCost);
             saleItems.push({
-                productId,
+                productId: line.productId,
                 productName: product.name,
                 sku: product.sku || null,
+                unit: product.unit || 'PCS',
                 qty,
                 unitPrice,
                 unitCost,
@@ -2069,9 +2161,9 @@ app.post('/api/pos/checkout', async (req, res) => {
             for (const item of saleItems) {
                 await client.query(
                     `INSERT INTO pos_sale_items
-                        (sale_id, product_id, product_name, sku, qty, unit_price, unit_cost, subtotal, subtotal_cost, profit)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-                    [sale.id, item.productId, item.productName, item.sku, item.qty, item.unitPrice, item.unitCost, item.subtotal, item.subtotalCost, item.profit]
+                        (sale_id, product_id, product_name, sku, unit, qty, unit_price, unit_cost, subtotal, subtotal_cost, profit)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+                    [sale.id, item.productId, item.productName, item.sku, item.unit, item.qty, item.unitPrice, item.unitCost, item.subtotal, item.subtotalCost, item.profit]
                 );
             }
             await client.query('COMMIT');
@@ -2238,14 +2330,37 @@ app.get('/api/pos/summary', async (req, res) => {
             values
         );
         const row = paidRes.rows[0] || {};
+        const laba = Number(row.laba || 0);
+
+        // Susut/layu & belanja kulakan dihitung terpisah agar laba bersih akurat.
+        const spoilRange = parsePosDateRange(req, 2);
+        const spoilRes = await pool.query(
+            `SELECT COALESCE(SUM(loss_amount), 0) AS loss, COUNT(*)::int AS entries
+             FROM pos_spoilage_logs
+             WHERE user_id = $1${spoilRange.clauses.length ? ` AND ${spoilRange.clauses.join(' AND ')}` : ''}`,
+            [user.id, ...spoilRange.params]
+        );
+        const purchaseRange = parsePosDateRange(req, 2);
+        const purchaseRes = await pool.query(
+            `SELECT COALESCE(SUM(total_amount), 0) AS total
+             FROM pos_purchases
+             WHERE user_id = $1${purchaseRange.clauses.length ? ` AND ${purchaseRange.clauses.join(' AND ')}` : ''}`,
+            [user.id, ...purchaseRange.params]
+        );
+        const spoilageLoss = Number(spoilRes.rows[0]?.loss || 0);
+
         res.json({
             transactions: Number(row.transactions || 0),
             omzet: Number(row.omzet || 0),
             hpp: Number(row.hpp || 0),
-            laba: Number(row.laba || 0),
+            laba: laba,
             cashTotal: Number(row.cash_total || 0),
             qrisTotal: Number(row.qris_total || 0),
-            pending: Number(pendingRes.rows[0]?.pending || 0)
+            pending: Number(pendingRes.rows[0]?.pending || 0),
+            spoilageLoss,
+            spoilageEntries: Number(spoilRes.rows[0]?.entries || 0),
+            netProfit: Number((laba - spoilageLoss).toFixed(2)),
+            purchaseTotal: Number(purchaseRes.rows[0]?.total || 0)
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -2262,7 +2377,7 @@ app.get('/api/pos/export-excel', async (req, res) => {
         const conditions = ['s.user_id = $1', ...clauses.map((c) => `s.${c}`)];
         const result = await pool.query(
             `SELECT s.invoice_no, s.created_at, s.payment_method, s.wallet,
-                    i.product_name, i.sku, i.qty, i.unit_price, i.unit_cost, i.subtotal, i.profit
+                    i.product_name, i.sku, i.unit, i.qty, i.unit_price, i.unit_cost, i.subtotal, i.profit
              FROM pos_sale_items i
              JOIN pos_sales s ON s.id = i.sale_id
              WHERE ${conditions.join(' AND ')} AND s.status = 'PAID'
@@ -2270,13 +2385,14 @@ app.get('/api/pos/export-excel', async (req, res) => {
             [user.id, ...params]
         );
         const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-        let csv = '\uFEFFTimestamp,ID Transaksi,Nama Produk,SKU,Qty,Harga Satuan,Harga Modal,Subtotal,Metode Bayar,Saku Tujuan,Laba Bersih\n';
+        let csv = '\uFEFFTimestamp,ID Transaksi,Nama Produk,SKU,Satuan,Qty,Harga Satuan,Harga Modal,Subtotal,Metode Bayar,Saku Tujuan,Laba Bersih\n';
         result.rows.forEach((row) => {
             csv += [
                 escapeCsv(new Date(row.created_at).toISOString()),
                 escapeCsv(row.invoice_no),
                 escapeCsv(row.product_name),
                 escapeCsv(row.sku),
+                escapeCsv(row.unit),
                 row.qty,
                 row.unit_price,
                 row.unit_cost,
@@ -2291,6 +2407,160 @@ app.get('/api/pos/export-excel', async (req, res) => {
         res.status(200).send(csv);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Catat barang susut/layu (mengurangi stok & laba bersih)
+app.post('/api/pos/spoilage', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+
+        const productId = Number(req.body?.productId);
+        const qtyLost = toQty(req.body?.qty ?? req.body?.qty_lost);
+        const reason = String(req.body?.reason || 'Layu/Busuk').trim().slice(0, 100);
+        if (!Number.isFinite(productId) || qtyLost <= 0) {
+            return res.status(400).json({ error: 'Produk dan jumlah susut wajib diisi.' });
+        }
+
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            const productRes = await client.query(
+                'SELECT * FROM pos_products WHERE id = $1 AND user_id = $2 FOR UPDATE',
+                [productId, user.id]
+            );
+            const product = productRes.rows[0];
+            if (!product) {
+                await client.query('ROLLBACK');
+                return res.status(404).json({ error: 'Produk tidak ditemukan.' });
+            }
+            if (Number(product.stock) < qtyLost) {
+                await client.query('ROLLBACK');
+                return res.status(409).json({ error: `Stok ${product.name} hanya ${product.stock} ${product.unit}.` });
+            }
+
+            const lossAmount = toMoney(Number(product.price_cost) * qtyLost);
+            await client.query(
+                'UPDATE pos_products SET stock = stock - $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                [qtyLost, product.id]
+            );
+            const logRes = await client.query(
+                `INSERT INTO pos_spoilage_logs (user_id, product_id, product_name, unit, qty_lost, loss_amount, reason)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+                [user.id, product.id, product.name, product.unit || 'PCS', qtyLost, lossAmount, reason || null]
+            );
+            await client.query('COMMIT');
+            res.status(201).json(logRes.rows[0]);
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw err;
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Riwayat barang susut
+app.get('/api/pos/spoilage', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        const { clauses, params } = parsePosDateRange(req, 2);
+        const result = await pool.query(
+            `SELECT * FROM pos_spoilage_logs
+             WHERE user_id = $1${clauses.length ? ` AND ${clauses.join(' AND ')}` : ''}
+             ORDER BY created_at DESC, id DESC LIMIT 200`,
+            [user.id, ...params]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Kulakan pagi — stok masuk sekaligus update HPP, memotong saldo saku modal
+app.post('/api/pos/purchases', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+
+        const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+        if (rawItems.length === 0) return res.status(400).json({ error: 'Daftar kulakan masih kosong.' });
+        const wallet = String(req.body?.wallet || POS_CASH_WALLET).trim().slice(0, 80) || POS_CASH_WALLET;
+        const note = String(req.body?.note || '').trim().slice(0, 500) || null;
+
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            let totalAmount = 0;
+            const prepared = [];
+            for (const raw of rawItems) {
+                const productId = Number(raw?.productId);
+                const qty = toQty(raw?.qty);
+                const costPerUnit = toMoney(raw?.costPerUnit ?? raw?.cost_per_unit);
+                const sellPrice = raw?.sellPrice !== undefined && raw?.sellPrice !== '' ? toMoney(raw.sellPrice) : null;
+                if (!Number.isFinite(productId) || qty <= 0 || costPerUnit < 0) continue;
+                const productRes = await client.query(
+                    'SELECT * FROM pos_products WHERE id = $1 AND user_id = $2 FOR UPDATE',
+                    [productId, user.id]
+                );
+                const product = productRes.rows[0];
+                if (!product) throw new Error(`Produk #${productId} tidak ditemukan.`);
+                const subtotal = toMoney(costPerUnit * qty);
+                totalAmount = toMoney(totalAmount + subtotal);
+                prepared.push({ product, qty, costPerUnit, sellPrice, subtotal });
+            }
+            if (prepared.length === 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: 'Item kulakan tidak valid.' });
+            }
+
+            const purchaseRes = await client.query(
+                `INSERT INTO pos_purchases (user_id, wallet, total_amount, note)
+                 VALUES ($1, $2, $3, $4) RETURNING *`,
+                [user.id, wallet, totalAmount, note]
+            );
+            const purchase = purchaseRes.rows[0];
+
+            for (const item of prepared) {
+                await client.query(
+                    `UPDATE pos_products
+                     SET stock = stock + $1,
+                         price_cost = $2,
+                         price_sell = COALESCE($3, price_sell),
+                         updated_at = CURRENT_TIMESTAMP
+                     WHERE id = $4`,
+                    [item.qty, item.costPerUnit, item.sellPrice, item.product.id]
+                );
+                await client.query(
+                    `INSERT INTO pos_purchase_items
+                        (purchase_id, product_id, product_name, unit, qty, cost_per_unit, sell_price, subtotal)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                    [purchase.id, item.product.id, item.product.name, item.product.unit || 'PCS', item.qty, item.costPerUnit, item.sellPrice, item.subtotal]
+                );
+            }
+
+            await client.query(
+                `INSERT INTO transactions ("desc", amount, type, category, wallet, date, user_id)
+                 VALUES ($1, $2, 'expense', 'Kulakan POS', $3, CURRENT_TIMESTAMP, $4)`,
+                [`Kulakan POS #${purchase.id}`, totalAmount, wallet, user.id]
+            );
+            await client.query('COMMIT');
+            res.status(201).json({ ...purchase, items: prepared.length });
+        } catch (err) {
+            await client.query('ROLLBACK').catch(() => {});
+            throw err;
+        } finally {
+            client.release();
+        }
+    } catch (err) {
+        res.status(400).json({ error: err.message });
     }
 });
 
@@ -2347,9 +2617,21 @@ function toMoney(value) {
     return Math.round(num * 100) / 100;
 }
 
+// Kuantitas mendukung timbangan desimal (contoh 0.25 kg / 1.5 ons).
 function toQty(value) {
-    const num = Math.round(Number(value));
-    return Number.isFinite(num) && num > 0 ? num : 0;
+    const num = Number(value);
+    if (!Number.isFinite(num) || num <= 0) return 0;
+    return Math.round(num * 1000) / 1000;
+}
+
+function toUnitLabel(value, fallback = 'PCS') {
+    const label = String(value || '').trim().toUpperCase().slice(0, 20);
+    return label || fallback;
+}
+
+function toCategoryLabel(value) {
+    const label = String(value || '').trim().toUpperCase().slice(0, 50);
+    return label || 'UMUM';
 }
 
 function buildPosInvoiceNo() {
@@ -2427,7 +2709,7 @@ async function syncPosSaleToSheets(userId, saleId) {
         if (!sale || sale.status !== 'PAID') return { synced: false, reason: 'not_paid' };
 
         const itemsRes = await pool.query(
-            'SELECT product_name, sku, qty, unit_price, unit_cost, subtotal, subtotal_cost, profit FROM pos_sale_items WHERE sale_id = $1 ORDER BY id',
+            'SELECT product_name, sku, unit, qty, unit_price, unit_cost, subtotal, subtotal_cost, profit FROM pos_sale_items WHERE sale_id = $1 ORDER BY id',
             [saleId]
         );
 
@@ -2448,6 +2730,7 @@ async function syncPosSaleToSheets(userId, saleId) {
                 'ID Transaksi': sale.invoice_no,
                 'Nama Produk': item.product_name,
                 SKU: item.sku || '',
+                Satuan: item.unit || '',
                 Qty: Number(item.qty),
                 'Harga Satuan': Number(item.unit_price),
                 'Harga Modal': Number(item.unit_cost),

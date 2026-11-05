@@ -180,9 +180,12 @@ Tidak perlu menjalankan migrasi manual. Saat server pertama kali menerima reques
 | Tabel | Fungsi |
 | --- | --- |
 | `users` | Akun: `username`, `email`, `password_hash`, `full_name`, `avatar`, `role` |
-| `pos_products` | Produk POS: SKU/barcode, harga jual, HPP, stok |
+| `pos_products` | Produk POS: SKU/barcode, **kategori**, **satuan**, **`is_weighable`**, harga jual, HPP, **stok desimal `NUMERIC(10,3)`** |
 | `pos_sales` | Header penjualan: invoice, metode, total, HPP, laba, status |
-| `pos_sale_items` | Rincian item per invoice (harga jual & modal saat transaksi) |
+| `pos_sale_items` | Rincian item per invoice (harga jual & modal saat transaksi, **qty desimal + satuan**) |
+| `pos_spoilage_logs` | Catatan sayur layu/busuk: qty hilang, nilai kerugian, alasan |
+| `pos_purchases` | Header belanja kulakan (stok masuk) beserta saku pembayaran |
+| `pos_purchase_items` | Rincian item kulakan + HPP baru per satuan |
 | `pos_settings` | Payload QRIS & URL webhook Google Sheets per pengguna |
 
 Migrasi ringan (`ADD COLUMN IF NOT EXISTS`, unique index email, backfill `user_id` data lama) juga berjalan otomatis.
@@ -196,19 +199,31 @@ Halaman kasir terpisah dari dashboard keuangan, tetapi memakai **database, sesi 
 - `/dashboard` → perencana keuangan harian (saldo kantong, utang, laporan).
 - `/pos` → layar kasir penuh: katalog, keranjang, pembayaran, struk, dan laporan POS.
 
+### Toko sayur & bumbu dapur
+
+Modul ini disiapkan untuk pedagang sayur/bumbu:
+
+- **Stok & qty desimal** — `NUMERIC(10,3)`, jadi 0,25 kg cabai atau 1,5 ons bawang tercatat presisi.
+- **Produk timbangan (`is_weighable`)** — saat diklik di katalog, kasir memilih berat cepat (`1 Ons`, `¼ Kg`, `½ Kg`, `1 Kg`) atau langsung mengetik **nominal rupiah** (mis. “cabai Rp 5.000”) dan sistem menghitung berat ekuivalennya.
+- **Satuan per produk** — KG, ONS, GRAM, IKAT, BUNGKUS, PCS. Satuan ikut tercetak di struk, laporan, dan Google Sheets.
+- **Kategori** — `SAYUR_DAUN`, `BUMBU_TIMBANG`, `SEMBAKO`, `BUNGKUSAN`, `UMUM`.
+- **Kulakan pagi** — tombol 📥 **Kulakan** mencatat stok masuk sekaligus memperbarui HPP (dan harga jual bila diisi), lalu mencatat total belanja sebagai pengeluaran saku agar saldo kas ikut turun.
+- **Susut / layu** — tombol 🥀 **Susut** mengurangi stok dan mencatat kerugian modal di `pos_spoilage_logs`. Nilainya **tidak** masuk tabel `transactions` (agar saldo kas tidak dobel), tetapi muncul di laporan sebagai `spoilageLoss`, dan **laba bersih = laba kotor − susut**.
+
 ### Alur transaksi
 
 1. Kasir memilih produk / scan barcode. Stok dicek sebelum masuk keranjang.
-2. Keranjang menghitung total jual, total HPP, dan laba kotor dari data produk.
-3. **Tunai** → kasir mengisi uang diterima, sistem menghitung kembalian, transaksi langsung `PAID`.
-4. **QRIS** → transaksi dibuat `PENDING`; kasir menekan **Konfirmasi Lunas**, atau payment gateway memanggil webhook.
-5. Saat `PAID`, satu fungsi backend otomatis:
+2. Produk timbangan membuka dialog berat/nominal; produk biasa langsung bertambah 1 satuan.
+3. Keranjang menghitung total jual, total HPP, dan laba kotor dari data produk.
+4. **Tunai** → kasir mengisi uang diterima, sistem menghitung kembalian, transaksi langsung `PAID`.
+5. **QRIS** → transaksi dibuat `PENDING`; kasir menekan **Konfirmasi Lunas**, atau payment gateway memanggil webhook.
+6. Saat `PAID`, satu fungsi backend otomatis:
    - mengurangi stok produk,
    - mencatat pemasukan ke tabel `transactions` pada saku `Tunai` atau `QRIS`,
    - menyimpan total HPP & laba kotor di `pos_sales` untuk laporan laba/rugi,
    - mengirim rincian item ke Google Sheets (bila webhook diatur).
-6. Struk bisa dicetak atau dikirim ke WhatsApp pelanggan.
-7. Tombol **Download Excel/CSV** di laporan menarik rincian item per rentang tanggal.
+7. Struk bisa dicetak atau dikirim ke WhatsApp pelanggan.
+8. Tombol **Download Excel/CSV** di laporan menarik rincian item (termasuk satuan & qty desimal) per rentang tanggal.
 
 ### Callback pembayaran QRIS
 
@@ -230,14 +245,14 @@ function doPost(e) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('POS') ||
                 SpreadsheetApp.getActiveSpreadsheet().insertSheet('POS');
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['Timestamp', 'ID Transaksi', 'Nama Produk', 'SKU', 'Qty',
+    sheet.appendRow(['Timestamp', 'ID Transaksi', 'Nama Produk', 'SKU', 'Satuan', 'Qty',
                      'Harga Satuan', 'Harga Modal', 'Subtotal', 'Metode Bayar',
                      'Saku Tujuan', 'Laba Bersih']);
   }
   const payload = JSON.parse(e.postData.contents);
   (payload.rows || []).forEach(function (row) {
     sheet.appendRow([
-      row.Timestamp, row['ID Transaksi'], row['Nama Produk'], row.SKU, row.Qty,
+      row.Timestamp, row['ID Transaksi'], row['Nama Produk'], row.SKU, row.Satuan, row.Qty,
       row['Harga Satuan'], row['Harga Modal'], row.Subtotal,
       row['Metode Bayar'], row['Saku Tujuan'], row['Laba Bersih']
     ]);
@@ -369,13 +384,16 @@ Semua endpoint data memerlukan header `Authorization: Bearer <token>`.
 | PUT | `/api/pos/products/:id` | Update produk/harga/stok |
 | DELETE | `/api/pos/products/:id` | Nonaktifkan produk |
 | GET/PUT | `/api/pos/settings` | Payload QRIS & URL webhook Sheets |
-| POST | `/api/pos/checkout` | Checkout (`CASH` langsung lunas, `QRIS` pending) |
+| POST | `/api/pos/checkout` | Checkout (`CASH` langsung lunas, `QRIS` pending). Item mendukung `qty` desimal dan `subtotal` (nominal manual untuk produk timbangan) |
+| GET | `/api/pos/spoilage` | Riwayat barang susut (`?from=&to=`) |
+| POST | `/api/pos/spoilage` | Catat susut `{ productId, qty, reason }` — stok berkurang, tidak menyentuh saldo kas |
+| POST | `/api/pos/purchases` | Kulakan `{ wallet, note, items:[{ productId, qty, costPerUnit, sellPrice? }] }` — stok masuk, HPP & harga jual diperbarui, belanja dicatat sebagai pengeluaran |
 | POST | `/api/pos/sales/:id/pay` | Konfirmasi pelunasan QRIS |
 | POST | `/api/pos/sales/:id/cancel` | Batalkan transaksi pending |
 | GET | `/api/pos/sales` | Riwayat transaksi (`?from=&to=&status=`) |
 | GET | `/api/pos/sales/:id` | Detail transaksi + item |
 | POST | `/api/pos/sales/:id/sync-sheet` | Kirim ulang ke Google Sheets |
-| GET | `/api/pos/summary` | Omzet, HPP, laba, tunai/QRIS, pending |
+| GET | `/api/pos/summary` | Omzet, HPP, laba kotor, `spoilageLoss`, `netProfit`, `purchaseTotal`, tunai/QRIS, pending |
 | GET | `/api/pos/export-excel` | Unduh rincian item (CSV) |
 | POST | `/api/pos/webhook/payment` | Callback pembayaran QRIS (secret header) |
 
