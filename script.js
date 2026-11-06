@@ -7,6 +7,32 @@ const AUTH_URL = `${API_BASE_URL}/auth`;
 const VISIBLE_TRANSACTION_LIMIT = 6;
 const CATEGORY_COLORS = ['#89bd5c', '#e9756a', '#6b96d6', '#f5b942', '#9b7ede', '#57b8a6', '#e79a5a'];
 
+// Sesi disimpan sebagai cookie HttpOnly di server. Token tidak lagi ditulis ke localStorage,
+// sehingga skrip yang disisipkan (XSS) tidak bisa mencuri sesi pengguna.
+// Semua request ke API wajib menyertakan credentials agar cookie ikut terkirim.
+const nativeFetch = window.fetch.bind(window);
+window.fetch = function patchedFetch(input, init) {
+    const options = init ? { ...init } : {};
+    let url = '';
+    try {
+        url = typeof input === 'string' ? input : (input && input.url) || '';
+    } catch { url = ''; }
+    if (url.startsWith(API_BASE_URL)) {
+        options.credentials = options.credentials || 'include';
+    }
+    return nativeFetch(input, options);
+};
+
+// Escape nilai yang berasal dari pengguna sebelum dimasukkan ke innerHTML.
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 const STORAGE_KEYS = {
     theme: 'saku-theme',
     userSession: 'saku-user-session-v1',
@@ -1213,7 +1239,7 @@ function renderGoogleCalendarAndTimeline(monthTransactions) {
             const isPaid = Array.isArray(bill.paidMonths) && bill.paidMonths.includes(selectedMonth);
             const chip = document.createElement('div');
             chip.className = `gcal-chip chip-bill${isPaid ? ' paid' : ''}`;
-            chip.innerHTML = `<span>🔔 ${bill.name}</span><span>${formatCompactRp(bill.amount)}</span>`;
+            chip.innerHTML = `<span>🔔 ${escapeHtml(bill.name)}</span><span>${formatCompactRp(bill.amount)}</span>`;
             chips.push(chip);
         });
 
@@ -1290,7 +1316,7 @@ function renderDayInspector(dateKey, dayTrx, dayBills) {
         card.className = 'day-event-card';
         const left = document.createElement('div');
         left.className = 'ev-left';
-        left.innerHTML = `<div class="ev-title">🔔 Tagihan: ${bill.name}</div><div class="ev-sub">${bill.category} · ${formatCurrency(bill.amount)}</div>`;
+        left.innerHTML = `<div class="ev-title">🔔 Tagihan: ${escapeHtml(bill.name)}</div><div class="ev-sub">${escapeHtml(bill.category)} · ${formatCurrency(bill.amount)}</div>`;
 
         const actionBtn = document.createElement('button');
         actionBtn.type = 'button';
@@ -1314,7 +1340,7 @@ function renderDayInspector(dateKey, dayTrx, dayBills) {
         title.textContent = String(trx.desc || 'Transaksi');
         const sub = document.createElement('div');
         sub.className = 'ev-sub';
-        sub.innerHTML = `${trx.category || 'Umum'} · <span class="wallet-badge">${wMeta.logoSvg}<span>${wMeta.name}</span></span>`;
+        sub.innerHTML = `${escapeHtml(trx.category || 'Umum')} · <span class="wallet-badge">${wMeta.logoSvg}<span>${escapeHtml(wMeta.name)}</span></span>`;
         left.append(title, sub);
 
         const rightWrap = document.createElement('div');
@@ -1524,8 +1550,8 @@ function renderBillsAndNotifications() {
         card.innerHTML = `
             <div class="bill-card-top">
                 <div>
-                    <div class="bill-title">${bill.name}</div>
-                    <div class="bill-sub">${bill.category} · Rutin tiap tanggal ${dueDay}</div>
+                    <div class="bill-title">${escapeHtml(bill.name)}</div>
+                    <div class="bill-sub">${escapeHtml(bill.category)} · Rutin tiap tanggal ${dueDay}</div>
                 </div>
                 <span class="bill-due-badge ${statusClass}">${statusText}</span>
             </div>
@@ -1535,7 +1561,7 @@ function renderBillsAndNotifications() {
                     <button type="button" class="button ${isPaid ? 'button-secondary' : 'button-primary'} button-sm" data-pay-bill="${bill.id}">
                         ${isPaid ? 'Batalkan Lunas' : 'Bayar & Catat'}
                     </button>
-                    <button type="button" class="icon-button btn-sm" data-delete-bill="${bill.id}" title="Hapus pengingat tagihan" aria-label="Hapus ${bill.name}">🗑️</button>
+                    <button type="button" class="icon-button btn-sm" data-delete-bill="${bill.id}" title="Hapus pengingat tagihan" aria-label="Hapus ${escapeHtml(bill.name)}">🗑️</button>
                 </div>
             </div>
         `;
@@ -1573,7 +1599,7 @@ function renderBillsAndNotifications() {
         urgentNotifications.forEach((n) => {
             const item = document.createElement('div');
             item.className = `notif-item ${n.kind}`;
-            item.innerHTML = `<div><strong>${n.title}</strong><div>${n.body}</div></div>`;
+            item.innerHTML = `<div><strong>${escapeHtml(n.title)}</strong><div>${escapeHtml(n.body)}</div></div>`;
             elements.notifList.append(item);
         });
     }
@@ -1784,7 +1810,7 @@ function createTransactionRow(transaction) {
     const wMeta = getWalletMeta(transaction.wallet);
     const walletBadge = document.createElement('span');
     walletBadge.className = 'wallet-badge';
-    walletBadge.innerHTML = `${wMeta.logoSvg}<span>${wMeta.name}</span>`;
+    walletBadge.innerHTML = `${wMeta.logoSvg}<span>${escapeHtml(wMeta.name)}</span>`;
 
     category.append(catText, walletBadge);
     details.append(description, category);
@@ -3219,6 +3245,7 @@ function clearUserScopedStorage() {
 function redirectCashierToPos(user, token) {
     if (!user || user.role !== 'cashier') return false;
     try {
+        // Token sesi tidak disimpan di browser; server memakai cookie HttpOnly.
         localStorage.setItem(STORAGE_KEYS.userSession, JSON.stringify({
             user: {
                 id: user.id,
@@ -3227,10 +3254,8 @@ function redirectCashierToPos(user, token) {
                 fullName: user.fullName || user.full_name || user.username,
                 avatar: user.avatar || '🧑‍🍳',
                 role: 'cashier',
-                ownerId: user.ownerId || user.owner_id || null,
-                token: token || ''
-            },
-            token: token || ''
+                ownerId: user.ownerId || user.owner_id || null
+            }
         }));
     } catch {}
     window.location.replace('pos.html');
@@ -3252,10 +3277,9 @@ function setCurrentUser(user, token, persist = true) {
 
     if (persist) {
         try {
-            localStorage.setItem(STORAGE_KEYS.userSession, JSON.stringify({
-                user: currentUser,
-                token: currentUser.token
-            }));
+            // Hanya profil yang disimpan; token sesi tetap di cookie HttpOnly.
+            const { token: _omitToken, ...profile } = currentUser;
+            localStorage.setItem(STORAGE_KEYS.userSession, JSON.stringify({ user: profile }));
         } catch {}
     }
 
@@ -3287,13 +3311,11 @@ async function handleLogout() {
     if (!confirmLogout) return;
 
     try {
-        if (currentUser?.token) {
-            await fetch(`${AUTH_URL}/logout`, {
-                method: 'POST',
-                headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({ token: currentUser.token })
-            }).catch(() => {});
-        }
+        // Server menghapus sesi berdasarkan cookie HttpOnly yang dikirim otomatis.
+        await fetch(`${AUTH_URL}/logout`, {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' })
+        }).catch(() => {});
     } catch {}
 
     currentUser = null;
@@ -3432,7 +3454,7 @@ function handleQuickDemo() {
         role: 'guest'
     };
     clearUserScopedStorage();
-    setCurrentUser(demoUser, 'demo-token-guest', true);
+    setCurrentUser(demoUser, '', true);
     triggerCartoonCelebration();
     setNotice('Masuk dalam Mode Demo / Tamu. Semua fitur aktif! 🐮✨');
 }
@@ -3444,12 +3466,11 @@ async function initializeAuth() {
         try {
             const parsed = JSON.parse(savedSessionRaw);
             if (parsed && parsed.user) {
-                if (redirectCashierToPos(parsed.user, parsed.token)) return;
+                if (redirectCashierToPos(parsed.user)) return;
                 currentUser = parsed.user;
-                currentUser.token = parsed.token || '';
+                currentUser.token = '';
 
-                // Verifikasi validasi sesi di backend secara diam-diam jika online
-                const sessionToken = currentUser.token;
+                // Validasi sesi ke backend menggunakan cookie HttpOnly.
                 const isGuestSession = currentUser.role === 'guest';
                 fetch(`${AUTH_URL}/me`, {
                     headers: getAuthHeaders()
@@ -3470,13 +3491,13 @@ async function initializeAuth() {
                     })
                     .then((data) => {
                         if (data?.ok && data?.user) {
-                            setCurrentUser(data.user, sessionToken, false);
+                            setCurrentUser(data.user, '', false);
                         }
                     })
                     .catch(() => {});
 
                 // Aktifkan tampilan langsung menggunakan sesi tersimpan
-                setCurrentUser(currentUser, currentUser.token, false);
+                setCurrentUser(currentUser, '', false);
                 return;
             }
         } catch {
@@ -3505,7 +3526,7 @@ function setupAuthEventListeners() {
     elements.authDemoBtn?.addEventListener('click', handleQuickDemo);
 
     elements.authHelpBtn?.addEventListener('click', () => {
-        showAuthAlert('💡 Masuk dengan email terdaftar. Akun admin bawaan: admin@sakuharian.app / admin123. Kamu juga bisa membuat akun baru dengan emailmu sendiri.', 'success');
+        showAuthAlert('💡 Masuk dengan email dan kata sandi yang kamu daftarkan sendiri. Belum punya akun? Klik "Daftar" untuk membuat akun baru.', 'success');
     });
 
     // Login password visibility toggle
@@ -3586,14 +3607,3 @@ initializeNavigation();
 setupAuthEventListeners();
 initializeAuth();
 renderIcons();
-
-// Sinkronisasi otomatis menu & webhook Telegram di latar belakang
-fetch(`${API_BASE_URL}/setup-telegram-menu`)
-    .then((r) => r.json())
-    .then((d) => {
-        if (d?.report?.botUsername) {
-            const botLink = document.querySelector('.bot-link');
-            if (botLink) botLink.href = `https://t.me/${d.report.botUsername}`;
-        }
-    })
-    .catch(() => {});

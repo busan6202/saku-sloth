@@ -124,11 +124,12 @@
         if (!anyOpen) document.body.style.overflow = '';
     }
 
+    // Sesi utama disimpan server sebagai cookie HttpOnly; localStorage hanya menyimpan profil.
     function readSession() {
         try {
             const parsed = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
-            if (!parsed || !parsed.token) return null;
-            return { token: parsed.token, user: parsed.user || {} };
+            if (!parsed || !parsed.user) return null;
+            return { token: parsed.token || '', user: parsed.user || {} };
         } catch {
             return null;
         }
@@ -151,6 +152,7 @@
         try {
             const response = await fetch(`${API_BASE_URL}/auth/login`, {
                 method: 'POST',
+                credentials: 'include',
                 headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
                 body: JSON.stringify({
                     identifier: els.gateEmail.value.trim(),
@@ -171,7 +173,9 @@
                 ownerId: data.user.ownerId || null,
                 token: data.token
             };
-            localStorage.setItem(SESSION_KEY, JSON.stringify({ user, token: data.token }));
+            // Token tidak ditulis ke localStorage; hanya profil yang disimpan.
+            const { token: _omitToken, ...profile } = user;
+            localStorage.setItem(SESSION_KEY, JSON.stringify({ user: profile }));
             window.location.reload();
         } catch (err) {
             els.gateError.textContent = err.message;
@@ -184,7 +188,11 @@
     async function api(path, options = {}) {
         const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
         if (state.token) headers.Authorization = `Bearer ${state.token}`;
-        const response = await fetch(`${API_BASE_URL}${path.replace(/^\/api/, '')}`, { ...options, headers });
+        const response = await fetch(`${API_BASE_URL}${path.replace(/^\/api/, '')}`, {
+            credentials: 'include',
+            ...options,
+            headers
+        });
         let data = null;
         try {
             data = await response.json();
@@ -1130,7 +1138,8 @@
         try {
             const query = reportQuery();
             const response = await fetch(`${API_BASE_URL}/pos/export-excel${query ? `?${query}` : ''}`, {
-                headers: { Authorization: `Bearer ${state.token}` }
+                credentials: 'include',
+                headers: state.token ? { Authorization: `Bearer ${state.token}` } : {}
             });
             if (!response.ok) {
                 const data = await response.json().catch(() => ({}));
@@ -1734,7 +1743,21 @@
             return;
         }
 
-        state.token = session.token;
+        // Validasi sesi ke server (cookie HttpOnly) sebelum menampilkan layar kasir.
+        try {
+            const meRes = await fetch(`${API_BASE_URL}/auth/me`, { credentials: 'include' });
+            if (!meRes.ok) {
+                localStorage.removeItem(SESSION_KEY);
+                showGate('Sesi Anda tidak valid atau sudah berakhir. Silakan masuk kembali.');
+                return;
+            }
+            const me = await meRes.json().catch(() => null);
+            if (me?.user) session.user = { ...session.user, ...me.user };
+        } catch {
+            // Offline: lanjutkan dengan profil tersimpan.
+        }
+
+        state.token = session.token || '';
         state.user = session.user || {};
         const displayName = state.user.fullName || state.user.full_name || state.user.username || 'Kasir';
         els.posUserName.textContent = displayName;

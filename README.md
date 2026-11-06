@@ -139,6 +139,18 @@ TELEGRAM_BOT_TOKEN=123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # OPSIONAL — URL publik untuk webhook Telegram
 WEBHOOK_URL=https://domain-anda.vercel.app/api/telegram-webhook
 
+# WAJIB bila webhook publik aktif — secret_token yang divalidasi di setiap request Telegram
+TELEGRAM_WEBHOOK_SECRET=string-acak-panjang
+
+# OPSIONAL — Batasi chat Telegram yang boleh memakai bot (pisahkan dengan koma)
+TELEGRAM_ALLOWED_CHAT_IDS=
+
+# OPSIONAL — Daftar origin frontend yang diizinkan mengakses API (pisahkan dengan koma)
+CORS_ORIGINS=https://domain-anda.vercel.app,http://localhost:3000
+
+# OPSIONAL — Jumlah iterasi PBKDF2 (default 210000). Naikkan bila server kuat.
+PASSWORD_ITERATIONS=210000
+
 # OPSIONAL — Analisis AI
 GEMINI_API_KEY=your-gemini-api-key
 
@@ -154,6 +166,10 @@ GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/XXXX/exec
 | `DATABASE_URL` | ✅ | Connection string PostgreSQL/Neon. Untuk kompatibilitas lama, `MONGO_URI` juga dibaca. |
 | `TELEGRAM_BOT_TOKEN` | ❌ | Tanpa ini fitur bot tidak aktif. |
 | `WEBHOOK_URL` | ❌ | Wajib bila ingin bot berjalan di server publik (Vercel). |
+| `TELEGRAM_WEBHOOK_SECRET` | ⚠️ | **Wajib di produksi.** Dikirim Telegram di header `x-telegram-bot-api-secret-token`; webhook menolak request tanpa secret yang cocok (401). |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | ❌ | Whitelist `chat_id` Telegram yang boleh memakai bot. Kosong = semua chat diizinkan. |
+| `CORS_ORIGINS` | ❌ | Whitelist origin frontend. Kosong = hanya origin yang sama dengan server. |
+| `PASSWORD_ITERATIONS` | ❌ | Iterasi PBKDF2-SHA512 (default `210000`). |
 | `GEMINI_API_KEY` | ❌ | Untuk fitur analisis AI. |
 | `PORT` | ❌ | Port lokal (default 3000). |
 | `POS_CASH_WALLET` | ❌ | Nama saku untuk pembayaran tunai (default `Tunai`). |
@@ -162,6 +178,11 @@ GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/XXXX/exec
 | `GOOGLE_SHEETS_WEBHOOK_URL` | ❌ | URL Apps Script `doPost` default untuk sinkronisasi POS. |
 
 > ⚠️ **Jangan pernah commit file `.env`.** File ini sudah masuk `.gitignore`.
+
+> 🌐 **Frontend dan API beda domain** (mis. frontend di `github.io`, API di `vercel.app`)?
+> Tambahkan origin frontend ke `CORS_ORIGINS`, contoh:
+> `CORS_ORIGINS=https://nama-user.github.io,http://localhost:3000`.
+> Tanpa itu, request yang membawa cookie sesi akan ditolak `403` oleh proteksi CSRF.
 
 ### Cara mendapatkan `DATABASE_URL` (Neon)
 
@@ -276,15 +297,16 @@ function doPost(e) {
 
 Migrasi ringan (`ADD COLUMN IF NOT EXISTS`, unique index email, backfill `user_id` data lama) juga berjalan otomatis.
 
-**Akun awal:** jika tabel `users` masih kosong, dibuat akun admin:
+**Akun awal:** tidak ada akun bawaan. Daftarkan akun pertama lewat halaman **Daftar**.
 
-| Field | Nilai |
-| --- | --- |
-| Email | `admin@sakuharian.app` |
-| Username | `admin` |
-| Kata sandi | `admin123` |
-
-> Segera ganti kata sandi/akun ini untuk penggunaan produksi.
+> Ingin akun admin? Daftar seperti biasa, lalu ubah `role` user tersebut menjadi `admin`
+> langsung di database:
+>
+> ```sql
+> UPDATE users SET role = 'admin' WHERE LOWER(email) = 'email-anda@contoh.com';
+> ```
+>
+> Jangan pernah menaruh kredensial default di kode atau dokumentasi publik.
 
 ---
 
@@ -293,11 +315,12 @@ Migrasi ringan (`ADD COLUMN IF NOT EXISTS`, unique index email, backfill `user_i
 1. **Daftar** → isi nama, email, kata sandi (min. 6 karakter), pilih maskot.
    - Email divalidasi formatnya dan harus unik (case-insensitive).
    - Username internal dibuat otomatis dari email (mis. `andriadi@gmail.com` → `andriadi`, ditambah angka bila bentrok).
-2. Backend menyimpan hash `PBKDF2` (salt + hash, format `salt:hash`).
-3. Backend membuat token sesi acak 32 byte dan menyimpannya di `user_sessions` (berlaku 30 hari).
-4. Klien menyimpan token di `localStorage` dan mengirimnya sebagai header `Authorization: Bearer <token>`.
-5. Setiap request data (transaksi/utang/ekspor) difilter dengan `user_id` dari token.
-6. Login lama dengan **username** tetap didukung untuk akun yang sudah ada.
+2. Backend menyimpan hash `PBKDF2-SHA512` (210.000 iterasi, format `pbkdf2$<iterasi>$<salt>$<hash>`). Hash lama 1.000 iterasi otomatis di-*upgrade* saat login berhasil.
+3. Backend membuat token sesi acak 32 byte dan menyimpannya di `user_sessions` (berlaku 30 hari, atau 12 jam bila "ingat saya" tidak dicentang).
+4. Token dikirim ke browser sebagai **cookie `HttpOnly`** (opsional `SameSite=None; Secure` untuk frontend lintas domain). **Token tidak disimpan di `localStorage`**, sehingga XSS tidak bisa mencuri sesi.
+5. Klien mengirim `credentials: 'include'`; server juga masih menerima `Authorization: Bearer <token>` sebagai fallback.
+6. Setiap request data (transaksi/utang/ekspor) difilter dengan `user_id` dari sesi aktif.
+7. Login lama dengan **username** tetap didukung untuk akun yang sudah ada.
 
 **Kenapa data tidak tercampur antar pengguna:**
 
@@ -311,14 +334,23 @@ Migrasi ringan (`ADD COLUMN IF NOT EXISTS`, unique index email, backfill `user_i
 
 1. Chat **@BotFather** → `/newbot` → simpan **token**.
 2. Isi `TELEGRAM_BOT_TOKEN` di `.env`.
-3. Untuk server publik, isi `WEBHOOK_URL`, misal `https://saku-sloth.vercel.app/api/telegram-webhook`.
-4. Jalankan server. Webhook + menu perintah tersinkron otomatis saat start, atau paksa lewat:
+3. Isi `TELEGRAM_WEBHOOK_SECRET` dengan string acak panjang. Nilai ini didaftarkan sebagai
+   `secret_token` webhook dan **wajib** ada di produksi (tanpa itu webhook membalas `503`).
+4. Untuk server publik, isi `WEBHOOK_URL`, misal `https://saku-sloth.vercel.app/api/telegram-webhook`.
+5. Jalankan server. Webhook + menu perintah tersinkron otomatis saat start, atau paksa lewat
+   (endpoint ini **khusus admin yang sedang login**):
 
 ```bash
-curl -X GET https://domain-anda.vercel.app/api/setup-telegram-menu
+curl -X POST https://domain-anda.vercel.app/api/setup-telegram-menu \
+  -H "Cookie: saku_session=<token-sesi-anda>"
 ```
 
-5. Buka bot di Telegram, kirim `/menu` untuk melihat tombol interaktif.
+6. Buka bot di Telegram, kirim `/menu` untuk melihat tombol interaktif.
+
+**Isolasi data bot:** setiap `chat_id` Telegram dipetakan ke satu akun (`users.telegram_chat_id`)
+yang dibuat otomatis. Bot hanya membaca/menulis transaksi milik akun tersebut — pengguna satu chat
+tidak bisa melihat data chat lain. Bila ingin membatasi siapa saja yang boleh memakai bot, isi
+`TELEGRAM_ALLOWED_CHAT_IDS` dengan daftar `chat_id` yang diizinkan.
 
 ---
 
@@ -331,9 +363,11 @@ curl -X GET https://domain-anda.vercel.app/api/setup-telegram-menu
 3. Import repository `saku-sloth`.
 4. Framework preset: **Other** (biarkan default; `vercel.json` sudah mengatur build & route).
 5. Tambahkan **Environment Variables**: `DATABASE_URL`, `TELEGRAM_BOT_TOKEN`,
-   `WEBHOOK_URL` → `https://<nama-project>.vercel.app/api/telegram-webhook`, `GEMINI_API_KEY` (opsional).
+   `TELEGRAM_WEBHOOK_SECRET`, `WEBHOOK_URL` → `https://<nama-project>.vercel.app/api/telegram-webhook`,
+   `CORS_ORIGINS`, dan `GEMINI_API_KEY` (opsional).
 6. Klik **Deploy**.
-7. Setelah dapat domain, buka `https://<domain>/api/setup-telegram-menu` sekali agar webhook terpasang.
+7. Setelah dapat domain dan akun admin sudah dibuat, panggil `POST /api/setup-telegram-menu`
+   sekali (dengan cookie sesi admin) agar webhook terpasang.
 
 ### Opsi B — Vercel CLI
 
@@ -350,7 +384,8 @@ vercel --prod     # deploy production
 
 ## 🔌 Ringkasan API
 
-Semua endpoint data memerlukan header `Authorization: Bearer <token>`.
+Semua endpoint data memerlukan sesi aktif, dikirim sebagai **cookie `saku_session`**
+(otomatis setelah login) atau header `Authorization: Bearer <token>` sebagai fallback.
 
 ### Auth
 
@@ -416,8 +451,25 @@ Semua endpoint data memerlukan header `Authorization: Bearer <token>`.
 
 | Method | Endpoint | Keterangan |
 | --- | --- | --- |
-| GET | `/api/setup-telegram-menu` | Sinkron menu & webhook bot |
-| POST | `/api/telegram-webhook` | Endpoint webhook Telegram |
+| POST | `/api/setup-telegram-menu` | Sinkron menu & webhook bot (khusus admin) |
+| POST | `/api/telegram-webhook` | Endpoint webhook Telegram (wajib secret token) |
+
+---
+
+## 🧪 Menjalankan Tes
+
+```bash
+npm test
+```
+
+Tes memakai `node --test` bawaan Node.js dan mencakup:
+
+- Format & verifikasi hash kata sandi (PBKDF2 210.000 iterasi), termasuk kompatibilitas hash lama.
+- Penolakan hash `sha256` tanpa salt.
+- Pembuatan & validasi cookie sesi (`HttpOnly`, `SameSite`, `Secure`).
+- Ekstraksi token dari cookie/header.
+- Rate limiter (blokir setelah batas percobaan).
+- Scope `user_id` untuk pengguna biasa vs admin.
 
 ---
 
@@ -535,7 +587,8 @@ git push
 | Login gagal "Email atau kata sandi tidak cocok" | Email belum terdaftar, atau akun lama belum punya email → login pakai username. |
 | Data antar akun terlihat sama | Pastikan server versi terbaru (query memakai `user_id`) lalu logout dan login ulang. |
 | Sesi langsung logout | Token kedaluwarsa / tabel `user_sessions` terhapus. Login ulang. |
-| Bot tidak merespons | `TELEGRAM_BOT_TOKEN`/`WEBHOOK_URL` salah. Buka `/api/setup-telegram-menu` dan cek hasil `report`. |
+| Bot tidak merespons | `TELEGRAM_BOT_TOKEN`/`WEBHOOK_URL`/`TELEGRAM_WEBHOOK_SECRET` salah. Panggil `POST /api/setup-telegram-menu` sebagai admin dan cek hasil `report`. |
+| Bot membalas `401`/`503` | `TELEGRAM_WEBHOOK_SECRET` tidak cocok atau belum diisi di produksi. Isi variabelnya lalu panggil ulang setup webhook. |
 | Data hilang setelah deploy | Database berbeda antar environment — pastikan `DATABASE_URL` produksi benar. |
 | `npm start` error `EADDRINUSE` | Port terpakai. Jalankan dengan `PORT` lain. |
 | CSS/JS tidak berubah di browser | Hard refresh (`Ctrl+Shift+R`) atau cek cache/CDN. |
