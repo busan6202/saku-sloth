@@ -291,12 +291,27 @@
 .pos-product-icon {
     display: grid;
     place-items: center;
-    width: 42px;
-    height: 42px;
-    border-radius: 14px;
+    width: 68px;
+    height: 68px;
+    border-radius: 18px;
     background: var(--surface-accent);
-    font-size: 20px;
-    margin-bottom: 4px;
+    color: var(--green-ink);
+    margin-bottom: 8px;
+}
+
+.pos-product-icon svg,
+.pos-product-icon-svg {
+    width: 40px;
+    height: 40px;
+    display: block;
+}
+
+.pos-product-icon-img {
+    width: 52px;
+    height: 52px;
+    display: block;
+    object-fit: contain;
+    image-rendering: -webkit-optimize-contrast;
 }
 
 .pos-product-name {
@@ -1055,6 +1070,22 @@
 
     .pos-product-grid {
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
+
+    .pos-product-icon {
+        width: 58px;
+        height: 58px;
+        border-radius: 16px;
+    }
+
+    .pos-product-icon svg {
+        width: 34px;
+        height: 34px;
+    }
+
+    .pos-product-icon-img {
+        width: 46px;
+        height: 46px;
     }
 }
 

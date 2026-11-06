@@ -233,17 +233,109 @@
         renderProductList();
     }
 
-    function productEmoji(product) {
+    // Ikon PNG dari open-crop-icons (https://github.com/openfarmcc/open-crop-icons, lisensi CC0).
+    // Urutan penting: pola yang lebih spesifik harus berada di atas.
+    const VEG_ICON_RULES = [
+        [/daun bawang|bawang daun|green onion|spring onion/, 'green-onion'],
+        [/lokio|kucai|chive/, 'garlic'],
+        [/prei|leek/, 'leek'],
+        [/bawang putih|garlic/, 'garlic'],
+        [/bawang bombay|onion bombay|yellow onion/, 'yellow-onion'],
+        [/bawang merah|shallot/, 'red-onion'],
+        [/bawang|onion/, 'shallot'],
+        [/sawi putih|petsai|petsay|napa/, 'napa-cabbage'],
+        [/sawi hijau|caisim|caisin|collard/, 'collard-greens'],
+        [/pakcoy|pokcoy|pocoy|bok choy|bok-choy/, 'bok-choy'],
+        [/kembang kol|cauliflower/, 'cauliflower'],
+        [/brokoli|broccoli/, 'broccoli'],
+        [/kubis|kol\b|cabbage/, 'green-cabbage'],
+        [/selada air|kangkung|water ?spinach|watercress/, 'watercress'],
+        [/selada keriting|iceberg/, 'iceberg'],
+        [/selada|lettuce/, 'loose-leaf-lettuce'],
+        [/bayam merah|red chard|red-chard/, 'red-chard'],
+        [/bayam|spinach/, 'spinach'],
+        [/seledri|celery/, 'celery'],
+        [/kemangi|basil/, 'basil'],
+        [/tomat cherry|cherry tomato|tomat ceri/, 'cherry-tomato'],
+        [/tomat|tomato/, 'tomato'],
+        [/terong|terung|eggplant|aubergine/, 'eggplant'],
+        [/jagung|corn/, 'corn'],
+        [/paprika|capsicum|bell pepper/, 'red-bell-pepper'],
+        [/cabai rawit|cabe rawit|rawit|bird'?s eye|birds eye/, 'birds-eye-chili'],
+        [/cabai|cabe|chilli|chili|chile|lombok/, 'cayenne-pepper'],
+        [/wortel|carrot/, 'carrot'],
+        [/timun|mentimun|cucumber/, 'cucumber'],
+        [/kentang|potato/, 'russet-potato'],
+        [/buncis|green bean|snap bean|wax bean/, 'wax-bean'],
+        [/kacang panjang|long bean|yardlong|runner bean/, 'runner-bean'],
+        [/jahe|ginger/, 'ginger'],
+        [/kunyit|turmeric/, 'turmeric'],
+        [/kencur|lengkuas|galangal/, 'galangal'],
+        [/serai|sereh|lemongrass/, 'lemongrass'],
+        [/katuk|daun/, 'collard-greens']
+    ];
+
+    // Ikon lini bergaya theSVG UI untuk produk non-sayur: grid 24x24, memakai currentColor.
+    const PRODUCT_ICON_ATTRS = 'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"';
+
+    const PRODUCT_ICONS = {
+        grain: `
+            <path d="M12 21V8" />
+            <path d="M12 8c0-2 1.3-3.6 3.2-4" />
+            <path d="M12 8c0-2-1.3-3.6-3.2-4" />
+            <path d="M12 12.5c1.6-1.2 3.6-1.1 5 .2" />
+            <path d="M12 12.5c-1.6-1.2-3.6-1.1-5 .2" />
+            <path d="M12 17c1.6-1.2 3.6-1.1 5 .2" />
+            <path d="M12 17c-1.6-1.2-3.6-1.1-5 .2" />
+        `,
+        bag: `
+            <path d="M6 8h12l-1 12H7L6 8Z" />
+            <path d="M9 8V6.5a3 3 0 0 1 6 0V8" />
+        `,
+        cup: `
+            <path d="M5 8h14l-1.4 11.2a2 2 0 0 1-2 1.8H8.4a2 2 0 0 1-2-1.8L5 8Z" />
+            <path d="M8 5h8" />
+        `,
+        bread: `
+            <path d="M4 11.5C4 8.5 6.2 6 9.2 6h5.6C17.8 6 20 8.5 20 11.5c0 1.4-1 2.5-2.4 2.5H6.4C5 14 4 12.9 4 11.5Z" />
+            <path d="M5 14v3.5C5 18.9 6.1 20 7.5 20h9c1.4 0 2.5-1.1 2.5-2.5V14" />
+        `,
+        phone: `
+            <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
+            <path d="M11 18.5h2" />
+        `,
+        package: `
+            <path d="M12 3 21 7.5v9L12 21l-9-4.5v-9L12 3Z" />
+            <path d="m3 7.5 9 4.5 9-4.5" />
+            <path d="M12 12v9" />
+        `
+    };
+
+    function vegIconFile(name) {
+        for (const [pattern, file] of VEG_ICON_RULES) {
+            if (pattern.test(name)) return file;
+        }
+        return '';
+    }
+
+    function productIcon(product) {
         const name = String(product.name || '').toLowerCase();
         const category = String(product.category || '').toUpperCase();
-        if (category === 'SAYUR_DAUN' || /kangkung|bayam|sawi|caisim|selada|seledri|daun/.test(name)) return '🥬';
-        if (category === 'BUMBU_TIMBANG' || /cabai|cabe|bawang|jahe|kencur|kunyit|lengkuas|kemiri|tomat/.test(name)) return '🌶️';
-        if (category === 'SEMBAKO' || /beras|gula|minyak|telur|tepung/.test(name)) return '🍚';
-        if (category === 'BUNGKUSAN' || /bungkus|sachet|kemasan/.test(name)) return '🛍️';
-        if (/kopi|teh|minum|susu|jus|es/.test(name)) return '🥤';
-        if (/roti|kue|snack|makan|nasi|mie/.test(name)) return '🍞';
-        if (/pulsa|kuota|token/.test(name)) return '📱';
-        return '📦';
+
+        const isProduce = category === 'SAYUR_DAUN' || category === 'BUMBU_TIMBANG';
+        const fallback = category === 'BUMBU_TIMBANG' ? 'cayenne-pepper' : 'collard-greens';
+        const vegFile = vegIconFile(name) || (isProduce ? fallback : '');
+        if (vegFile) {
+            return `<img class="pos-product-icon-img" src="icons/vegetables/${vegFile}.png" width="64" height="64" alt="" loading="lazy" decoding="async">`;
+        }
+
+        let key = 'package';
+        if (category === 'SEMBAKO' || /beras|gula|minyak|telur|tepung/.test(name)) key = 'grain';
+        else if (category === 'BUNGKUSAN' || /bungkus|sachet|kemasan/.test(name)) key = 'bag';
+        else if (/kopi|teh|minum|susu|jus|es/.test(name)) key = 'cup';
+        else if (/roti|kue|snack|makan|nasi|mie/.test(name)) key = 'bread';
+        else if (/pulsa|kuota|token/.test(name)) key = 'phone';
+        return `<svg class="pos-product-icon-svg" ${PRODUCT_ICON_ATTRS}>${PRODUCT_ICONS[key]}</svg>`;
     }
 
     function stockLabel(product) {
@@ -275,7 +367,7 @@
             const stock = Number(product.stock) || 0;
             return `
                 <button type="button" class="pos-product-card" data-product-id="${product.id}" ${stock <= 0 ? 'disabled' : ''}>
-                    <span class="pos-product-icon" aria-hidden="true">${productEmoji(product)}</span>
+                    <span class="pos-product-icon" aria-hidden="true">${productIcon(product)}</span>
                     <span class="pos-product-name">${escapeHtml(product.name)}</span>
                     <span class="pos-product-meta">${escapeHtml(product.category || 'UMUM')} · ${escapeHtml(product.sku || product.barcode || 'Tanpa SKU')}</span>
                     <span class="pos-product-price">${formatMoney(product.price_sell)}<small> / ${escapeHtml(product.unit || 'PCS')}</small></span>
