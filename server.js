@@ -21,25 +21,36 @@ const app = express();
 // Limit dinaikkan agar ikon produk kustom (data URL gambar) muat di payload JSON.
 app.use(express.json({ limit: '1mb' }));
 
-// --- CORS: hanya same-origin dan origin yang didaftarkan lewat CORS_ORIGINS ---
+// --- CORS: same-origin, origin terdaftar di CORS_ORIGINS, dan hosting statis GitHub Pages ---
 const ALLOWED_ORIGINS = String(process.env.CORS_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
 
+// Frontend juga bisa dibuka sebagai hosting statis (GitHub Pages) yang memanggil API ini
+// dari domain berbeda. Tanpa izin ini semua request diblokir browser ("Failed to fetch").
+function isOriginAllowed(origin, req) {
+    if (!origin) return true; // same-origin / non-browser client
+    if (ALLOWED_ORIGINS.includes(origin)) return true;
+    try {
+        const url = new URL(origin);
+        if (url.host === req.headers.host) return true;
+        if (url.protocol === 'https:' && (url.hostname === 'github.io' || url.hostname.endsWith('.github.io'))) return true;
+        if (['localhost', '127.0.0.1'].includes(url.hostname)) return true;
+    } catch {
+        return false;
+    }
+    return false;
+}
+
 app.use((req, res, next) => {
     cors({
         origin(origin, callback) {
-            if (!origin) return callback(null, true); // same-origin / non-browser client
-            if (ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-            try {
-                if (new URL(origin).host === req.headers.host) return callback(null, true);
-            } catch {
-                return callback(null, false);
-            }
-            return callback(null, false);
+            callback(null, isOriginAllowed(origin, req));
         },
-        credentials: true
+        credentials: true,
+        allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'x-session-token', 'x-pos-secret'],
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
     })(req, res, next);
 });
 
@@ -51,12 +62,7 @@ app.use((req, res, next) => {
     if (!origin) return next();
     const cookies = req.headers.cookie || '';
     if (!cookies.includes('saku_session=')) return next();
-    if (ALLOWED_ORIGINS.includes(origin)) return next();
-    try {
-        if (new URL(origin).host === req.headers.host) return next();
-    } catch {
-        // lanjut ke penolakan di bawah
-    }
+    if (isOriginAllowed(origin, req)) return next();
     return res.status(403).json({ error: 'Permintaan lintas situs ditolak.' });
 });
 

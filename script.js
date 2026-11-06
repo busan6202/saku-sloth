@@ -7,8 +7,28 @@ const AUTH_URL = `${API_BASE_URL}/auth`;
 const VISIBLE_TRANSACTION_LIMIT = 6;
 const CATEGORY_COLORS = ['#89bd5c', '#e9756a', '#6b96d6', '#f5b942', '#9b7ede', '#57b8a6', '#e79a5a'];
 
-// Sesi disimpan sebagai cookie HttpOnly di server. Token tidak lagi ditulis ke localStorage,
-// sehingga skrip yang disisipkan (XSS) tidak bisa mencuri sesi pengguna.
+// Saat frontend di-hosting terpisah (mis. GitHub Pages) API berada di domain lain.
+// Browser memblokir cookie pihak ketiga, jadi mode lintas origin memakai Bearer token
+// yang hanya disimpan di sessionStorage (hilang saat tab ditutup).
+const IS_CROSS_ORIGIN_API = (() => {
+    try { return new URL(API_BASE_URL).origin !== window.location.origin; } catch { return false; }
+})();
+const SESSION_TOKEN_KEY = 'saku-session-token-v1';
+
+function persistSessionToken(token) {
+    if (!IS_CROSS_ORIGIN_API) return;
+    try {
+        if (token) sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+        else sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    } catch {}
+}
+
+function readStoredSessionToken() {
+    if (!IS_CROSS_ORIGIN_API) return '';
+    try { return sessionStorage.getItem(SESSION_TOKEN_KEY) || ''; } catch { return ''; }
+}
+
+// Sesi utama tetap cookie HttpOnly di server; token di localStorage tidak pernah ditulis.
 // Semua request ke API wajib menyertakan credentials agar cookie ikut terkirim.
 const nativeFetch = window.fetch.bind(window);
 window.fetch = function patchedFetch(input, init) {
@@ -3245,7 +3265,7 @@ function clearUserScopedStorage() {
 function redirectCashierToPos(user, token) {
     if (!user || user.role !== 'cashier') return false;
     try {
-        // Token sesi tidak disimpan di browser; server memakai cookie HttpOnly.
+        // Token sesi tidak disimpan di localStorage; server memakai cookie HttpOnly.
         localStorage.setItem(STORAGE_KEYS.userSession, JSON.stringify({
             user: {
                 id: user.id,
@@ -3257,6 +3277,7 @@ function redirectCashierToPos(user, token) {
                 ownerId: user.ownerId || user.owner_id || null
             }
         }));
+        persistSessionToken(token);
     } catch {}
     window.location.replace('pos.html');
     return true;
@@ -3277,9 +3298,11 @@ function setCurrentUser(user, token, persist = true) {
 
     if (persist) {
         try {
-            // Hanya profil yang disimpan; token sesi tetap di cookie HttpOnly.
+            // Hanya profil yang disimpan; token sesi tetap di cookie HttpOnly
+            // (atau sessionStorage bila API berada di domain berbeda).
             const { token: _omitToken, ...profile } = currentUser;
             localStorage.setItem(STORAGE_KEYS.userSession, JSON.stringify({ user: profile }));
+            persistSessionToken(currentUser.token);
         } catch {}
     }
 
@@ -3320,6 +3343,7 @@ async function handleLogout() {
 
     currentUser = null;
     localStorage.removeItem(STORAGE_KEYS.userSession);
+    persistSessionToken('');
     clearUserScopedStorage();
 
     if (elements.userDropdownPopover) elements.userDropdownPopover.hidden = true;
@@ -3466,12 +3490,13 @@ async function initializeAuth() {
         try {
             const parsed = JSON.parse(savedSessionRaw);
             if (parsed && parsed.user) {
-                if (redirectCashierToPos(parsed.user)) return;
                 currentUser = parsed.user;
-                currentUser.token = '';
+                currentUser.token = readStoredSessionToken();
+                if (redirectCashierToPos(parsed.user, currentUser.token)) return;
 
-                // Validasi sesi ke backend menggunakan cookie HttpOnly.
+                // Validasi sesi ke backend (cookie HttpOnly atau Bearer token).
                 const isGuestSession = currentUser.role === 'guest';
+                const fallbackToken = currentUser.token;
                 fetch(`${AUTH_URL}/me`, {
                     headers: getAuthHeaders()
                 })
@@ -3480,6 +3505,7 @@ async function initializeAuth() {
                         if (res.status === 401 && !isGuestSession) {
                             currentUser = null;
                             localStorage.removeItem(STORAGE_KEYS.userSession);
+                            persistSessionToken('');
                             clearUserScopedStorage();
                             if (elements.appShell) elements.appShell.hidden = true;
                             if (elements.authScreen) elements.authScreen.hidden = false;
@@ -3491,13 +3517,13 @@ async function initializeAuth() {
                     })
                     .then((data) => {
                         if (data?.ok && data?.user) {
-                            setCurrentUser(data.user, '', false);
+                            setCurrentUser(data.user, fallbackToken, false);
                         }
                     })
                     .catch(() => {});
 
                 // Aktifkan tampilan langsung menggunakan sesi tersimpan
-                setCurrentUser(currentUser, '', false);
+                setCurrentUser(currentUser, fallbackToken, false);
                 return;
             }
         } catch {

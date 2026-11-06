@@ -168,7 +168,7 @@ GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/XXXX/exec
 | `WEBHOOK_URL` | ❌ | Wajib bila ingin bot berjalan di server publik (Vercel). |
 | `TELEGRAM_WEBHOOK_SECRET` | ⚠️ | **Wajib di produksi.** Dikirim Telegram di header `x-telegram-bot-api-secret-token`; webhook menolak request tanpa secret yang cocok (401). |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | ❌ | Whitelist `chat_id` Telegram yang boleh memakai bot. Kosong = semua chat diizinkan. |
-| `CORS_ORIGINS` | ❌ | Whitelist origin frontend. Kosong = hanya origin yang sama dengan server. |
+| `CORS_ORIGINS` | ❌ | Whitelist tambahan origin frontend. Origin server sendiri, `*.github.io`, dan `localhost` selalu diizinkan. |
 | `PASSWORD_ITERATIONS` | ❌ | Iterasi PBKDF2-SHA512 (default `210000`). |
 | `GEMINI_API_KEY` | ❌ | Untuk fitur analisis AI. |
 | `PORT` | ❌ | Port lokal (default 3000). |
@@ -179,10 +179,13 @@ GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/XXXX/exec
 
 > ⚠️ **Jangan pernah commit file `.env`.** File ini sudah masuk `.gitignore`.
 
-> 🌐 **Frontend dan API beda domain** (mis. frontend di `github.io`, API di `vercel.app`)?
-> Tambahkan origin frontend ke `CORS_ORIGINS`, contoh:
-> `CORS_ORIGINS=https://nama-user.github.io,http://localhost:3000`.
-> Tanpa itu, request yang membawa cookie sesi akan ditolak `403` oleh proteksi CSRF.
+> 🌐 **Frontend dan API beda domain** (mis. frontend di `github.io`, API di `vercel.app`).
+> Origin `*.github.io` dan `localhost`/`127.0.0.1` sudah diizinkan otomatis. Untuk domain lain,
+> tambahkan ke `CORS_ORIGINS`, contoh: `CORS_ORIGINS=https://app.domain-anda.com`.
+>
+> Karena browser memblokir cookie pihak ketiga, mode lintas domain memakai **Bearer token**
+> yang disimpan di `sessionStorage` (hilang saat tab ditutup). Cookie `HttpOnly` tetap dipakai
+> saat frontend dan API berada di domain yang sama.
 
 ### Cara mendapatkan `DATABASE_URL` (Neon)
 

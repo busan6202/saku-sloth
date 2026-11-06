@@ -5,11 +5,30 @@
     'use strict';
 
     const SESSION_KEY = 'saku-user-session-v1';
+    const SESSION_TOKEN_KEY = 'saku-session-token-v1';
     const THEME_KEY = 'saku-theme';
     // GitHub Pages tidak menjalankan backend Express, jadi panggilan API diarahkan ke server Vercel.
     const API_BASE_URL = (typeof window !== 'undefined' && window.location.origin.startsWith('http') && !window.location.origin.includes('github.io'))
         ? `${window.location.origin}/api`
         : 'https://saku-sloth.vercel.app/api';
+    // Bila API beda domain, cookie HttpOnly diblokir browser sebagai cookie pihak ketiga,
+    // jadi token disimpan di sessionStorage dan dikirim lewat header Authorization.
+    const IS_CROSS_ORIGIN_API = (() => {
+        try { return new URL(API_BASE_URL).origin !== window.location.origin; } catch { return false; }
+    })();
+
+    function persistSessionToken(token) {
+        if (!IS_CROSS_ORIGIN_API) return;
+        try {
+            if (token) sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+            else sessionStorage.removeItem(SESSION_TOKEN_KEY);
+        } catch {}
+    }
+
+    function readStoredSessionToken() {
+        if (!IS_CROSS_ORIGIN_API) return '';
+        try { return sessionStorage.getItem(SESSION_TOKEN_KEY) || ''; } catch { return ''; }
+    }
     const rupiah = new Intl.NumberFormat('id-ID', {
         style: 'currency',
         currency: 'IDR',
@@ -129,7 +148,8 @@
         try {
             const parsed = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
             if (!parsed || !parsed.user) return null;
-            return { token: parsed.token || '', user: parsed.user || {} };
+            const token = parsed.token || readStoredSessionToken();
+            return { token, user: parsed.user || {} };
         } catch {
             return null;
         }
@@ -176,6 +196,7 @@
             // Token tidak ditulis ke localStorage; hanya profil yang disimpan.
             const { token: _omitToken, ...profile } = user;
             localStorage.setItem(SESSION_KEY, JSON.stringify({ user: profile }));
+            persistSessionToken(data.token);
             window.location.reload();
         } catch (err) {
             els.gateError.textContent = err.message;
@@ -1743,11 +1764,16 @@
             return;
         }
 
-        // Validasi sesi ke server (cookie HttpOnly) sebelum menampilkan layar kasir.
+        // Validasi sesi ke server (cookie HttpOnly atau Bearer token) sebelum menampilkan layar kasir.
         try {
-            const meRes = await fetch(`${API_BASE_URL}/auth/me`, { credentials: 'include' });
+            const authHeader = session.token ? { Authorization: `Bearer ${session.token}` } : {};
+            const meRes = await fetch(`${API_BASE_URL}/auth/me`, {
+                credentials: 'include',
+                headers: authHeader
+            });
             if (!meRes.ok) {
                 localStorage.removeItem(SESSION_KEY);
+                persistSessionToken('');
                 showGate('Sesi Anda tidak valid atau sudah berakhir. Silakan masuk kembali.');
                 return;
             }
