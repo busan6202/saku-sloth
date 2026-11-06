@@ -186,7 +186,11 @@ mark, .hum-mark {
     background: var(--surface);
     border-right: 1px solid var(--line);
     box-shadow: 2px 0 16px rgba(22, 27, 38, 0.03);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
 }
+.side-nav { flex-shrink: 0; }
 .brand {
     display: inline-flex;
     align-items: center;
@@ -2123,15 +2127,20 @@ h1 {
         display: flex;
         align-items: center;
         justify-content: space-around;
+        gap: 2px;
         min-height: calc(64px + env(safe-area-inset-bottom));
         padding: 7px 10px calc(7px + env(safe-area-inset-bottom));
         border-top: 1px solid var(--line);
         background: color-mix(in srgb, var(--surface) 94%, transparent);
         backdrop-filter: blur(16px);
+        overflow-x: auto;
+        scrollbar-width: none;
     }
+    .mobile-nav::-webkit-scrollbar { display: none; }
     .mobile-nav-link {
         display: flex;
-        min-width: 58px;
+        flex: 1 0 44px;
+        min-width: 44px;
         flex-direction: column;
         align-items: center;
         gap: 3px;
@@ -3180,7 +3189,80 @@ h1 {
     color: var(--muted);
 }
 .user-popover-actions {
+    display: grid;
+    gap: 8px;
     padding-top: 4px;
+}
+
+/* ================= AKUN KASIR (DARI MENU AKUN UTAMA) ================= */
+.cashier-dialog { width: min(520px, calc(100% - 28px)); }
+.cashier-dialog-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 18px 0 8px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+}
+.cashier-dialog-head strong { font-size: 13px; font-weight: 700; }
+.cashier-count-pill {
+    padding: 3px 9px;
+    border-radius: var(--radius-pill);
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 10.5px;
+    font-weight: 700;
+}
+.cashier-account-list { display: grid; gap: 9px; max-height: 280px; overflow-y: auto; }
+.cashier-account-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 11px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-stock);
+    background: var(--surface-soft);
+}
+.cashier-account-info { min-width: 0; }
+.cashier-account-info strong {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cashier-account-info span {
+    display: block;
+    font-size: 11px;
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cashier-account-actions { display: flex; flex-shrink: 0; gap: 6px; }
+.cashier-account-actions .button { min-height: 30px; padding: 0 9px; font-size: 10.5px; }
+.cashier-empty {
+    padding: 16px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-stock);
+    color: var(--muted);
+    font-size: 11.5px;
+    text-align: center;
+}
+.cashier-hint-row {
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--color-accent) 18%, var(--surface));
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.5;
 }
 
 /* Auth Screen Responsive */

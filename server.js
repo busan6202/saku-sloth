@@ -94,11 +94,29 @@ const PUBLIC_STATIC_FILES = new Set([
     'manifest.webmanifest'
 ]);
 
-app.get('/:file', (req, res, next) => {
-    const name = String(req.params.file || '');
-    if (name === 'pos') return res.sendFile(path.join(__dirname, 'pos.html'));
-    if (!PUBLIC_STATIC_FILES.has(name)) return next();
-    res.sendFile(path.join(__dirname, name));
+// Akun kasir tidak boleh membuka dashboard utama, bahkan dengan sesi yang valid.
+async function isCashierSession(req) {
+    if (!readSessionToken(req)) return false;
+    try {
+        const user = await resolveAuthUser(req);
+        return user?.role === 'cashier';
+    } catch {
+        return false;
+    }
+}
+
+app.get('/:file', async (req, res, next) => {
+    try {
+        const name = String(req.params.file || '');
+        if (name === 'pos') return res.sendFile(path.join(__dirname, 'pos.html'));
+        if (!PUBLIC_STATIC_FILES.has(name)) return next();
+        if (name === 'index.html' && await isCashierSession(req)) {
+            return res.redirect('/pos');
+        }
+        res.sendFile(path.join(__dirname, name));
+    } catch (err) {
+        next(err);
+    }
 });
 app.use('/icons', express.static(path.join(__dirname, 'icons'), { fallthrough: false, maxAge: '7d' }));
 
@@ -117,8 +135,13 @@ app.use(async (req, res, next) => {
     }
 });
 
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+app.get('/', async (req, res, next) => {
+    try {
+        if (await isCashierSession(req)) return res.redirect('/pos');
+        res.sendFile(path.join(__dirname, 'index.html'));
+    } catch (err) {
+        next(err);
+    }
 });
 
 // Koneksi ke Neon PostgreSQL (Konfigurasi SSL yang bersih & aman)

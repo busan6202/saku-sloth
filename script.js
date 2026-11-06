@@ -348,6 +348,11 @@ const elements = {
     debtDialogTitle: document.getElementById('debtDialogTitle'),
     debtFormError: document.getElementById('debtFormError'),
     debtTypeHint: document.getElementById('debtTypeHint'),
+    debtDescription: document.getElementById('debtDescription'),
+    debtAmount: document.getElementById('debtAmount'),
+    debtDueDate: document.getElementById('debtDueDate'),
+    debtStatus: document.getElementById('debtStatus'),
+    debtPaidAmount: document.getElementById('debtPaidAmount'),
     saveDebtBtn: document.getElementById('saveDebtBtn'),
     debtTypeFilter: document.getElementById('debtTypeFilter'),
     debtStatusFilter: document.getElementById('debtStatusFilter'),
@@ -440,7 +445,19 @@ const elements = {
     popoverUserAvatar: document.getElementById('popoverUserAvatar'),
     popoverFullName: document.getElementById('popoverFullName'),
     popoverUsername: document.getElementById('popoverUsername'),
-    logoutTopbarBtn: document.getElementById('logoutTopbarBtn')
+    logoutTopbarBtn: document.getElementById('logoutTopbarBtn'),
+    // Cashier account management (owner only)
+    openCashierDialogBtn: document.getElementById('openCashierDialogBtn'),
+    cashierDialog: document.getElementById('cashierDialog'),
+    closeCashierDialog: document.getElementById('closeCashierDialog'),
+    cashierForm: document.getElementById('cashierForm'),
+    cashierName: document.getElementById('cashierName'),
+    cashierEmail: document.getElementById('cashierEmail'),
+    cashierPassword: document.getElementById('cashierPassword'),
+    cashierError: document.getElementById('cashierError'),
+    saveCashierBtn: document.getElementById('saveCashierBtn'),
+    cashierCount: document.getElementById('cashierCount'),
+    cashierAccountList: document.getElementById('cashierAccountList')
 };
 
 let currentUser = null;
@@ -3261,6 +3278,141 @@ function clearUserScopedStorage() {
     debts = [];
 }
 
+function canManageCashierAccounts() {
+    return Boolean(currentUser && currentUser.role !== 'cashier' && currentUser.role !== 'guest');
+}
+
+function syncCashierMenuVisibility() {
+    if (elements.openCashierDialogBtn) {
+        elements.openCashierDialogBtn.hidden = !canManageCashierAccounts();
+    }
+}
+
+function renderCashierAccounts(rows) {
+    if (!elements.cashierAccountList) return;
+    elements.cashierAccountList.replaceChildren();
+    const list = Array.isArray(rows) ? rows : [];
+    if (elements.cashierCount) {
+        elements.cashierCount.textContent = `${list.length} akun`;
+    }
+    if (list.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'cashier-empty';
+        empty.textContent = 'Belum ada akun kasir. Tambahkan akun agar kasir bisa masuk ke halaman POS.';
+        elements.cashierAccountList.append(empty);
+        return;
+    }
+
+    list.forEach((row) => {
+        const item = document.createElement('div');
+        item.className = 'cashier-account-row';
+        item.innerHTML = `
+            <div class="cashier-account-info">
+                <strong></strong>
+                <span></span>
+            </div>
+            <div class="cashier-account-actions">
+                <button class="button button-secondary button-sm" type="button" data-reset-cashier="${escapeHtml(row.id)}">Reset Sandi</button>
+                <button class="button button-danger-soft button-sm" type="button" data-delete-cashier="${escapeHtml(row.id)}">Hapus</button>
+            </div>
+        `;
+        item.querySelector('.cashier-account-info strong').textContent = row.full_name || row.fullName || 'Kasir';
+        item.querySelector('.cashier-account-info span').textContent = row.email || `@${row.username || 'kasir'}`;
+        elements.cashierAccountList.append(item);
+    });
+}
+
+async function loadCashierAccounts() {
+    if (!elements.cashierAccountList) return;
+    elements.cashierAccountList.innerHTML = '<p class="cashier-empty">Memuat akun kasir...</p>';
+    try {
+        const response = await fetch(`${API_BASE_URL}/pos/cashiers`, { headers: getAuthHeaders() });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || `Server merespons ${response.status}`);
+        renderCashierAccounts(data);
+    } catch (error) {
+        if (elements.cashierCount) elements.cashierCount.textContent = '0 akun';
+        elements.cashierAccountList.innerHTML = '<p class="cashier-empty">Gagal memuat akun kasir. Pastikan Anda masuk sebagai pemilik toko.</p>';
+        console.warn('Gagal memuat akun kasir:', error);
+    }
+}
+
+async function submitCashierForm(event) {
+    event.preventDefault();
+    if (!canManageCashierAccounts()) return;
+    const fullName = String(elements.cashierName?.value || '').trim();
+    const email = String(elements.cashierEmail?.value || '').trim().toLowerCase();
+    const password = String(elements.cashierPassword?.value || '');
+
+    const showError = (message) => {
+        if (!elements.cashierError) return;
+        elements.cashierError.textContent = message;
+        elements.cashierError.hidden = false;
+    };
+
+    if (elements.cashierError) elements.cashierError.hidden = true;
+    if (!fullName) return showError('Nama kasir wajib diisi.');
+    if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) return showError('Format email kasir belum benar.');
+    if (password.length < 6) return showError('Kata sandi kasir minimal 6 karakter.');
+
+    if (elements.saveCashierBtn) elements.saveCashierBtn.disabled = true;
+    try {
+        const response = await fetch(`${API_BASE_URL}/pos/cashiers`, {
+            method: 'POST',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ fullName, email, password })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Gagal membuat akun kasir.');
+
+        elements.cashierForm.reset();
+        await loadCashierAccounts();
+        setNotice(`Akun kasir ${fullName} berhasil dibuat. Kasir hanya bisa membuka halaman POS. ✅`);
+        triggerCartoonCelebration(8);
+    } catch (error) {
+        showError(error.message || 'Gagal membuat akun kasir.');
+    } finally {
+        if (elements.saveCashierBtn) elements.saveCashierBtn.disabled = false;
+    }
+}
+
+async function resetCashierPassword(cashierId) {
+    const password = window.prompt('Kata sandi baru untuk kasir ini (minimal 6 karakter):');
+    if (!password) return;
+    if (password.length < 6) {
+        setNotice('Kata sandi baru minimal 6 karakter.', 'error');
+        return;
+    }
+    try {
+        const response = await fetch(`${API_BASE_URL}/pos/cashiers/${encodeURIComponent(cashierId)}`, {
+            method: 'PUT',
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ password })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Gagal memperbarui kata sandi kasir.');
+        setNotice('Kata sandi kasir berhasil diperbarui.');
+    } catch (error) {
+        setNotice(error.message || 'Gagal memperbarui kata sandi kasir.', 'error');
+    }
+}
+
+async function deleteCashierAccount(cashierId) {
+    if (!window.confirm('Hapus akun kasir ini? Kasir tidak akan bisa masuk lagi.')) return;
+    try {
+        const response = await fetch(`${API_BASE_URL}/pos/cashiers/${encodeURIComponent(cashierId)}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Gagal menghapus akun kasir.');
+        await loadCashierAccounts();
+        setNotice('Akun kasir berhasil dihapus.');
+    } catch (error) {
+        setNotice(error.message || 'Gagal menghapus akun kasir.', 'error');
+    }
+}
+
 // Akun kasir tidak boleh memakai dashboard keuangan: langsung arahkan ke layar POS.
 function redirectCashierToPos(user, token) {
     if (!user || user.role !== 'cashier') return false;
@@ -3319,6 +3471,7 @@ function setCurrentUser(user, token, persist = true) {
     if (elements.popoverUserAvatar) elements.popoverUserAvatar.textContent = currentUser.avatar;
     if (elements.popoverFullName) elements.popoverFullName.textContent = currentUser.fullName;
     if (elements.popoverUsername) elements.popoverUsername.textContent = currentUser.email || `@${currentUser.username}`;
+    syncCashierMenuVisibility();
 
     // Tampilkan App Shell dan sembunyikan Layar Login
     if (elements.authScreen) elements.authScreen.hidden = true;
@@ -3345,7 +3498,9 @@ async function handleLogout() {
     localStorage.removeItem(STORAGE_KEYS.userSession);
     persistSessionToken('');
     clearUserScopedStorage();
+    syncCashierMenuVisibility();
 
+    if (elements.cashierDialog?.open) elements.cashierDialog.close();
     if (elements.userDropdownPopover) elements.userDropdownPopover.hidden = true;
     if (elements.appShell) elements.appShell.hidden = true;
     if (elements.authScreen) elements.authScreen.hidden = false;
@@ -3588,6 +3743,26 @@ function setupAuthEventListeners() {
     // Logout triggers
     elements.logoutSidebarBtn?.addEventListener('click', handleLogout);
     elements.logoutTopbarBtn?.addEventListener('click', handleLogout);
+
+    // Cashier account management (owner only)
+    elements.openCashierDialogBtn?.addEventListener('click', () => {
+        if (!canManageCashierAccounts() || !elements.cashierDialog) return;
+        if (elements.cashierError) elements.cashierError.hidden = true;
+        if (elements.userDropdownPopover) elements.userDropdownPopover.hidden = true;
+        elements.cashierDialog.showModal();
+        loadCashierAccounts();
+    });
+    elements.closeCashierDialog?.addEventListener('click', () => elements.cashierDialog?.close());
+    elements.cashierForm?.addEventListener('submit', submitCashierForm);
+    elements.cashierAccountList?.addEventListener('click', (event) => {
+        const resetButton = event.target.closest('[data-reset-cashier]');
+        if (resetButton) return resetCashierPassword(resetButton.dataset.resetCashier);
+        const deleteButton = event.target.closest('[data-delete-cashier]');
+        if (deleteButton) return deleteCashierAccount(deleteButton.dataset.deleteCashier);
+    });
+    elements.cashierDialog?.addEventListener('click', (event) => {
+        if (event.target === elements.cashierDialog) elements.cashierDialog.close();
+    });
 
     // Topbar user dropdown toggle
     elements.userTopbarBtn?.addEventListener('click', (event) => {

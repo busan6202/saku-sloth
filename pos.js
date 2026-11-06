@@ -1196,6 +1196,7 @@
         }
         if (els.btnSettings) els.btnSettings.hidden = cashier;
         if (els.cashierSection) els.cashierSection.hidden = cashier;
+        if (els.gateLoginLink) els.gateLoginLink.hidden = cashier;
         if (cashier) {
             els.posUserName.textContent = `${state.user.fullName || state.user.full_name || state.user.username || 'Kasir'} · Kasir`;
         }

@@ -313,6 +313,9 @@
                                 <span class="popover-badge-pill">🔒 Multi-User Aktif</span>
                             </div>
                             <div class="user-popover-actions">
+                                <button class="button button-secondary button-sm button-full" id="openCashierDialogBtn" type="button" hidden>
+                                    <i data-lucide="users" aria-hidden="true"></i> Kelola Akun Kasir
+                                </button>
                                 <button class="button button-danger-soft button-sm button-full" id="logoutTopbarBtn" type="button">
                                     <i data-lucide="log-out" aria-hidden="true"></i> Keluar dari Akun
                                 </button>
@@ -1335,6 +1338,42 @@
                 <button class="button button-primary" id="confirmDebtPayBtn" type="submit">Konfirmasi Pembayaran</button>
             </div>
         </form>
+    </dialog>
+
+    <!-- DIALOG KELOLA AKUN KASIR (AKUN TERPISAH DARI AKUN UTAMA) -->
+    <dialog class="transaction-dialog cashier-dialog" id="cashierDialog" aria-labelledby="cashierDialogTitle">
+        <div class="dialog-heading">
+            <div>
+                <p class="eyebrow">AKSES KASIR</p>
+                <h2 id="cashierDialogTitle">Kelola Akun Kasir</h2>
+            </div>
+            <button class="dialog-close" id="closeCashierDialog" type="button" aria-label="Tutup">×</button>
+        </div>
+        <p class="dialog-subcopy">Akun kasir terpisah dari akun utama dan hanya bisa membuka halaman POS. Dashboard keuangan tetap terkunci untuk mereka.</p>
+
+        <form id="cashierForm">
+            <label class="form-label" for="cashierName">Nama Kasir
+                <input id="cashierName" name="fullName" type="text" maxlength="100" placeholder="Contoh: Siti" required>
+            </label>
+            <div class="form-row-2">
+                <label class="form-label" for="cashierEmail">Email Login
+                    <input id="cashierEmail" name="email" type="email" maxlength="160" placeholder="kasir@toko.com" required>
+                </label>
+                <label class="form-label" for="cashierPassword">Kata Sandi
+                    <input id="cashierPassword" name="password" type="password" minlength="6" autocomplete="new-password" placeholder="Minimal 6 karakter" required>
+                </label>
+            </div>
+            <p class="form-error" id="cashierError" role="alert" hidden></p>
+            <div class="dialog-actions">
+                <button class="button button-primary" id="saveCashierBtn" type="submit">Tambah Akun Kasir</button>
+            </div>
+        </form>
+
+        <div class="cashier-dialog-head">
+            <strong>Akun kasir aktif</strong>
+            <span class="cashier-count-pill" id="cashierCount">0 akun</span>
+        </div>
+        <div class="cashier-account-list" id="cashierAccountList" aria-live="polite"></div>
     </dialog>
 </body>
 </html>
