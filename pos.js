@@ -46,6 +46,7 @@
             'checkoutError', 'btnConfirmPayment',
             'receiptModal', 'receiptContent', 'btnPrintReceipt', 'btnSendWa', 'waPhone',
             'productsModal', 'productForm', 'productId', 'productFormTitle', 'pName', 'pSku',
+            'pIconFile', 'pIconPreview', 'btnClearIcon',
             'pBarcode', 'pSell', 'pCost', 'pStock', 'pMinStock', 'pCategory', 'pUnit', 'pWeighable',
             'productError', 'btnResetProduct', 'btnSaveProduct', 'productList',
             'weighModal', 'weighTitle', 'weighProductName', 'weighProductPrice', 'weighModeQty',
@@ -322,6 +323,12 @@
         const name = String(product.name || '').toLowerCase();
         const category = String(product.category || '').toUpperCase();
 
+        // Ikon kustom per produk (hasil unggah PNG di form produk) selalu diutamakan.
+        const customIcon = String(product.icon_url || '').trim();
+        if (customIcon) {
+            return `<img class="pos-product-icon-img" src="${escapeHtml(customIcon)}" width="64" height="64" alt="" loading="lazy" decoding="async">`;
+        }
+
         const isProduce = category === 'SAYUR_DAUN' || category === 'BUMBU_TIMBANG';
         const fallback = category === 'BUMBU_TIMBANG' ? 'cayenne-pepper' : 'collard-greens';
         const vegFile = vegIconFile(name) || (isProduce ? fallback : '');
@@ -386,8 +393,13 @@
         els.productList.innerHTML = state.products.map((product) => `
             <tr>
                 <td>
-                    <strong>${escapeHtml(product.name)}</strong><br>
-                    <span class="pos-product-meta">${escapeHtml(product.sku || '-')} · ${escapeHtml(product.barcode || 'tanpa barcode')}${product.is_active ? '' : ' · nonaktif'}</span>
+                    <div class="pos-table-product">
+                        <span class="pos-table-icon" aria-hidden="true">${productIcon(product)}</span>
+                        <span>
+                            <strong>${escapeHtml(product.name)}</strong><br>
+                            <span class="pos-product-meta">${escapeHtml(product.sku || '-')} · ${escapeHtml(product.barcode || 'tanpa barcode')}${product.is_active ? '' : ' · nonaktif'}</span>
+                        </span>
+                    </div>
                 </td>
                 <td class="numeric">${formatMoney(product.price_sell)}<br><span class="pos-product-meta">per ${escapeHtml(product.unit || 'PCS')}</span></td>
                 <td class="numeric">${formatMoney(product.price_cost)}</td>
@@ -1243,12 +1255,98 @@
 
     // ================= FORM PRODUK =================
 
+    // Draf ikon kustom untuk form produk (data URL PNG hasil resize di browser).
+    let productIconDraft = '';
+
+    const ICON_MAX_SIZE = 128;          // px, sisi terpanjang
+    const ICON_MAX_SOURCE_BYTES = 5 * 1024 * 1024; // batas file mentah yang diterima
+
+    function renderProductIconPreview() {
+        const box = els.pIconPreview;
+        if (!box) return;
+        if (productIconDraft) {
+            box.innerHTML = `<img class="pos-product-icon-img" src="${escapeHtml(productIconDraft)}" width="64" height="64" alt="">`;
+            box.classList.add('is-custom');
+            return;
+        }
+        box.classList.remove('is-custom');
+        const preview = productIcon({
+            name: els.pName?.value || '',
+            category: els.pCategory?.value || '',
+            icon_url: ''
+        });
+        box.innerHTML = preview;
+    }
+
+    function readFileAsDataUrl(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Perkecil gambar ke maksimal ICON_MAX_SIZE agar payload API & database tetap ringan.
+    function resizeImageDataUrl(dataUrl) {
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                const scale = Math.min(1, ICON_MAX_SIZE / Math.max(img.width, img.height));
+                const width = Math.max(1, Math.round(img.width * scale));
+                const height = Math.max(1, Math.round(img.height * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return reject(new Error('Canvas tidak didukung browser ini.'));
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.onerror = () => reject(new Error('File bukan gambar yang valid.'));
+            img.src = dataUrl;
+        });
+    }
+
+    async function handleIconFileChange(event) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        if (!/^image\/(png|jpeg|webp)$/i.test(file.type)) {
+            showToast('Gunakan gambar PNG, JPG, atau WebP.', true);
+            event.target.value = '';
+            return;
+        }
+        if (file.size > ICON_MAX_SOURCE_BYTES) {
+            showToast('Ukuran file terlalu besar. Maksimal 5 MB.', true);
+            event.target.value = '';
+            return;
+        }
+        try {
+            const raw = await readFileAsDataUrl(file);
+            productIconDraft = await resizeImageDataUrl(raw);
+            renderProductIconPreview();
+            showToast('Ikon siap disimpan. Klik Simpan/Update Produk.');
+        } catch (err) {
+            showToast(err.message, true);
+        } finally {
+            event.target.value = '';
+        }
+    }
+
+    function clearProductIconDraft() {
+        productIconDraft = '';
+        renderProductIconPreview();
+    }
+
     function resetProductForm() {
         els.productForm.reset();
         els.productId.value = '';
         els.pCategory.value = 'SAYUR_DAUN';
         els.pUnit.value = 'KG';
         els.pWeighable.checked = true;
+        productIconDraft = '';
+        renderProductIconPreview();
         els.productFormTitle.textContent = 'Tambah Produk';
         els.btnSaveProduct.textContent = 'Simpan Produk';
         els.productError.hidden = true;
@@ -1268,6 +1366,8 @@
         els.pCategory.value = product.category || 'UMUM';
         els.pUnit.value = product.unit || 'PCS';
         els.pWeighable.checked = Boolean(product.is_weighable);
+        productIconDraft = String(product.icon_url || '');
+        renderProductIconPreview();
         els.productError.hidden = true;
         els.productForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -1287,7 +1387,8 @@
             min_stock: Math.max(0, Number(els.pMinStock.value) || 0),
             category: els.pCategory.value || 'UMUM',
             unit: els.pUnit.value || 'PCS',
-            is_weighable: els.pWeighable.checked
+            is_weighable: els.pWeighable.checked,
+            icon_url: productIconDraft || null
         };
         try {
             if (productId) {
@@ -1392,6 +1493,11 @@
             loadProducts().catch((err) => showToast(err.message, true));
             openModal('productsModal');
         });
+
+        els.pIconFile?.addEventListener('change', handleIconFileChange);
+        els.btnClearIcon?.addEventListener('click', clearProductIconDraft);
+        els.pName?.addEventListener('input', renderProductIconPreview);
+        els.pCategory?.addEventListener('change', renderProductIconPreview);
 
         // Timangan / nominal manual
         els.weighModeQty.addEventListener('click', () => setWeighMode('qty'));

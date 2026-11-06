@@ -228,6 +228,20 @@
                         <span>Nama Produk</span>
                         <input id="pName" type="text" maxlength="160" required placeholder="Contoh: Kopi Susu 250ml">
                     </label>
+                    <div class="pos-field">
+                        <span>Ikon Produk <em>(opsional, PNG/JPG/WebP)</em></span>
+                        <div class="pos-icon-picker">
+                            <span class="pos-icon-preview" id="pIconPreview" aria-hidden="true"></span>
+                            <div class="pos-icon-actions">
+                                <label class="pos-button pos-button-ghost pos-icon-upload">
+                                    <input id="pIconFile" type="file" accept="image/png,image/jpeg,image/webp">
+                                    <span>Pilih Gambar</span>
+                                </label>
+                                <button type="button" class="pos-button pos-button-ghost" id="btnClearIcon">Hapus Ikon</button>
+                            </div>
+                        </div>
+                        <small class="pos-icon-hint">Kosongkan untuk memakai ikon sayuran otomatis. Gambar akan diperkecil otomatis ke 128×128 px.</small>
+                    </div>
                     <div class="pos-field-row">
                         <label class="pos-field">
                             <span>SKU</span>

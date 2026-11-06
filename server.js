@@ -6,7 +6,8 @@ const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
-app.use(express.json());
+// Limit dinaikkan agar ikon produk kustom (data URL gambar) muat di payload JSON.
+app.use(express.json({ limit: '1mb' }));
 app.use(cors());
 app.use(express.static(__dirname));
 
@@ -255,6 +256,8 @@ async function ensureDatabaseReady() {
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
+            // Ikon produk kustom (data URL PNG/JPEG/WebP) opsional per produk.
+            await pool.query(`ALTER TABLE pos_products ADD COLUMN IF NOT EXISTS icon_url TEXT`);
             await pool.query(`CREATE INDEX IF NOT EXISTS pos_products_user_idx ON pos_products (user_id)`);
             await pool.query(`
                 CREATE UNIQUE INDEX IF NOT EXISTS pos_products_barcode_unique_idx
@@ -1951,13 +1954,14 @@ app.post('/api/pos/products', async (req, res) => {
         const priceCost = toMoney(req.body?.price_cost);
         const stock = toQty(req.body?.stock);
         const minStock = toQty(req.body?.min_stock) || 0;
+        const iconUrl = normalizeIconDataUrl(req.body?.icon_url);
 
         const result = await pool.query(
             `INSERT INTO pos_products
-                (user_id, sku, barcode, name, category, unit, is_weighable, price_sell, price_cost, stock, min_stock)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                (user_id, sku, barcode, name, category, unit, is_weighable, price_sell, price_cost, stock, min_stock, icon_url)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              RETURNING *`,
-            [posOwnerId(user), sku, barcode, name, category, unit, isWeighable, priceSell, priceCost, stock, minStock]
+            [posOwnerId(user), sku, barcode, name, category, unit, isWeighable, priceSell, priceCost, stock, minStock, iconUrl]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -1993,15 +1997,16 @@ app.put('/api/pos/products/:id', async (req, res) => {
         const stock = req.body?.stock !== undefined ? toQty(req.body.stock) : current.stock;
         const minStock = req.body?.min_stock !== undefined ? toQty(req.body.min_stock) : current.min_stock;
         const isActive = req.body?.is_active !== undefined ? Boolean(req.body.is_active) : current.is_active;
+        const iconUrl = req.body?.icon_url !== undefined ? normalizeIconDataUrl(req.body.icon_url) : current.icon_url;
 
         const result = await pool.query(
             `UPDATE pos_products
              SET sku = $1, barcode = $2, name = $3, category = $4, unit = $5, is_weighable = $6,
                  price_sell = $7, price_cost = $8, stock = $9, min_stock = $10,
-                 is_active = $11, updated_at = CURRENT_TIMESTAMP
-             WHERE id = $12 AND user_id = $13
+                 is_active = $11, icon_url = $12, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $13 AND user_id = $14
              RETURNING *`,
-            [sku, barcode, name, category, unit, isWeighable, priceSell, priceCost, stock, minStock, isActive, productId, posOwnerId(user)]
+            [sku, barcode, name, category, unit, isWeighable, priceSell, priceCost, stock, minStock, isActive, iconUrl, productId, posOwnerId(user)]
         );
         res.json(result.rows[0]);
     } catch (err) {
@@ -2792,6 +2797,22 @@ function toUnitLabel(value, fallback = 'PCS') {
 function toCategoryLabel(value) {
     const label = String(value || '').trim().toUpperCase().slice(0, 50);
     return label || 'UMUM';
+}
+
+// Ikon produk kustom dikirim sebagai data URL gambar (hasil resize di browser).
+// Batasi ukuran agar payload API dan kolom database tetap wajar.
+const POS_ICON_MAX_LENGTH = 400 * 1024; // ~400 KB
+
+function normalizeIconDataUrl(value) {
+    const raw = typeof value === 'string' ? value.trim() : '';
+    if (!raw) return null;
+    if (!/^data:image\/(png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(raw)) return null;
+    if (raw.length > POS_ICON_MAX_LENGTH) {
+        const err = new Error('Ukuran ikon terlalu besar. Gunakan gambar PNG kecil (maksimal ~300 KB).');
+        err.statusCode = 400;
+        throw err;
+    }
+    return raw;
 }
 
 function buildPosInvoiceNo() {
