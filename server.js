@@ -1954,7 +1954,7 @@ app.post('/api/pos/products', async (req, res) => {
         const priceCost = toMoney(req.body?.price_cost);
         const stock = toQty(req.body?.stock);
         const minStock = toQty(req.body?.min_stock) || 0;
-        const iconUrl = normalizeIconDataUrl(req.body?.icon_url);
+        const iconUrl = normalizeIconValue(req.body?.icon_url);
 
         const result = await pool.query(
             `INSERT INTO pos_products
@@ -1997,7 +1997,7 @@ app.put('/api/pos/products/:id', async (req, res) => {
         const stock = req.body?.stock !== undefined ? toQty(req.body.stock) : current.stock;
         const minStock = req.body?.min_stock !== undefined ? toQty(req.body.min_stock) : current.min_stock;
         const isActive = req.body?.is_active !== undefined ? Boolean(req.body.is_active) : current.is_active;
-        const iconUrl = req.body?.icon_url !== undefined ? normalizeIconDataUrl(req.body.icon_url) : current.icon_url;
+        const iconUrl = req.body?.icon_url !== undefined ? normalizeIconValue(req.body.icon_url) : current.icon_url;
 
         const result = await pool.query(
             `UPDATE pos_products
@@ -2799,13 +2799,17 @@ function toCategoryLabel(value) {
     return label || 'UMUM';
 }
 
-// Ikon produk kustom dikirim sebagai data URL gambar (hasil resize di browser).
-// Batasi ukuran agar payload API dan kolom database tetap wajar.
+// Ikon produk bisa berupa:
+// - data URL gambar (hasil unggah & resize di browser)
+// - path lokal repo, mis. icons/vegetables/carrot.png
+// - token katalog sayur, mis. sayur:daun-singkong
 const POS_ICON_MAX_LENGTH = 400 * 1024; // ~400 KB
 
-function normalizeIconDataUrl(value) {
+function normalizeIconValue(value) {
     const raw = typeof value === 'string' ? value.trim() : '';
     if (!raw) return null;
+    if (/^sayur:[a-z0-9-]{1,64}$/i.test(raw)) return raw.toLowerCase();
+    if (/^(icons|assets)\/(?![^/]*\.\.)[A-Za-z0-9/_.-]+\.(png|webp|svg|jpe?g)$/i.test(raw)) return raw;
     if (!/^data:image\/(png|jpeg|jpg|webp|gif);base64,[a-z0-9+/=\s]+$/i.test(raw)) return null;
     if (raw.length > POS_ICON_MAX_LENGTH) {
         const err = new Error('Ukuran ikon terlalu besar. Gunakan gambar PNG kecil (maksimal ~300 KB).');

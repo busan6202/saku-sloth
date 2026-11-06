@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="pos.css">
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js" defer></script>
+    <script src="sayur-nusantara.js" defer></script>
     <script src="pos.js" defer></script>
 </head>
 <body class="pos-body">
@@ -241,6 +242,14 @@
                             </div>
                         </div>
                         <small class="pos-icon-hint">Kosongkan untuk memakai ikon sayuran otomatis. Gambar akan diperkecil otomatis ke 128×128 px.</small>
+                        <button type="button" class="pos-button pos-button-ghost pos-sayur-toggle" id="btnToggleSayurPicker">🌿 Pilih dari katalog sayur</button>
+                        <div class="pos-sayur-picker" id="sayurPicker" hidden>
+                            <div class="pos-sayur-picker-head">
+                                <input id="sayurPickerSearch" type="search" placeholder="Cari sayur / nama lokal…" autocomplete="off" aria-label="Cari ikon sayur">
+                                <button type="button" class="pos-icon-button" id="btnCloseSayurPicker" aria-label="Tutup katalog">✕</button>
+                            </div>
+                            <div class="pos-sayur-picker-grid" id="sayurPickerGrid"></div>
+                        </div>
                     </div>
                     <div class="pos-field-row">
                         <label class="pos-field">

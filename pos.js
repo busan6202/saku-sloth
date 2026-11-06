@@ -46,7 +46,8 @@
             'checkoutError', 'btnConfirmPayment',
             'receiptModal', 'receiptContent', 'btnPrintReceipt', 'btnSendWa', 'waPhone',
             'productsModal', 'productForm', 'productId', 'productFormTitle', 'pName', 'pSku',
-            'pIconFile', 'pIconPreview', 'btnClearIcon',
+            'pIconFile', 'pIconPreview', 'btnClearIcon', 'btnToggleSayurPicker', 'sayurPicker',
+            'sayurPickerGrid', 'sayurPickerSearch', 'btnCloseSayurPicker',
             'pBarcode', 'pSell', 'pCost', 'pStock', 'pMinStock', 'pCategory', 'pUnit', 'pWeighable',
             'productError', 'btnResetProduct', 'btnSaveProduct', 'productList',
             'weighModal', 'weighTitle', 'weighProductName', 'weighProductPrice', 'weighModeQty',
@@ -319,21 +320,53 @@
         return '';
     }
 
+    function iconImgTag(src, fallback = '', className = 'pos-product-icon-img') {
+        const fb = fallback
+            ? ` data-fb="${escapeHtml(fallback)}" onerror="this.onerror=null;this.src=this.dataset.fb"`
+            : '';
+        return `<img class="${className}" src="${escapeHtml(src)}" width="64" height="64" alt="" loading="lazy" decoding="async"${fb}>`;
+    }
+
+    // Ubah nilai icon_url tersimpan (data URL, path lokal, atau token sayur:<id>) jadi sumber gambar.
+    function resolveIconValue(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return null;
+        if (raw.toLowerCase().startsWith('sayur:')) {
+            const item = window.SayurIcons?.byId(raw.slice(6));
+            if (!item) return null;
+            return window.SayurIcons.iconFor(item);
+        }
+        if (/^data:image\//i.test(raw)) return { src: raw, fallback: '', isLocal: false };
+        if (/^(icons|assets)\/(?![^/]*\.\.)[A-Za-z0-9/_.-]+\.(png|webp|svg|jpe?g)$/i.test(raw)) {
+            return { src: raw, fallback: '', isLocal: true };
+        }
+        return null;
+    }
+
     function productIcon(product) {
         const name = String(product.name || '').toLowerCase();
         const category = String(product.category || '').toUpperCase();
 
-        // Ikon kustom per produk (hasil unggah PNG di form produk) selalu diutamakan.
-        const customIcon = String(product.icon_url || '').trim();
-        if (customIcon) {
-            return `<img class="pos-product-icon-img" src="${escapeHtml(customIcon)}" width="64" height="64" alt="" loading="lazy" decoding="async">`;
+        // 1) Ikon yang dipilih pengguna (unggahan atau katalog) selalu diutamakan.
+        const custom = resolveIconValue(product.icon_url);
+        if (custom) return iconImgTag(custom.src, custom.fallback);
+
+        // 2) Ikon PNG kurasi berdasarkan nama produk (open-crop-icons).
+        const isProduce = category === 'SAYUR_DAUN' || category === 'BUMBU_TIMBANG';
+        const vegFile = vegIconFile(name);
+        if (vegFile) return iconImgTag(`icons/vegetables/${vegFile}.png`);
+
+        // 3) Katalog Sayuran Nusantara (hybrid: PNG lokal atau badge SVG).
+        const sayur = window.SayurIcons?.findByName(name);
+        if (sayur) {
+            const icon = window.SayurIcons.iconFor(sayur);
+            return iconImgTag(icon.src, icon.fallback);
         }
 
-        const isProduce = category === 'SAYUR_DAUN' || category === 'BUMBU_TIMBANG';
-        const fallback = category === 'BUMBU_TIMBANG' ? 'cayenne-pepper' : 'collard-greens';
-        const vegFile = vegIconFile(name) || (isProduce ? fallback : '');
-        if (vegFile) {
-            return `<img class="pos-product-icon-img" src="icons/vegetables/${vegFile}.png" width="64" height="64" alt="" loading="lazy" decoding="async">`;
+        // 4) Ikon generik untuk produk non-sayur.
+        if (isProduce) {
+            const fallbackFile = category === 'BUMBU_TIMBANG' ? 'cayenne-pepper' : 'collard-greens';
+            return iconImgTag(`icons/vegetables/${fallbackFile}.png`);
         }
 
         let key = 'package';
@@ -373,15 +406,26 @@
         els.productGrid.innerHTML = visible.map((product) => {
             const stock = Number(product.stock) || 0;
             return `
-                <button type="button" class="pos-product-card" data-product-id="${product.id}" ${stock <= 0 ? 'disabled' : ''}>
-                    <span class="pos-product-icon" aria-hidden="true">${productIcon(product)}</span>
-                    <span class="pos-product-name">${escapeHtml(product.name)}</span>
-                    <span class="pos-product-meta">${escapeHtml(product.category || 'UMUM')} · ${escapeHtml(product.sku || product.barcode || 'Tanpa SKU')}</span>
-                    <span class="pos-product-price">${formatMoney(product.price_sell)}<small> / ${escapeHtml(product.unit || 'PCS')}</small></span>
-                    <span class="pos-stock-pill ${stockClass(product)}">${stock <= 0 ? 'Stok habis' : `Stok ${escapeHtml(stockLabel(product))}`}${product.is_weighable ? ' ⚖️' : ''}</span>
-                </button>
+                <div class="pos-product-cell">
+                    <button type="button" class="pos-product-card" data-product-id="${product.id}" ${stock <= 0 ? 'disabled' : ''}>
+                        <span class="pos-product-icon" aria-hidden="true">${productIcon(product)}</span>
+                        <span class="pos-product-name">${escapeHtml(product.name)}</span>
+                        <span class="pos-product-meta">${escapeHtml(product.category || 'UMUM')} · ${escapeHtml(product.sku || product.barcode || 'Tanpa SKU')}</span>
+                        <span class="pos-product-price">${formatMoney(product.price_sell)}<small> / ${escapeHtml(product.unit || 'PCS')}</small></span>
+                        <span class="pos-stock-pill ${stockClass(product)}">${stock <= 0 ? 'Stok habis' : `Stok ${escapeHtml(stockLabel(product))}`}${product.is_weighable ? ' ⚖️' : ''}</span>
+                    </button>
+                    <button type="button" class="pos-product-edit" data-edit-product="${product.id}" title="Edit ${escapeHtml(product.name)}" aria-label="Edit produk ${escapeHtml(product.name)}">✏️</button>
+                </div>
             `;
         }).join('');
+    }
+
+    // Buka modal Produk langsung dalam mode edit untuk produk tertentu.
+    function openProductEditor(productId) {
+        const product = findProduct(productId);
+        resetProductForm();
+        openModal('productsModal');
+        if (product) fillProductForm(product);
     }
 
     function renderProductList() {
@@ -391,7 +435,7 @@
             return;
         }
         els.productList.innerHTML = state.products.map((product) => `
-            <tr>
+            <tr class="pos-table-row" data-product-row="${product.id}" title="Klik untuk edit produk">
                 <td>
                     <div class="pos-table-product">
                         <span class="pos-table-icon" aria-hidden="true">${productIcon(product)}</span>
@@ -1265,7 +1309,10 @@
         const box = els.pIconPreview;
         if (!box) return;
         if (productIconDraft) {
-            box.innerHTML = `<img class="pos-product-icon-img" src="${escapeHtml(productIconDraft)}" width="64" height="64" alt="">`;
+            const resolved = resolveIconValue(productIconDraft);
+            box.innerHTML = resolved
+                ? iconImgTag(resolved.src, resolved.fallback)
+                : '';
             box.classList.add('is-custom');
             return;
         }
@@ -1276,6 +1323,60 @@
             icon_url: ''
         });
         box.innerHTML = preview;
+    }
+
+    // ---------- Pemilih ikon dari katalog sayur Nusantara ----------
+    const SAYUR_ITEMS = window.SayurIcons?.items || [];
+
+    function sayurDraftId() {
+        return productIconDraft.toLowerCase().startsWith('sayur:')
+            ? productIconDraft.slice(6).toLowerCase()
+            : '';
+    }
+
+    function renderSayurPicker(keyword = '') {
+        const grid = els.sayurPickerGrid;
+        if (!grid) return;
+        const q = keyword.trim().toLowerCase();
+        const visible = q
+            ? SAYUR_ITEMS.filter((item) => {
+                const haystack = `${item.nama} ${item.id} ${(item.alias || []).join(' ')} ${item.kategori}`.toLowerCase();
+                return haystack.includes(q);
+            })
+            : SAYUR_ITEMS;
+        if (visible.length === 0) {
+            grid.innerHTML = '<p class="pos-sayur-empty">Sayuran tidak ditemukan.</p>';
+            return;
+        }
+        const activeId = sayurDraftId();
+        grid.innerHTML = visible.map((item) => {
+            const icon = window.SayurIcons.iconFor(item);
+            const active = item.id === activeId ? ' is-active' : '';
+            return `<button type="button" class="pos-sayur-item${active}" data-sayur-id="${item.id}" title="${escapeHtml(item.nama)}">
+                ${iconImgTag(icon.src, icon.fallback, 'pos-sayur-thumb')}
+                <span>${escapeHtml(item.nama)}</span>
+            </button>`;
+        }).join('');
+    }
+
+    function toggleSayurPicker(force) {
+        const panel = els.sayurPicker;
+        if (!panel) return;
+        const show = force !== undefined ? force : panel.hidden;
+        panel.hidden = !show;
+        if (show) {
+            renderSayurPicker(els.sayurPickerSearch?.value || '');
+            els.sayurPickerSearch?.focus();
+        }
+    }
+
+    function pickSayurIcon(id) {
+        const item = window.SayurIcons?.byId(id);
+        if (!item) return;
+        productIconDraft = window.SayurIcons.tokenFor(item);
+        renderProductIconPreview();
+        renderSayurPicker(els.sayurPickerSearch?.value || '');
+        showToast(`Ikon "${item.nama}" dipakai. Klik Simpan/Update Produk.`);
     }
 
     function readFileAsDataUrl(file) {
@@ -1346,6 +1447,8 @@
         els.pUnit.value = 'KG';
         els.pWeighable.checked = true;
         productIconDraft = '';
+        if (els.sayurPickerSearch) els.sayurPickerSearch.value = '';
+        toggleSayurPicker(false);
         renderProductIconPreview();
         els.productFormTitle.textContent = 'Tambah Produk';
         els.btnSaveProduct.textContent = 'Simpan Produk';
@@ -1367,6 +1470,7 @@
         els.pUnit.value = product.unit || 'PCS';
         els.pWeighable.checked = Boolean(product.is_weighable);
         productIconDraft = String(product.icon_url || '');
+        if (els.sayurPickerSearch) els.sayurPickerSearch.value = '';
         renderProductIconPreview();
         els.productError.hidden = true;
         els.productForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1462,6 +1566,13 @@
         });
 
         els.productGrid.addEventListener('click', (event) => {
+            const editButton = event.target.closest('[data-edit-product]');
+            if (editButton) {
+                loadProducts()
+                    .catch((err) => showToast(err.message, true))
+                    .finally(() => openProductEditor(editButton.dataset.editProduct));
+                return;
+            }
             const card = event.target.closest('[data-product-id]');
             if (card) addToCart(card.dataset.productId);
         });
@@ -1498,6 +1609,16 @@
         els.btnClearIcon?.addEventListener('click', clearProductIconDraft);
         els.pName?.addEventListener('input', renderProductIconPreview);
         els.pCategory?.addEventListener('change', renderProductIconPreview);
+        if (els.btnToggleSayurPicker && SAYUR_ITEMS.length) {
+            els.btnToggleSayurPicker.textContent = `🌿 Pilih dari katalog sayur (${SAYUR_ITEMS.length})`;
+        }
+        els.btnToggleSayurPicker?.addEventListener('click', () => toggleSayurPicker());
+        els.btnCloseSayurPicker?.addEventListener('click', () => toggleSayurPicker(false));
+        els.sayurPickerSearch?.addEventListener('input', () => renderSayurPicker(els.sayurPickerSearch.value));
+        els.sayurPickerGrid?.addEventListener('click', (event) => {
+            const pick = event.target.closest('[data-sayur-id]');
+            if (pick) pickSayurIcon(pick.dataset.sayurId);
+        });
 
         // Timangan / nominal manual
         els.weighModeQty.addEventListener('click', () => setWeighMode('qty'));
@@ -1544,7 +1665,16 @@
                 return;
             }
             const deleteButton = event.target.closest('[data-delete-product]');
-            if (deleteButton) removeProduct(deleteButton.dataset.deleteProduct);
+            if (deleteButton) {
+                removeProduct(deleteButton.dataset.deleteProduct);
+                return;
+            }
+            // Klik baris produk = buka form edit (lebih ramah layar sentuh).
+            const row = event.target.closest('[data-product-row]');
+            if (row) {
+                const product = findProduct(row.dataset.productRow);
+                if (product) fillProductForm(product);
+            }
         });
 
         els.btnReports.addEventListener('click', openReports);

@@ -262,8 +262,14 @@
     gap: 14px;
 }
 
+.pos-product-cell {
+    position: relative;
+    display: flex;
+}
+
 .pos-product-card {
     position: relative;
+    flex: 1;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -286,6 +292,40 @@
     cursor: not-allowed;
     opacity: 0.55;
     transform: none;
+}
+
+/* Tombol edit kecil di pojok kartu produk (selalu terlihat untuk layar sentuh). */
+.pos-product-edit {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color 0.18s, transform 0.18s var(--ease-spring);
+}
+
+.pos-product-edit:hover {
+    border-color: var(--color-accent-deep);
+    transform: scale(1.06);
+}
+
+.pos-table-row {
+    cursor: pointer;
+}
+
+.pos-table-row:hover {
+    background: var(--surface-soft);
 }
 
 .pos-product-icon {
@@ -900,6 +940,106 @@
     line-height: 1.4;
 }
 
+.pos-sayur-toggle {
+    align-self: flex-start;
+    margin-top: 8px;
+}
+
+.pos-sayur-picker {
+    margin-top: 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-input);
+    background: var(--surface);
+    padding: 10px;
+}
+
+.pos-sayur-picker[hidden] {
+    display: none;
+}
+
+.pos-sayur-picker-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.pos-sayur-picker-head input {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 11px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    font-size: 12.5px;
+    font-weight: 500;
+    outline: none;
+}
+
+.pos-sayur-picker-head input:focus {
+    border-color: var(--color-focus);
+}
+
+.pos-sayur-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+    gap: 6px;
+    max-height: 236px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.pos-sayur-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 6px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--surface-soft);
+    cursor: pointer;
+    transition: border-color 0.16s, background 0.16s, transform 0.16s var(--ease-spring);
+}
+
+.pos-sayur-item:hover {
+    border-color: var(--color-accent-deep);
+    transform: translateY(-2px);
+}
+
+.pos-sayur-item.is-active {
+    border-color: var(--color-accent-deep);
+    background: var(--surface-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent-deep) 25%, transparent);
+}
+
+.pos-sayur-item span {
+    font-size: 9.5px;
+    font-weight: 600;
+    line-height: 1.2;
+    text-align: center;
+    color: var(--muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.pos-sayur-thumb {
+    width: 40px;
+    height: 40px;
+    display: block;
+    object-fit: contain;
+}
+
+.pos-sayur-empty {
+    grid-column: 1 / -1;
+    margin: 6px 0;
+    font-size: 12px;
+    color: var(--muted);
+    text-align: center;
+}
+
 .pos-table-product {
     display: flex;
     align-items: center;
@@ -939,6 +1079,21 @@
 .pos-product-table-wrap,
 .pos-report-table-wrap {
     overflow-x: auto;
+}
+
+/* Kolom aksi tetap terlihat saat tabel produk digeser di layar sempit. */
+.pos-product-table-wrap .pos-table th:last-child,
+.pos-product-table-wrap .pos-table td:last-child {
+    position: sticky;
+    right: 0;
+    background: var(--surface);
+    box-shadow: -8px 0 12px -12px rgba(0, 0, 0, 0.35);
+}
+
+.pos-table .pos-mini-button {
+    padding: 5px 10px;
+    font-size: 11.5px;
+    white-space: nowrap;
 }
 
 .pos-table {
