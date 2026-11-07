@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Saku Harga">
+  <rect width="512" height="512" rx="116" fill="#FAF7F0"/>
+  <rect x="28" y="28" width="456" height="456" rx="96" fill="#C9E265" stroke="#161B26" stroke-width="14"/>
+  <!-- Kartu label harga miring -->
+  <g transform="translate(256 260) rotate(-8) translate(-165 -115)">
+    <path d="M24 0h236l70 115-70 115H24a24 24 0 0 1-24-24V24A24 24 0 0 1 24 0Z" fill="#FFFDF8" stroke="#161B26" stroke-width="14" stroke-linejoin="round"/>
+    <!-- Lubang gantung -->
+    <circle cx="56" cy="115" r="22" fill="#FAF7F0" stroke="#161B26" stroke-width="12"/>
+    <!-- Garis stabilo pir -->
+    <rect x="98" y="132" width="152" height="30" rx="8" fill="#C9E265"/>
+    <!-- Tulisan Rp -->
+    <text x="104" y="142" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="88" font-weight="800" fill="#161B26" letter-spacing="-3">Rp</text>
+  </g>
+</svg>

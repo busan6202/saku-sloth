@@ -89,6 +89,10 @@ const PUBLIC_STATIC_FILES = new Set([
     'pos.html',
     'pos.css',
     'pos.js',
+    'harga.html',
+    'harga.css',
+    'harga.js',
+    'sw.js',
     'sayur-nusantara.js',
     'favicon.ico',
     'manifest.webmanifest'
@@ -109,9 +113,20 @@ app.get('/:file', async (req, res, next) => {
     try {
         const name = String(req.params.file || '');
         if (name === 'pos') return res.sendFile(path.join(__dirname, 'pos.html'));
+        if (name === 'harga') {
+            if (await isCashierSession(req)) return res.redirect('/pos');
+            return res.sendFile(path.join(__dirname, 'harga.html'));
+        }
         if (!PUBLIC_STATIC_FILES.has(name)) return next();
         if (name === 'index.html' && await isCashierSession(req)) {
             return res.redirect('/pos');
+        }
+        if (name === 'harga.html' && await isCashierSession(req)) {
+            return res.redirect('/pos');
+        }
+        if (name === 'sw.js') {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Service-Worker-Allowed', '/');
         }
         res.sendFile(path.join(__dirname, name));
     } catch (err) {
@@ -2077,6 +2092,16 @@ app.get('/dashboard', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// PWA "Saku Harga" — ubah harga produk cepat dari ponsel (khusus pemilik toko).
+app.get('/harga', async (req, res, next) => {
+    try {
+        if (await isCashierSession(req)) return res.redirect('/pos');
+        res.sendFile(path.join(__dirname, 'harga.html'));
+    } catch (err) {
+        next(err);
+    }
+});
+
 // API: Daftar produk POS (pencarian nama/SKU/barcode)
 app.get('/api/pos/products', async (req, res) => {
     try {
@@ -2096,6 +2121,34 @@ app.get('/api/pos/products', async (req, res) => {
         query += ' ORDER BY name ASC';
         const result = await pool.query(query, params);
         res.json(result.rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Ringkasan harga produk untuk PWA "Saku Harga".
+// Payload sengaja ringan (tanpa ikon/deskripsi) supaya sinkronisasi harga cepat & hemat kuota.
+// Dukung mode delta lewat ?since=<epoch-ms> agar hanya baris yang berubah yang dikirim ulang.
+app.get('/api/pos/products/price-sync', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+
+        res.setHeader('Cache-Control', 'no-store');
+        const params = [posOwnerId(user)];
+        let query = `SELECT id, name, sku, unit, category, is_weighable, is_active,
+                            price_sell, price_cost,
+                            EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_ms
+                     FROM pos_products WHERE user_id = $1`;
+        const since = Number(req.query.since);
+        if (Number.isFinite(since) && since > 0) {
+            params.push(since);
+            query += ` AND EXTRACT(EPOCH FROM updated_at) * 1000 > $${params.length}`;
+        }
+        query += ' ORDER BY name ASC';
+        const result = await pool.query(query, params);
+        res.json({ serverTime: Date.now(), products: result.rows });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -2201,6 +2254,52 @@ app.put('/api/pos/products/:id', async (req, res) => {
         if (err.code === '23505') {
             return res.status(409).json({ error: 'SKU atau barcode sudah dipakai produk lain.' });
         }
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// API: Ubah cepat harga jual & HPP produk (khusus pemilik toko, bukan kasir).
+// Dipakai PWA "Saku Harga" supaya pemilik bisa memperbarui harga tanpa membuka layar POS.
+app.put('/api/pos/products/:id/price', async (req, res) => {
+    try {
+        await ensureDatabaseReady();
+        const user = await resolveAuthUser(req);
+        if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        if (isCashier(user)) return res.status(403).json({ error: 'Hanya pemilik toko yang dapat mengubah harga.' });
+
+        const productId = Number(req.params.id);
+        if (!Number.isFinite(productId)) return res.status(400).json({ error: 'ID produk tidak valid.' });
+
+        const hasSell = req.body?.price_sell !== undefined && req.body?.price_sell !== null && req.body?.price_sell !== '';
+        const hasCost = req.body?.price_cost !== undefined && req.body?.price_cost !== null && req.body?.price_cost !== '';
+        if (!hasSell && !hasCost) return res.status(400).json({ error: 'Isi minimal harga jual atau HPP.' });
+
+        const owned = await pool.query('SELECT id FROM pos_products WHERE id = $1 AND user_id = $2', [productId, posOwnerId(user)]);
+        if (owned.rows.length === 0) return res.status(404).json({ error: 'Produk tidak ditemukan.' });
+
+        const sets = [];
+        const values = [];
+        if (hasSell) {
+            values.push(Math.max(0, toMoney(req.body.price_sell)));
+            sets.push(`price_sell = $${values.length}`);
+        }
+        if (hasCost) {
+            values.push(Math.max(0, toMoney(req.body.price_cost)));
+            sets.push(`price_cost = $${values.length}`);
+        }
+        values.push(productId, posOwnerId(user));
+
+        const result = await pool.query(
+            `UPDATE pos_products
+             SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $${values.length - 1} AND user_id = $${values.length}
+             RETURNING id, name, sku, unit, category, is_weighable, is_active,
+                       price_sell, price_cost,
+                       EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_ms`,
+            values
+        );
+        res.json(result.rows[0]);
+    } catch (err) {
         res.status(400).json({ error: err.message });
     }
 });

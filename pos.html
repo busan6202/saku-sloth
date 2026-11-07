@@ -6,6 +6,9 @@
     <meta name="theme-color" content="#f5f6f2">
     <meta name="description" content="Saku Kasir — modul POS terpisah untuk mencatat penjualan, stok, dan laba otomatis ke Saku Harian.">
     <title>Saku Kasir — POS Penjualan</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/app-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/app-icon.png">
     <link rel="preconnect" href="https://api.fontshare.com">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -54,6 +57,7 @@
             </div>
 
             <nav class="pos-topbar-actions" aria-label="Menu kasir">
+                <a class="pos-button pos-button-ghost" id="btnSakuHarga" href="/harga" title="Ubah harga produk cepat (Saku Harga)">🏷️ Harga</a>
                 <button type="button" class="pos-button pos-button-ghost" id="btnManageProducts">📦 Produk</button>
                 <button type="button" class="pos-button pos-button-ghost" id="btnPurchase">📥 Kulakan</button>
                 <button type="button" class="pos-button pos-button-ghost" id="btnSpoilage">🥀 Susut</button>

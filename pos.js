@@ -46,8 +46,21 @@
         payMethod: 'CASH',
         pendingSale: null,
         lastSale: null,
-        reportRows: []
+        reportRows: [],
+        lastPriceSyncMs: 0,
+        priceSyncing: false
     };
+
+    const PRICE_SYNC_INTERVAL_MS = 15_000;
+    const PRICE_CHANNEL_NAME = 'saku-pos-prices';
+    const PRICE_BUMP_KEY = 'saku-pos-price-bump';
+    let priceSyncTimer = null;
+    let priceChannel = null;
+    try {
+        if ('BroadcastChannel' in window) {
+            priceChannel = new BroadcastChannel(PRICE_CHANNEL_NAME);
+        }
+    } catch {}
 
     const els = {};
 
@@ -58,7 +71,7 @@
             'posSearch', 'btnClearSearch', 'productGrid', 'productCount', 'emptyCatalog',
             'cartItems', 'cartEmpty', 'cartQty', 'cartCost', 'cartProfit', 'cartTotal',
             'btnClearCart', 'btnCheckout', 'checkoutCount',
-            'btnManageProducts', 'btnReports', 'btnSettings', 'btnTheme',
+            'btnSakuHarga', 'btnManageProducts', 'btnReports', 'btnSettings', 'btnTheme',
             'checkoutModal', 'checkoutTotal', 'payMethodCash', 'payMethodQris',
             'cashPane', 'qrisPane', 'cashInput', 'quickCash', 'changeText',
             'qrisCanvas', 'qrisFallback', 'qrisHint', 'customerName', 'customerPhone',
@@ -254,6 +267,12 @@
 
     async function loadProducts() {
         state.products = await api('/api/pos/products?include_inactive=1');
+        let maxMs = state.lastPriceSyncMs || 0;
+        for (const product of state.products) {
+            const ms = product.updated_at ? new Date(product.updated_at).getTime() : 0;
+            if (Number.isFinite(ms) && ms > maxMs) maxMs = ms;
+        }
+        state.lastPriceSyncMs = maxMs;
         for (const [key, line] of [...state.cart.entries()]) {
             if (!state.products.some((product) => Number(product.id) === Number(line.productId))) {
                 state.cart.delete(key);
@@ -262,6 +281,81 @@
         renderCatalog();
         renderCart();
         renderProductList();
+    }
+
+    function applySyncedPrices(rows) {
+        if (!Array.isArray(rows) || rows.length === 0) return false;
+        let hasNewUnknownProduct = false;
+        let changed = false;
+
+        for (const row of rows) {
+            const target = state.products.find((p) => Number(p.id) === Number(row.id));
+            const updatedMs = Number(row.updated_ms) || 0;
+            if (updatedMs > state.lastPriceSyncMs) {
+                state.lastPriceSyncMs = updatedMs;
+            }
+            if (!target) {
+                hasNewUnknownProduct = true;
+                continue;
+            }
+            const nextSell = Number(row.price_sell);
+            const nextCost = Number(row.price_cost);
+            if (
+                Number(target.price_sell) !== nextSell ||
+                Number(target.price_cost) !== nextCost ||
+                target.name !== row.name ||
+                target.unit !== row.unit ||
+                target.category !== row.category ||
+                Boolean(target.is_active) !== Boolean(row.is_active)
+            ) {
+                target.price_sell = nextSell;
+                target.price_cost = nextCost;
+                if (row.name !== undefined) target.name = row.name;
+                if (row.sku !== undefined) target.sku = row.sku;
+                if (row.unit !== undefined) target.unit = row.unit;
+                if (row.category !== undefined) target.category = row.category;
+                if (row.is_weighable !== undefined) target.is_weighable = Boolean(row.is_weighable);
+                if (row.is_active !== undefined) target.is_active = Boolean(row.is_active);
+                changed = true;
+            }
+        }
+
+        if (hasNewUnknownProduct) {
+            loadProducts().catch(() => {});
+            return true;
+        }
+        if (changed) {
+            renderCatalog();
+            renderCart();
+            renderProductList();
+        }
+        return changed;
+    }
+
+    // Sinkronisasi ringan (~15 detik) agar perubahan harga dari PWA Saku Harga langsung tampil di kasir.
+    async function syncProductPrices() {
+        if (state.priceSyncing || !state.user) return;
+        state.priceSyncing = true;
+        try {
+            const since = state.lastPriceSyncMs > 0 ? `?since=${encodeURIComponent(Math.floor(state.lastPriceSyncMs))}` : '';
+            const data = await api(`/api/pos/products/price-sync${since}`);
+            if (Array.isArray(data?.products) && data.products.length > 0) {
+                applySyncedPrices(data.products);
+            }
+        } catch {
+            // Abaikan kegagalan sementara saat polling latar belakang
+        } finally {
+            state.priceSyncing = false;
+        }
+    }
+
+    function startPriceSyncPolling() {
+        if (priceSyncTimer) clearInterval(priceSyncTimer);
+        priceSyncTimer = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                syncProductPrices();
+            }
+        }, PRICE_SYNC_INTERVAL_MS);
     }
 
     // Ikon PNG dari open-crop-icons (https://github.com/openfarmcc/open-crop-icons, lisensi CC0).
@@ -1194,6 +1288,7 @@
             els.posBrandLink.href = cashier ? 'pos.html' : 'index.html';
             els.posBrandLink.title = cashier ? 'Saku Kasir' : 'Kembali ke dashboard keuangan';
         }
+        if (els.btnSakuHarga) els.btnSakuHarga.hidden = cashier;
         if (els.btnSettings) els.btnSettings.hidden = cashier;
         if (els.cashierSection) els.cashierSection.hidden = cashier;
         if (els.gateLoginLink) els.gateLoginLink.hidden = cashier;
@@ -1752,6 +1847,33 @@
                 if (open) closeModal(open.id);
             }
         });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                syncProductPrices();
+            }
+        });
+        window.addEventListener('focus', () => {
+            syncProductPrices();
+        });
+        window.addEventListener('online', () => {
+            syncProductPrices();
+        });
+        if (priceChannel) {
+            priceChannel.addEventListener('message', (event) => {
+                if (event.data?.type === 'price-updated' && event.data.product) {
+                    applySyncedPrices([event.data.product]);
+                }
+            });
+        }
+        window.addEventListener('storage', (event) => {
+            if (event.key === PRICE_BUMP_KEY && event.newValue) {
+                try {
+                    const data = JSON.parse(event.newValue);
+                    if (data?.product) applySyncedPrices([data.product]);
+                } catch {}
+            }
+        });
     }
 
     // ================= INIT =================
@@ -1805,6 +1927,7 @@
             }
             els.reportFrom.value = firstDayOfMonthValue();
             els.reportTo.value = todayInputValue();
+            startPriceSyncPolling();
         } catch (err) {
             if (/masuk|sesi|401/i.test(err.message)) {
                 showGate('Sesi Anda tidak valid atau sudah berakhir. Silakan masuk kembali.');

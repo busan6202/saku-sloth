@@ -30,7 +30,31 @@
       "use": "@vercel/static"
     },
     {
-      "src": "icons/*.svg",
+      "src": "sayur-nusantara.js",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "harga.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "harga.css",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "harga.js",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "sw.js",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "manifest.webmanifest",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "icons/**",
       "use": "@vercel/static"
     }
   ],
@@ -44,12 +68,28 @@
       "dest": "/icons/$1"
     },
     {
+      "src": "/manifest.webmanifest",
+      "dest": "/manifest.webmanifest"
+    },
+    {
+      "src": "/sw.js",
+      "headers": {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Service-Worker-Allowed": "/"
+      },
+      "dest": "/sw.js"
+    },
+    {
       "src": "/style.css",
       "dest": "/style.css"
     },
     {
       "src": "/script.js",
       "dest": "/script.js"
+    },
+    {
+      "src": "/sayur-nusantara.js",
+      "dest": "/sayur-nusantara.js"
     },
     {
       "src": "/pos",
@@ -70,6 +110,26 @@
     {
       "src": "/pos.js",
       "dest": "/pos.js"
+    },
+    {
+      "src": "/harga",
+      "dest": "/harga.html"
+    },
+    {
+      "src": "/harga/",
+      "dest": "/harga.html"
+    },
+    {
+      "src": "/harga.html",
+      "dest": "/harga.html"
+    },
+    {
+      "src": "/harga.css",
+      "dest": "/harga.css"
+    },
+    {
+      "src": "/harga.js",
+      "dest": "/harga.js"
     },
     {
       "src": "/dashboard",

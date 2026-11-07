@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#FAF7F0">
+    <meta name="description" content="Saku Harga — ubah harga jual dan modal produk langsung dari ponsel, tanpa membuka layar kasir.">
+    <meta name="robots" content="noindex">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Saku Harga">
+    <title>Saku Harga — Ubah Harga Produk</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icons/app-icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icons/app-icon.png">
+    <link rel="preconnect" href="https://api.fontshare.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://api.fontshare.com/v2/css?f[]=chillax@500,600,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="harga.css">
+    <script src="harga.js" defer></script>
+</head>
+<body class="harga-body">
+
+    <!-- ===================== GERBANG MASUK ===================== -->
+    <div class="harga-gate" id="hargaGate" hidden>
+        <div class="harga-gate-card">
+            <p class="harga-gate-emoji" aria-hidden="true">🦥</p>
+            <h1>Masuk ke Saku Harga</h1>
+            <p>Gunakan email pemilik toko. Akun kasir hanya bisa membuka layar kasir, bukan halaman harga ini.</p>
+            <form id="gateLoginForm">
+                <label class="harga-field">
+                    <span class="harga-field-label">Email</span>
+                    <span class="harga-field-input">
+                        <input id="gateEmail" type="email" autocomplete="username" placeholder="nama@toko.com" required>
+                    </span>
+                </label>
+                <label class="harga-field">
+                    <span class="harga-field-label">Kata sandi</span>
+                    <span class="harga-field-input">
+                        <input id="gatePassword" type="password" autocomplete="current-password" placeholder="••••••" required>
+                    </span>
+                </label>
+                <p class="harga-message is-error" id="gateError" hidden></p>
+                <button type="submit" class="harga-btn harga-btn-primary" id="gateSubmit">Masuk</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===================== APLIKASI ===================== -->
+    <div class="harga-app" id="hargaApp" hidden>
+
+        <header class="harga-top">
+            <div class="harga-top-row">
+                <div class="harga-brand">
+                    <span class="harga-brand-mark" aria-hidden="true">🦥</span>
+                    <span class="harga-brand-copy">saku<strong>harga</strong></span>
+                </div>
+                <div class="harga-top-actions">
+                    <button type="button" class="harga-icon-btn" id="btnInstall" title="Pasang ke layar utama" hidden>Pasang</button>
+                    <button type="button" class="harga-icon-btn" id="btnTheme" title="Ganti tema terang/gelap" aria-label="Ganti tema terang/gelap">🌙</button>
+                    <div class="harga-menu">
+                        <button type="button" class="harga-icon-btn" id="btnMenu" aria-haspopup="true" aria-expanded="false" aria-label="Menu lainnya">⋯</button>
+                        <div class="harga-menu-panel" id="menuPanel" role="menu" hidden>
+                            <a role="menuitem" href="/pos" id="menuPos">🛒 Layar kasir</a>
+                            <a role="menuitem" href="/dashboard" id="menuDash">📊 Dashboard keuangan</a>
+                            <button type="button" role="menuitem" id="menuRefresh">🔄 Muat ulang dari server</button>
+                            <button type="button" role="menuitem" class="is-danger" id="menuLogout">🚪 Keluar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p class="harga-lead">Ubah harga di sini, layar kasir ikut berubah dalam beberapa detik.</p>
+
+            <div class="harga-search">
+                <span class="harga-search-icon" aria-hidden="true">🔍</span>
+                <input id="hargaSearch" type="search" placeholder="Cari nama produk atau SKU…" autocomplete="off" aria-label="Cari produk">
+                <button type="button" class="harga-icon-btn" id="btnClearSearch" title="Bersihkan pencarian" aria-label="Bersihkan pencarian" hidden>✕</button>
+            </div>
+
+            <div class="harga-filters" id="categoryFilters" role="group" aria-label="Saring berdasarkan kategori"></div>
+        </header>
+
+        <main class="harga-main">
+            <p class="harga-stale" id="staleNotice" hidden></p>
+            <div class="harga-list" id="productList" role="list"></div>
+            <div class="harga-empty" id="emptyState" hidden>
+                <p aria-hidden="true">🏷️</p>
+                <h2 id="emptyTitle">Belum ada produk</h2>
+                <p id="emptyCopy">Tambahkan produk lewat layar kasir, lalu kembali ke halaman ini untuk mengatur harganya.</p>
+            </div>
+        </main>
+
+        <footer class="harga-sync" id="syncBar">
+            <span class="harga-sync-dot" id="syncDot" data-state="idle" aria-hidden="true"></span>
+            <span class="harga-sync-text" id="syncText" role="status">Menghubungkan…</span>
+            <button type="button" class="harga-sync-btn" id="btnRefresh">Segarkan</button>
+        </footer>
+    </div>
+
+    <!-- ===================== PANEL UBAH HARGA ===================== -->
+    <div class="harga-sheet" id="editorSheet" hidden>
+        <div class="harga-sheet-backdrop" data-close-sheet></div>
+        <div class="harga-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="editorName">
+            <div class="harga-sheet-grip" aria-hidden="true"></div>
+            <h2 class="harga-sheet-name" id="editorName">Produk</h2>
+            <p class="harga-sheet-meta" id="editorMeta"></p>
+
+            <div class="harga-field">
+                <label class="harga-field-label" for="editorSell">Harga jual <span id="sellUnitNote"></span></label>
+                <span class="harga-field-input">
+                    <span class="harga-field-prefix" aria-hidden="true">Rp</span>
+                    <input id="editorSell" type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done">
+                </span>
+            </div>
+            <div class="harga-quick" id="quickSell" role="group" aria-label="Penyesuaian cepat harga jual"></div>
+
+            <div class="harga-field">
+                <label class="harga-field-label" for="editorCost">Harga modal (HPP)</label>
+                <span class="harga-field-input">
+                    <span class="harga-field-prefix" aria-hidden="true">Rp</span>
+                    <input id="editorCost" type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done">
+                </span>
+            </div>
+
+            <p class="harga-margin" id="editorMargin">Laba per satuan: —</p>
+            <p class="harga-message is-error" id="editorError" hidden></p>
+
+            <div class="harga-sheet-actions">
+                <button type="button" class="harga-btn harga-btn-ghost" data-close-sheet>Batal</button>
+                <button type="button" class="harga-btn harga-btn-primary" id="editorSave">Simpan harga</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="harga-toast" id="hargaToast" role="status" hidden>
+        <span id="toastText"></span>
+        <button type="button" id="toastAction" hidden></button>
+    </div>
+</body>
+</html>

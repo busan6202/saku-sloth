@@ -1,0 +1,49 @@
+{
+  "id": "/harga",
+  "name": "Saku Harga — Ubah Harga Produk",
+  "short_name": "Saku Harga",
+  "description": "Ubah harga jual dan modal (HPP) produk langsung dari ponsel pemilik toko, otomatis tersinkron ke layar kasir.",
+  "lang": "id",
+  "dir": "ltr",
+  "start_url": "/harga",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAF7F0",
+  "theme_color": "#FAF7F0",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/app-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ubah Harga Produk",
+      "short_name": "Saku Harga",
+      "url": "/harga",
+      "icons": [{ "src": "/icons/app-icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Buka Layar Kasir",
+      "short_name": "Kasir POS",
+      "url": "/pos",
+      "icons": [{ "src": "/icons/app-icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}
