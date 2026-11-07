@@ -1,15 +1,30 @@
 /* ==========================================================================
-   SAKU HARGA — PWA ubah harga produk dari ponsel
-   Memakai token warna & tipografi Hallmark Hum dari style.css.
-   Satu elemen yang berani: kartu label harga (lubang gantung + angka mono
-   dengan penggaris stabilo pir). Sisanya dibuat tenang.
+   SAKU HARGA — PWA Ubah Harga Produk Cepat (Merchant Tool)
+   Dirancang dengan standar anti-slop frontend (tasteskill 2.5 / Leonxlnx):
+   - Satu sistem konsisten (tipografi Chillax + angka Geist Mono)
+   - Layout rapi dengan ritme 4, 8, 12, 16, 24, 32px
+   - Kartu produk nyata (thumbnail sayur/ikon 48px, badge margin, harga tabular)
+   - Mikro-interaksi hover lift 2px, sheet snap animation, indikator margin dinamis
+   - 90-95% netral tenang dengan aksen fungsional
    ========================================================================== */
+
+:root {
+    --h-gap: 12px;
+    --h-radius-card: 16px;
+    --h-radius-btn: 999px;
+    --h-radius-input: 14px;
+    --h-shadow-lift: 0 6px 18px -4px rgba(22, 27, 38, 0.09), 0 2px 6px -1px rgba(22, 27, 38, 0.05);
+}
 
 .harga-body {
     min-height: 100dvh;
     display: flex;
     flex-direction: column;
     background: var(--page);
+    color: var(--ink);
+    font-family: var(--font-display);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
 }
 
 /* ============================= GERBANG MASUK ============================= */
@@ -22,89 +37,153 @@
 }
 
 .harga-gate-card {
-    width: min(420px, 100%);
+    width: min(440px, 100%);
     background: var(--color-card);
     border: var(--rule-hair) solid var(--line);
     border-radius: var(--radius-card);
     box-shadow: var(--shadow-card);
-    padding: 26px 22px;
+    padding: 30px 24px;
+    display: grid;
+    gap: 16px;
+}
+
+.harga-gate-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .harga-gate-emoji {
-    margin: 0 0 6px;
-    font-size: 34px;
+    font-size: 26px;
     line-height: 1;
 }
 
+.harga-gate-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-radius: var(--radius-pill);
+    background: var(--surface-soft);
+    color: var(--muted);
+    border: var(--rule-hair) solid var(--line);
+}
+
 .harga-gate-card h1 {
-    margin: 0 0 6px;
-    font-size: 22px;
+    margin: 0;
+    font-size: 24px;
+    font-weight: 700;
     letter-spacing: var(--tracking-display);
+    line-height: 1.2;
 }
 
 .harga-gate-card > p {
-    margin: 0 0 18px;
+    margin: 0;
     color: var(--muted);
-    font-size: 13.5px;
+    font-size: 14px;
+    line-height: 1.55;
 }
 
 .harga-gate-card form {
     display: grid;
     gap: 14px;
+    margin-top: 4px;
+}
+
+.harga-gate-foot {
+    margin: 4px 0 0;
+    font-size: 13.5px;
+    text-align: center;
+}
+
+.harga-gate-foot a {
+    color: var(--color-accent-2);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.harga-gate-foot a:hover {
+    text-decoration: underline;
 }
 
 /* =============================== KERANGKA =============================== */
 
 .harga-app {
     flex: 1;
-    width: min(720px, 100%);
+    width: min(680px, 100%);
     margin: 0 auto;
     display: flex;
     flex-direction: column;
 }
 
+/* Header Pinned */
 .harga-top {
     position: sticky;
     top: 0;
     z-index: 20;
-    padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
     background: color-mix(in srgb, var(--page) 92%, transparent);
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
     border-bottom: var(--rule-hair) solid var(--line);
+    display: grid;
+    gap: 12px;
 }
 
 .harga-top-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 12px;
 }
 
 .harga-brand {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     min-width: 0;
 }
 
 .harga-brand-mark {
-    font-size: 20px;
+    font-size: 24px;
     line-height: 1;
+    flex: none;
+}
+
+.harga-brand-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
 
 .harga-brand-copy {
-    font-size: 15px;
-    letter-spacing: -0.02em;
+    font-size: 16px;
+    letter-spacing: var(--tracking-display);
+    line-height: 1.2;
+    color: var(--ink);
 }
 
 .harga-brand-copy strong {
     font-weight: 700;
 }
 
+.harga-live-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--muted);
+    font-family: var(--font-outlier);
+    margin-top: 1px;
+}
+
 .harga-top-actions {
     display: flex;
     align-items: center;
     gap: 6px;
+    flex: none;
 }
 
 .harga-icon-btn {
@@ -115,20 +194,41 @@
     border-radius: var(--radius-pill);
     min-width: 38px;
     height: 38px;
-    padding: 0 12px;
-    font-size: 14px;
+    padding: 0 11px;
+    font-size: 13.5px;
+    font-family: inherit;
+    font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 1px 2px rgba(22, 27, 38, 0.06);
+    box-shadow: 0 1px 2px rgba(22, 27, 38, 0.04);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: transform 120ms var(--ease-snap), background 120ms var(--ease-snap), border-color 120ms var(--ease-snap);
 }
 
 .harga-icon-btn:hover {
     background: var(--surface-soft);
+    border-color: color-mix(in srgb, var(--ink) 25%, var(--line));
 }
 
 .harga-icon-btn:active {
-    transform: translateY(1px);
+    transform: scale(0.97);
 }
 
+.harga-install-btn {
+    background: var(--color-accent);
+    border-color: var(--color-accent-deep);
+    color: var(--color-accent-ink);
+    padding: 0 13px;
+    font-weight: 700;
+}
+
+.harga-install-btn:hover {
+    background: color-mix(in srgb, var(--color-accent) 90%, black);
+}
+
+/* Dropdown Menu */
 .harga-menu {
     position: relative;
 }
@@ -137,15 +237,21 @@
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
-    z-index: 30;
-    width: 232px;
+    z-index: 40;
+    width: 240px;
     display: grid;
     padding: 6px;
-    gap: 2px;
+    gap: 3px;
     background: var(--color-card);
     border: var(--rule-hair) solid var(--line);
     border-radius: var(--radius-stock);
-    box-shadow: var(--shadow-card);
+    box-shadow: 0 12px 36px -4px rgba(22, 27, 38, 0.16);
+    animation: harga-menu-pop 160ms var(--ease-snap);
+}
+
+@keyframes harga-menu-pop {
+    from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .harga-menu-panel a,
@@ -157,50 +263,51 @@
     text-align: left;
     font: inherit;
     font-size: 13.5px;
+    font-weight: 500;
     padding: 10px 12px;
     border-radius: 10px;
     cursor: pointer;
     text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 100ms var(--ease-snap);
 }
 
 .harga-menu-panel a:hover,
 .harga-menu-panel button:hover {
     background: var(--surface-soft);
-    text-decoration: none;
 }
 
 .harga-menu-panel .is-danger {
     color: var(--red);
 }
 
-.harga-lead {
-    margin: 8px 2px 10px;
-    font-size: 12.5px;
-    color: var(--muted);
+/* Search Bar */
+.harga-search-wrap {
+    width: 100%;
 }
 
 .harga-search {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 10px;
+    gap: 10px;
+    padding: 0 12px;
     background: var(--color-card);
     border: var(--rule-hair) solid var(--line);
     border-radius: var(--radius-input);
+    transition: border-color 140ms var(--ease-snap), box-shadow 140ms var(--ease-snap);
 }
 
-.harga-search .harga-icon-btn {
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-    min-width: 30px;
-    height: 30px;
-    padding: 0;
-    color: var(--muted);
+.harga-search:focus-within {
+    border-color: var(--color-accent-deep);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 26%, transparent);
 }
 
 .harga-search-icon {
-    font-size: 14px;
+    font-size: 15px;
+    color: var(--muted);
+    flex: none;
 }
 
 .harga-search input {
@@ -211,21 +318,37 @@
     color: var(--ink);
     font: inherit;
     font-size: 15px;
-    padding: 11px 0;
+    padding: 12px 0;
     outline: none;
+}
+
+.harga-search input::placeholder {
+    color: var(--muted);
+    opacity: 0.8;
 }
 
 .harga-search input::-webkit-search-cancel-button {
     display: none;
 }
 
+.harga-search .harga-icon-btn {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    min-width: 28px;
+    height: 28px;
+    padding: 0;
+    color: var(--muted);
+}
+
+/* Category Filter Chips Carousel */
 .harga-filters {
     display: flex;
     gap: 6px;
     overflow-x: auto;
-    margin-top: 10px;
     padding-bottom: 2px;
     scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
 }
 
 .harga-filters::-webkit-scrollbar {
@@ -239,177 +362,288 @@
     background: var(--color-card);
     color: var(--muted);
     border-radius: var(--radius-pill);
-    padding: 6px 12px;
+    padding: 6px 13px;
+    font-family: inherit;
     font-size: 12.5px;
+    font-weight: 500;
     cursor: pointer;
+    transition: background 120ms var(--ease-snap), color 120ms var(--ease-snap), border-color 120ms var(--ease-snap);
+}
+
+.harga-chip:hover {
+    background: var(--surface-soft);
+    color: var(--ink);
 }
 
 .harga-chip[aria-pressed="true"] {
     background: var(--color-accent);
     border-color: var(--color-accent-deep);
     color: var(--color-accent-ink);
-    font-weight: 600;
+    font-weight: 700;
+    box-shadow: 0 1px 2px rgba(22, 27, 38, 0.08);
 }
 
-/* ================================ DAFTAR ================================ */
+/* ================================ MAIN CONTENT ================================ */
 
 .harga-main {
     flex: 1;
-    padding: 12px 14px 20px;
+    padding: 14px 16px 28px;
+    display: grid;
+    gap: 14px;
 }
 
 .harga-stale {
-    margin: 0 0 10px;
-    padding: 10px 12px;
+    margin: 0;
+    padding: 11px 14px;
     border-radius: var(--radius-stock);
     background: var(--amber-soft);
     color: var(--ink);
-    font-size: 12.5px;
-    border: var(--rule-hair) solid color-mix(in srgb, var(--amber) 40%, var(--line));
+    font-size: 13px;
+    line-height: 1.45;
+    border: var(--rule-hair) solid color-mix(in srgb, var(--amber) 42%, var(--line));
 }
 
-.harga-list {
+/* Summary Metrics Strip */
+.harga-summary-strip {
     display: grid;
+    grid-template-columns: repeat(3, 1fr);
     gap: 8px;
 }
 
-/* Kartu label harga: lubang gantung di kiri, harga mono di kanan. */
+.harga-summary-card {
+    background: var(--color-card);
+    border: var(--rule-hair) solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.harga-summary-num {
+    font-family: var(--font-outlier);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.harga-summary-num.is-alert {
+    color: var(--amber);
+}
+
+.harga-summary-label {
+    font-size: 11.5px;
+    color: var(--muted);
+    font-weight: 500;
+}
+
+/* Product Cards List */
+.harga-list {
+    display: grid;
+    gap: 9px;
+}
+
+/* Tangible Product Card: 
+   Left: Product Image/Badge
+   Middle: Title + Meta
+   Right: Price stack with tabular mono
+*/
 .harga-tag {
-    position: relative;
     appearance: none;
     width: 100%;
     text-align: left;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 10px;
-    padding: 11px 13px 11px 34px;
+    gap: 12px;
+    padding: 12px 14px;
     background: var(--color-card);
     border: var(--rule-hair) solid var(--line);
-    border-radius: 14px;
+    border-radius: var(--h-radius-card);
     color: var(--ink);
     font: inherit;
     cursor: pointer;
-    box-shadow: 0 1px 2px rgba(22, 27, 38, 0.04);
-}
-
-.harga-tag::before {
-    content: "";
-    position: absolute;
-    left: 13px;
-    top: 50%;
-    width: 10px;
-    height: 10px;
-    margin-top: -5px;
-    border-radius: 50%;
-    background: var(--page);
-    box-shadow: inset 0 1px 2px rgba(22, 27, 38, 0.28), 0 0 0 1px var(--line);
+    box-shadow: 0 1px 3px rgba(22, 27, 38, 0.03);
+    transition: transform 140ms var(--ease-snap), border-color 140ms var(--ease-snap), box-shadow 140ms var(--ease-snap);
 }
 
 .harga-tag:hover {
-    border-color: color-mix(in srgb, var(--color-accent-deep) 55%, var(--line));
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--color-accent-deep) 60%, var(--line));
+    box-shadow: var(--h-shadow-lift);
 }
 
 .harga-tag:active {
-    transform: translateY(1px);
+    transform: scale(0.99);
 }
 
-.harga-tag.is-offline {
-    opacity: 0.62;
+/* Tangible Thumbnail Container (48x48) */
+.harga-tag-thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--surface-soft);
+    border: var(--rule-hair) solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    flex: none;
+}
+
+.harga-tag-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.harga-tag-thumb svg {
+    width: 24px;
+    height: 24px;
+    color: var(--muted);
+}
+
+.harga-tag-emoji {
+    font-size: 24px;
+    line-height: 1;
+}
+
+/* Product Info */
+.harga-tag-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 3px;
 }
 
 .harga-tag-name {
-    display: block;
-    font-size: 14.5px;
+    font-size: 15px;
     font-weight: 600;
     line-height: 1.25;
+    color: var(--ink);
     overflow-wrap: anywhere;
 }
 
 .harga-tag-meta {
-    display: block;
-    margin-top: 2px;
-    font-size: 11.5px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 12px;
     color: var(--muted);
+}
+
+.harga-tag-cat {
+    display: inline-block;
+    padding: 1px 6px;
+    background: var(--surface-soft);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
 }
 
 .harga-tag-unit {
     font-family: var(--font-outlier);
     font-size: 11px;
-    letter-spacing: 0;
 }
 
+/* Prices Column */
 .harga-tag-prices {
     display: grid;
-    gap: 2px;
+    gap: 3px;
     text-align: right;
     justify-items: end;
+    flex: none;
 }
 
 .harga-tag-sell {
     font-family: var(--font-outlier);
-    font-size: 14.5px;
-    font-weight: 600;
+    font-size: 15.5px;
+    font-weight: 700;
     white-space: nowrap;
-    padding: 1px 6px;
-    border-radius: 5px;
+    padding: 2px 7px;
+    border-radius: 6px;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
     background: linear-gradient(
         to top,
-        color-mix(in srgb, var(--color-accent) 62%, transparent) 0 42%,
-        transparent 42%
+        color-mix(in srgb, var(--color-accent) 70%, transparent) 0 46%,
+        transparent 46%
     );
 }
 
 .harga-tag-cost {
     font-family: var(--font-outlier);
-    font-size: 11px;
+    font-size: 11.5px;
     color: var(--muted);
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 
 .harga-tag-cost.is-loss {
     color: var(--red);
+    font-weight: 600;
 }
 
-.harga-empty {
-    text-align: center;
-    padding: 48px 20px;
+.harga-tag-cost.is-missing {
+    color: var(--amber);
+    font-style: italic;
+}
+
+.harga-margin-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: var(--font-outlier);
+    font-size: 10.5px;
+    font-weight: 600;
+    background: var(--green-soft);
+    color: var(--green-ink);
+}
+
+.harga-margin-badge.is-loss {
+    background: var(--red-soft);
+    color: var(--red);
+}
+
+.harga-margin-badge.is-flat {
+    background: var(--surface-soft);
     color: var(--muted);
 }
 
-.harga-empty p:first-child {
-    font-size: 34px;
-    margin: 0 0 10px;
+/* Empty State */
+.harga-empty {
+    text-align: center;
+    padding: 56px 20px;
+    color: var(--muted);
+    background: var(--color-card);
+    border: var(--rule-hair) dashed var(--line);
+    border-radius: var(--radius-card);
+}
+
+.harga-empty-icon {
+    font-size: 38px;
+    margin-bottom: 12px;
 }
 
 .harga-empty h2 {
     margin: 0 0 6px;
-    font-size: 17px;
+    font-size: 18px;
     color: var(--ink);
+    font-weight: 700;
 }
 
-.harga-empty p:last-child {
+.harga-empty p {
     margin: 0 auto;
-    font-size: 13px;
-    max-width: 34ch;
+    font-size: 13.5px;
+    max-width: 38ch;
+    line-height: 1.5;
 }
 
-/* ============================ BAR SINKRONISASI =========================== */
-
-.harga-sync {
-    position: sticky;
-    bottom: 0;
-    z-index: 15;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 14px calc(9px + env(safe-area-inset-bottom));
-    background: color-mix(in srgb, var(--page) 94%, transparent);
-    backdrop-filter: blur(10px);
-    border-top: var(--rule-hair) solid var(--line);
-    font-size: 12px;
-    color: var(--muted);
-}
+/* ============================ SYNC BAR & DOT =========================== */
 
 .harga-sync-dot {
     width: 8px;
@@ -417,39 +651,29 @@
     border-radius: 50%;
     background: var(--muted);
     flex: none;
+    transition: background 160ms var(--ease-snap);
 }
 
 .harga-sync-dot[data-state="live"] {
-    background: var(--color-mint);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-mint) 28%, transparent);
+    background: #2EB67D;
+    box-shadow: 0 0 0 3px color-mix(in srgb, #2EB67D 28%, transparent);
 }
 
 .harga-sync-dot[data-state="busy"] {
     background: var(--amber);
+    animation: harga-pulse 1s infinite alternate ease-in-out;
 }
 
 .harga-sync-dot[data-state="offline"] {
     background: var(--red);
 }
 
-.harga-sync-text {
-    flex: 1;
-    min-width: 0;
+@keyframes harga-pulse {
+    from { opacity: 0.5; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1.2); }
 }
 
-.harga-sync-btn {
-    appearance: none;
-    border: var(--rule-hair) solid var(--line);
-    background: var(--color-card);
-    color: var(--ink);
-    border-radius: var(--radius-pill);
-    padding: 6px 12px;
-    font: inherit;
-    font-size: 12px;
-    cursor: pointer;
-}
-
-/* ============================== PANEL UBAH ============================== */
+/* ========================= BOTTOM SHEET EDITOR ========================= */
 
 .harga-sheet {
     position: fixed;
@@ -463,92 +687,153 @@
 .harga-sheet-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(16, 20, 28, 0.42);
+    background: rgba(14, 18, 25, 0.48);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: harga-fade-in 180ms ease-out;
+}
+
+@keyframes harga-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 .harga-sheet-panel {
     position: relative;
-    width: min(560px, 100%);
-    max-height: 92dvh;
+    width: min(580px, 100%);
+    max-height: 94dvh;
     overflow-y: auto;
     background: var(--color-card);
-    border-top-left-radius: var(--radius-card);
-    border-top-right-radius: var(--radius-card);
+    border-top-left-radius: 28px;
+    border-top-right-radius: 28px;
     border-top: var(--rule-hair) solid var(--line);
-    padding: 10px 18px calc(18px + env(safe-area-inset-bottom));
-    box-shadow: 0 -12px 40px rgba(22, 27, 38, 0.22);
-    animation: harga-sheet-in 220ms var(--ease-snap);
+    padding: 12px 20px calc(24px + env(safe-area-inset-bottom));
+    box-shadow: 0 -16px 44px rgba(22, 27, 38, 0.24);
+    animation: harga-sheet-in 240ms cubic-bezier(0.16, 1, 0.3, 1);
+    display: grid;
+    gap: 14px;
 }
 
 @keyframes harga-sheet-in {
-    from {
-        transform: translateY(14%);
-        opacity: 0.4;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
+    from { transform: translateY(18%); opacity: 0.2; }
+    to { transform: translateY(0); opacity: 1; }
 }
 
 .harga-sheet-grip {
-    width: 42px;
-    height: 4px;
+    width: 44px;
+    height: 5px;
     border-radius: 999px;
     background: var(--line);
-    margin: 4px auto 12px;
+    margin: 2px auto 6px;
+    cursor: pointer;
+}
+
+/* Product Preview in Sheet */
+.harga-editor-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 6px;
+    border-bottom: var(--rule-hair) solid var(--line);
+}
+
+.harga-editor-thumb {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: var(--surface-soft);
+    border: var(--rule-hair) solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    font-size: 26px;
+    flex: none;
+}
+
+.harga-editor-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.harga-editor-titles {
+    min-width: 0;
+    flex: 1;
 }
 
 .harga-sheet-name {
     margin: 0;
-    font-size: 19px;
+    font-size: 20px;
+    font-weight: 700;
     letter-spacing: var(--tracking-display);
+    line-height: 1.25;
     overflow-wrap: anywhere;
 }
 
 .harga-sheet-meta {
-    margin: 4px 0 16px;
-    font-size: 12px;
-    color: var(--muted);
-}
-
-/* ============================== FIELD & TOMBOL ============================== */
-
-.harga-field {
-    display: grid;
-    gap: 6px;
-    margin-bottom: 12px;
-}
-
-.harga-field-label {
+    margin: 3px 0 0;
     font-size: 12.5px;
     color: var(--muted);
 }
 
-.harga-field-label span {
+/* Fields */
+.harga-field {
+    display: grid;
+    gap: 6px;
+}
+
+.harga-field-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.harga-unit-badge {
     font-family: var(--font-outlier);
-    font-size: 11px;
+    font-size: 11.5px;
+    color: var(--muted);
+    font-weight: 500;
+    background: var(--surface-soft);
+    padding: 2px 7px;
+    border-radius: var(--radius-pill);
+}
+
+.harga-sub-hint {
+    font-size: 11.5px;
+    color: var(--muted);
+    font-weight: 400;
 }
 
 .harga-field-input {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 12px;
+    gap: 10px;
+    padding: 0 14px;
     background: var(--surface-soft);
     border: var(--rule-hair) solid var(--line);
-    border-radius: var(--radius-input);
-    transition: border-color 140ms var(--ease-snap);
+    border-radius: var(--h-radius-input);
+    transition: border-color 140ms var(--ease-snap), background 140ms var(--ease-snap);
 }
 
 .harga-field-input:focus-within {
-    border-color: var(--color-accent-2);
+    border-color: var(--color-accent-deep);
     background: var(--color-card);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 26%, transparent);
+}
+
+.harga-hero-input {
+    background: var(--color-card);
+    border-width: 2px;
 }
 
 .harga-field-prefix {
     font-family: var(--font-outlier);
-    font-size: 13px;
+    font-size: 15px;
+    font-weight: 700;
     color: var(--muted);
 }
 
@@ -559,55 +844,130 @@
     background: transparent;
     color: var(--ink);
     font-family: var(--font-outlier);
-    font-size: 19px;
-    font-weight: 600;
-    padding: 11px 0;
+    font-size: 21px;
+    font-weight: 700;
+    padding: 12px 0;
     outline: none;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+}
+
+.harga-hero-input input {
+    font-size: 26px;
+    padding: 14px 0;
+}
+
+/* Quick Stepper Chips */
+.harga-quick-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-top: -4px;
 }
 
 .harga-quick {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    margin: -4px 0 14px;
 }
 
 .harga-quick button {
     appearance: none;
     border: var(--rule-hair) solid var(--line);
-    background: var(--color-card);
+    background: var(--surface-soft);
     color: var(--ink);
-    border-radius: var(--radius-pill);
-    padding: 7px 12px;
+    border-radius: var(--h-radius-btn);
+    padding: 8px 14px;
     font-family: var(--font-outlier);
-    font-size: 12px;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
+    transition: transform 100ms var(--ease-snap), background 100ms var(--ease-snap), border-color 100ms var(--ease-snap);
 }
 
 .harga-quick button:hover {
     border-color: var(--color-accent-deep);
-    background: color-mix(in srgb, var(--color-accent) 22%, var(--color-card));
+    background: color-mix(in srgb, var(--color-accent) 20%, var(--color-card));
 }
 
-.harga-margin {
-    margin: 2px 0 14px;
-    font-size: 13px;
-    color: var(--green-ink);
+.harga-quick button:active {
+    transform: scale(0.96);
+}
+
+/* Live Margin Health Card */
+.harga-margin-card {
+    background: var(--surface-soft);
+    border: var(--rule-hair) solid var(--line);
+    border-radius: var(--radius-stock);
+    padding: 12px 14px;
+    display: grid;
+    gap: 8px;
+}
+
+.harga-margin-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.harga-margin-title {
+    font-size: 12.5px;
     font-weight: 600;
+    color: var(--muted);
 }
 
-.harga-margin.is-loss {
+.harga-margin-pct {
+    font-family: var(--font-outlier);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--green-ink);
+}
+
+.harga-margin-track {
+    width: 100%;
+    height: 6px;
+    background: color-mix(in srgb, var(--line) 80%, transparent);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.harga-margin-fill {
+    height: 100%;
+    background: var(--color-mint-deep);
+    border-radius: 999px;
+    transition: width 200ms var(--ease-snap), background 200ms var(--ease-snap);
+}
+
+.harga-margin-fill.is-loss {
+    background: var(--red);
+}
+
+.harga-margin-fill.is-flat {
+    background: var(--amber);
+}
+
+.harga-margin-detail {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--green-ink);
+}
+
+.harga-margin-detail.is-loss {
     color: var(--red);
 }
 
-.harga-margin.is-flat {
+.harga-margin-detail.is-flat {
     color: var(--muted);
-    font-weight: 500;
 }
 
+/* Buttons & Actions */
 .harga-message {
-    margin: 0 0 12px;
+    margin: 0;
     font-size: 13px;
+    line-height: 1.4;
 }
 
 .harga-message.is-error {
@@ -616,26 +976,36 @@
 
 .harga-sheet-actions {
     display: flex;
-    gap: 8px;
+    gap: 10px;
+    margin-top: 4px;
 }
 
 .harga-btn {
     appearance: none;
     flex: 1;
     border: var(--rule-hair) solid var(--line);
-    border-radius: var(--radius-pill);
-    padding: 13px 16px;
+    border-radius: var(--h-radius-btn);
+    padding: 14px 18px;
     font: inherit;
-    font-size: 14.5px;
-    font-weight: 600;
+    font-size: 15px;
+    font-weight: 700;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: transform 120ms var(--ease-snap), box-shadow 120ms var(--ease-snap), opacity 120ms;
 }
 
 .harga-btn-ghost {
     background: var(--color-card);
     color: var(--ink);
     flex: 0 0 auto;
-    padding-inline: 20px;
+    padding-inline: 22px;
+}
+
+.harga-btn-ghost:hover {
+    background: var(--surface-soft);
 }
 
 .harga-btn-primary {
@@ -651,8 +1021,8 @@
 }
 
 .harga-btn:disabled {
-    opacity: 0.55;
-    cursor: progress;
+    opacity: 0.5;
+    cursor: not-allowed;
     box-shadow: none;
     transform: none;
 }
@@ -662,23 +1032,31 @@
 .harga-toast {
     position: fixed;
     left: 50%;
-    bottom: calc(60px + env(safe-area-inset-bottom));
+    bottom: calc(24px + env(safe-area-inset-bottom));
     transform: translateX(-50%);
     z-index: 70;
     display: flex;
     align-items: center;
-    gap: 12px;
-    width: min(420px, calc(100% - 28px));
-    padding: 11px 14px;
+    justify-content: space-between;
+    gap: 14px;
+    width: min(440px, calc(100% - 28px));
+    padding: 12px 16px;
     background: var(--color-ink);
     color: var(--color-paper);
-    border-radius: var(--radius-input);
-    font-size: 13px;
-    box-shadow: 0 12px 32px rgba(16, 20, 28, 0.32);
+    border-radius: var(--h-radius-input);
+    font-size: 13.5px;
+    font-weight: 500;
+    box-shadow: 0 16px 40px rgba(16, 20, 28, 0.34);
+    animation: harga-toast-up 200ms var(--ease-snap);
+}
+
+@keyframes harga-toast-up {
+    from { transform: translate(-50%, 14px); opacity: 0; }
+    to { transform: translate(-50%, 0); opacity: 1; }
 }
 
 .harga-toast.is-error {
-    background: var(--color-accent-3);
+    background: var(--red);
     color: #fff;
 }
 
@@ -689,9 +1067,17 @@
     color: var(--color-accent);
     font: inherit;
     font-weight: 700;
+    font-size: 13px;
     cursor: pointer;
-    padding: 2px 4px;
+    padding: 4px 8px;
+    border-radius: 6px;
     white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.harga-toast button:hover {
+    background: rgba(255, 255, 255, 0.12);
 }
 
 .harga-toast.is-error button {
@@ -699,24 +1085,35 @@
     text-decoration: underline;
 }
 
-/* ============================== LAYAR LEBAR ============================== */
+/* ============================== DARK MODE REFINEMENT ============================== */
 
-@media (min-width: 620px) {
-    .harga-main {
-        padding: 16px 18px 28px;
-    }
-
-    .harga-list {
-        grid-template-columns: 1fr;
-        gap: 9px;
-    }
+[data-theme="dark"] .harga-tag-sell {
+    background: linear-gradient(
+        to top,
+        color-mix(in srgb, var(--color-accent) 40%, transparent) 0 46%,
+        transparent 46%
+    );
 }
 
+[data-theme="dark"] .harga-sheet-panel {
+    box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.6);
+}
+
+[data-theme="dark"] .harga-toast {
+    background: #232B3B;
+    border: var(--rule-hair) solid var(--line);
+}
+
+/* ============================== REDUCED MOTION ============================== */
+
 @media (prefers-reduced-motion: reduce) {
-    .harga-sheet-panel {
+    .harga-sheet-panel,
+    .harga-menu-panel,
+    .harga-toast {
         animation: none;
     }
 
+    .harga-tag:hover,
     .harga-tag:active,
     .harga-icon-btn:active,
     .harga-btn-primary:active {

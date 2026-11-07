@@ -2138,7 +2138,7 @@ app.get('/api/pos/products/price-sync', async (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
         const params = [posOwnerId(user)];
         let query = `SELECT id, name, sku, unit, category, is_weighable, is_active,
-                            price_sell, price_cost,
+                            price_sell, price_cost, icon_url,
                             EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_ms
                      FROM pos_products WHERE user_id = $1`;
         const since = Number(req.query.since);
@@ -2294,7 +2294,7 @@ app.put('/api/pos/products/:id/price', async (req, res) => {
              SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP
              WHERE id = $${values.length - 1} AND user_id = $${values.length}
              RETURNING id, name, sku, unit, category, is_weighable, is_active,
-                       price_sell, price_cost,
+                       price_sell, price_cost, icon_url,
                        EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_ms`,
             values
         );
