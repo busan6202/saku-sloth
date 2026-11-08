@@ -24,6 +24,10 @@
         ? `${window.location.origin}/api`
         : 'https://saku-sloth.vercel.app/api';
 
+    const POS_URL = (typeof window !== 'undefined' && window.location.origin.includes('github.io'))
+        ? 'pos.html'
+        : '/pos';
+
     const IS_CROSS_ORIGIN_API = (() => {
         try { return new URL(API_BASE_URL).origin !== window.location.origin; } catch { return false; }
     })();
@@ -566,7 +570,7 @@
                 return;
             }
             if (err.status === 403) {
-                window.location.href = '/pos';
+                window.location.href = POS_URL;
                 return;
             }
             const offlineMsg = navigator.onLine
@@ -1131,7 +1135,7 @@
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/sw.js').catch(() => {});
+                navigator.serviceWorker.register('sw.js').catch(() => {});
             });
         }
     }
@@ -1364,7 +1368,7 @@
         }
 
         if (session.user?.role === 'cashier') {
-            window.location.replace('/pos');
+            window.location.replace(POS_URL);
             return;
         }
 
@@ -1387,7 +1391,7 @@
             if (me?.user) {
                 state.user = { ...state.user, ...me.user };
                 if (state.user.role === 'cashier') {
-                    window.location.replace('/pos');
+                    window.location.replace(POS_URL);
                     return;
                 }
                 localStorage.setItem(SESSION_KEY, JSON.stringify({ user: state.user }));
