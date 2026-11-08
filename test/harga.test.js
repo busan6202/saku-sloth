@@ -38,3 +38,14 @@ test('server.js melayani /harga dan mengarahkan /harga/ untuk Saku Harga', () =>
     assert.match(serverCode, /app\.get\('\/harga\/',\s*\(req,\s*res\)\s*=>\s*res\.redirect\(301,\s*'\/harga'\)\)/);
     assert.match(serverCode, /app\.get\('\/harga',/);
 });
+
+test('link Kasir POS dan Saku Harga membuka di tab/window baru (target="_blank")', () => {
+    const indexHtml = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const posHtml = fs.readFileSync(path.join(__dirname, '..', 'pos.html'), 'utf8');
+    const hargaHtml = fs.readFileSync(path.join(__dirname, '..', 'harga.html'), 'utf8');
+
+    assert.match(indexHtml, /<a class="nav-link" href="pos\.html" target="_blank" rel="noopener noreferrer">/);
+    assert.match(indexHtml, /<a class="nav-link" href="harga\.html" target="_blank" rel="noopener noreferrer">/);
+    assert.match(posHtml, /id="btnSakuHarga" href="harga\.html" target="_blank" rel="noopener noreferrer"/);
+    assert.match(hargaHtml, /id="menuPos" target="_blank" rel="noopener noreferrer"/);
+});
