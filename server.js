@@ -2183,6 +2183,7 @@ app.post('/api/pos/products', async (req, res) => {
         await ensureDatabaseReady();
         const user = await resolveAuthUser(req);
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        if (isCashier(user)) return res.status(403).json({ error: 'Hanya pemilik atau admin toko yang dapat menambah produk.' });
 
         const name = String(req.body?.name || '').trim();
         if (!name) return res.status(400).json({ error: 'Nama produk wajib diisi.' });
@@ -2220,6 +2221,7 @@ app.put('/api/pos/products/:id', async (req, res) => {
         await ensureDatabaseReady();
         const user = await resolveAuthUser(req);
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        if (isCashier(user)) return res.status(403).json({ error: 'Hanya pemilik atau admin toko yang dapat mengubah data produk.' });
         const productId = Number(req.params.id);
         if (!Number.isFinite(productId)) return res.status(400).json({ error: 'ID produk tidak valid.' });
 
@@ -2311,6 +2313,7 @@ app.delete('/api/pos/products/:id', async (req, res) => {
         await ensureDatabaseReady();
         const user = await resolveAuthUser(req);
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        if (isCashier(user)) return res.status(403).json({ error: 'Hanya pemilik atau admin toko yang dapat menonaktifkan produk.' });
         const productId = Number(req.params.id);
         if (!Number.isFinite(productId)) return res.status(400).json({ error: 'ID produk tidak valid.' });
         const result = await pool.query(

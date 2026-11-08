@@ -58,6 +58,22 @@
         </div>
     </div>
 
+    <!-- ===================== AKSES DITOLAK KASIR ===================== -->
+    <div class="harga-gate" id="hargaBlocked" hidden>
+        <div class="harga-gate-card">
+            <div class="harga-gate-badge">
+                <span class="harga-gate-emoji" aria-hidden="true">🚫</span>
+                <span class="harga-gate-pill is-alert">Akses Ditolak</span>
+            </div>
+            <h1>Khusus Pemilik &amp; Admin</h1>
+            <p id="blockedMessage">Akun kasir tidak diizinkan mengakses Saku Harga. Halaman ini hanya dapat diakses oleh Pemilik Toko (Owner) atau Admin untuk mengubah harga dan modal produk.</p>
+            <div class="harga-sheet-actions" style="margin-top: 14px; flex-direction: column;">
+                <a href="pos.html" class="harga-btn harga-btn-primary" id="btnBlockedPos">Buka Layar Kasir POS</a>
+                <button type="button" class="harga-btn harga-btn-ghost" id="btnBlockedLogout">Keluar dari Akun Kasir</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ===================== APLIKASI UTAMA ===================== -->
     <div class="harga-app" id="hargaApp" hidden>
 

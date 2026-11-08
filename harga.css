@@ -71,6 +71,12 @@
     border: var(--rule-hair) solid var(--line);
 }
 
+.harga-gate-pill.is-alert {
+    background: color-mix(in srgb, var(--red) 12%, var(--surface-soft));
+    color: var(--red);
+    border-color: color-mix(in srgb, var(--red) 35%, var(--line));
+}
+
 .harga-gate-card h1 {
     margin: 0;
     font-size: 24px;

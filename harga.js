@@ -104,6 +104,7 @@
             'addName', 'addNameHint', 'addCategory', 'addUnit', 'addIsWeighable',
             'addSell', 'addSellUnitNote', 'addCost', 'addMarginCard', 'addMarginPct',
             'addMarginFill', 'addMargin', 'addStock', 'addError', 'addSave',
+            'hargaBlocked', 'blockedMessage', 'btnBlockedPos', 'btnBlockedLogout',
             'hargaToast', 'toastText', 'toastAction'
         ].forEach((id) => { els[id] = $(id); });
     }
@@ -388,10 +389,33 @@
 
     // ================= GERBANG MASUK (NON-KASIR) =================
 
+    function isCashierUser(user) {
+        if (!user) return false;
+        const role = String(user.role || '').toLowerCase();
+        return role === 'cashier' || Boolean(user.is_cashier);
+    }
+
+    function showCashierBlocked(user) {
+        stopPolling();
+        if (els.hargaApp) els.hargaApp.hidden = true;
+        if (els.editorSheet) els.editorSheet.hidden = true;
+        if (els.addProductSheet) els.addProductSheet.hidden = true;
+        if (els.hargaGate) els.hargaGate.hidden = true;
+        if (els.hargaBlocked) {
+            const name = user?.fullName || user?.full_name || user?.username || 'Kasir';
+            if (els.blockedMessage) {
+                els.blockedMessage.innerHTML = `Akun Anda terdaftar sebagai <strong>Kasir (${escapeHtml(name)})</strong>. Halaman Saku Harga hanya dapat diakses oleh <strong>Pemilik Toko (Owner)</strong> atau <strong>Admin</strong> untuk mengubah harga dan modal produk.`;
+            }
+            els.hargaBlocked.hidden = false;
+        }
+    }
+
     function showGate(errorMessage = '') {
         stopPolling();
+        if (els.hargaBlocked) els.hargaBlocked.hidden = true;
         els.hargaApp.hidden = true;
         els.editorSheet.hidden = true;
+        if (els.addProductSheet) els.addProductSheet.hidden = true;
         els.hargaGate.hidden = false;
         if (errorMessage) {
             els.gateError.textContent = errorMessage;
@@ -417,9 +441,9 @@
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(data.error || 'Email atau kata sandi tidak sesuai.');
 
-            if (data.user?.role === 'cashier') {
+            if (isCashierUser(data.user)) {
                 await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' }).catch(() => {});
-                throw new Error('Akun kasir hanya bisa membuka Layar Kasir (/pos), bukan Saku Harga.');
+                throw new Error('Akses ditolak: Akun kasir tidak diizinkan mengakses Saku Harga. Masuklah menggunakan akun Pemilik Toko atau Admin.');
             }
 
             const profile = {
@@ -456,6 +480,7 @@
         state.user = null;
         state.products = [];
         closeMenu();
+        if (els.hargaBlocked) els.hargaBlocked.hidden = true;
         showGate();
     }
 
@@ -570,7 +595,7 @@
                 return;
             }
             if (err.status === 403) {
-                window.location.href = POS_URL;
+                showCashierBlocked(state.user);
                 return;
             }
             const offlineMsg = navigator.onLine
@@ -1159,6 +1184,7 @@
         els.btnInstall.addEventListener('click', triggerInstall);
         if (els.btnAddProduct) els.btnAddProduct.addEventListener('click', () => openAddProductSheet());
         if (els.btnEmptyAdd) els.btnEmptyAdd.addEventListener('click', () => openAddProductSheet(state.search));
+        if (els.btnBlockedLogout) els.btnBlockedLogout.addEventListener('click', handleLogout);
 
         els.btnMenu.addEventListener('click', (event) => {
             event.stopPropagation();
@@ -1367,8 +1393,8 @@
             return;
         }
 
-        if (session.user?.role === 'cashier') {
-            window.location.replace(POS_URL);
+        if (isCashierUser(session.user)) {
+            showCashierBlocked(session.user);
             return;
         }
 
@@ -1390,8 +1416,8 @@
             const me = await meRes.json().catch(() => null);
             if (me?.user) {
                 state.user = { ...state.user, ...me.user };
-                if (state.user.role === 'cashier') {
-                    window.location.replace(POS_URL);
+                if (isCashierUser(state.user)) {
+                    showCashierBlocked(state.user);
                     return;
                 }
                 localStorage.setItem(SESSION_KEY, JSON.stringify({ user: state.user }));

@@ -49,3 +49,17 @@ test('link Kasir POS dan Saku Harga membuka di tab/window baru (target="_blank")
     assert.match(posHtml, /id="btnSakuHarga" href="harga\.html" target="_blank" rel="noopener noreferrer"/);
     assert.match(hargaHtml, /id="menuPos" target="_blank" rel="noopener noreferrer"/);
 });
+
+test('kasir dibatasi: harga.html memiliki elemen blocked dan server menolak akses modifikasi produk bagi kasir', () => {
+    const hargaHtml = fs.readFileSync(path.join(__dirname, '..', 'harga.html'), 'utf8');
+    const hargaJs = fs.readFileSync(path.join(__dirname, '..', 'harga.js'), 'utf8');
+    const serverCode = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+
+    assert.match(hargaHtml, /id="hargaBlocked"/);
+    assert.match(hargaHtml, /id="blockedMessage"/);
+    assert.match(hargaJs, /function isCashierUser/);
+    assert.match(hargaJs, /showCashierBlocked/);
+    assert.match(serverCode, /app\.post\('\/api\/pos\/products'[\s\S]*?if \(isCashier\(user\)\) return res\.status\(403\)/);
+    assert.match(serverCode, /app\.put\('\/api\/pos\/products\/:id'[\s\S]*?if \(isCashier\(user\)\) return res\.status\(403\)/);
+    assert.match(serverCode, /app\.delete\('\/api\/pos\/products\/:id'[\s\S]*?if \(isCashier\(user\)\) return res\.status\(403\)/);
+});
