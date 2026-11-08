@@ -68,7 +68,7 @@
         [
             'posGate', 'posShell', 'gateLoginLink', 'gateLoginForm', 'gateEmail', 'gatePassword',
             'gateError', 'gateSubmit', 'posUserAvatar', 'posUserName',
-            'posSearch', 'btnClearSearch', 'productGrid', 'productCount', 'emptyCatalog',
+            'posSearch', 'btnClearSearch', 'productGrid', 'productCount', 'emptyCatalog', 'emptyCatalogHint',
             'cartItems', 'cartEmpty', 'cartQty', 'cartCost', 'cartProfit', 'cartTotal',
             'btnClearCart', 'btnCheckout', 'checkoutCount',
             'btnSakuHarga', 'btnManageProducts', 'btnReports', 'btnSettings', 'btnTheme',
@@ -89,7 +89,7 @@
             'purchaseTotal', 'purchaseError', 'btnSavePurchase',
             'btnSpoilage', 'spoilageModal', 'spoilProduct', 'spoilQty', 'spoilReason',
             'spoilEstimate', 'spoilError', 'btnSaveSpoilage',
-            'reportsModal', 'reportFrom', 'reportTo', 'btnLoadReport', 'btnExportCsv',
+            'reportsModal', 'reportsTitle', 'reportProfitHeader', 'reportFrom', 'reportTo', 'btnLoadReport', 'btnExportCsv',
             'reportSummary', 'reportTableBody',
             'settingsModal', 'sQrisPayload', 'sSheetsUrl', 'qrisHelp', 'sheetsHelp',
             'settingsError', 'btnSaveSettings',
@@ -526,8 +526,12 @@
 
         els.productCount.textContent = `${visible.length} produk`;
         els.emptyCatalog.hidden = visible.length > 0;
+        const canEditProduct = !isCashier();
         els.productGrid.innerHTML = visible.map((product) => {
             const stock = Number(product.stock) || 0;
+            const editBtn = canEditProduct
+                ? `<button type="button" class="pos-product-edit" data-edit-product="${product.id}" title="Edit ${escapeHtml(product.name)}" aria-label="Edit produk ${escapeHtml(product.name)}">✏️</button>`
+                : '';
             return `
                 <div class="pos-product-cell">
                     <button type="button" class="pos-product-card" data-product-id="${product.id}" ${stock <= 0 ? 'disabled' : ''}>
@@ -537,14 +541,15 @@
                         <span class="pos-product-price">${formatMoney(product.price_sell)}<small> / ${escapeHtml(product.unit || 'PCS')}</small></span>
                         <span class="pos-stock-pill ${stockClass(product)}">${stock <= 0 ? 'Stok habis' : `Stok ${escapeHtml(stockLabel(product))}`}${product.is_weighable ? ' ⚖️' : ''}</span>
                     </button>
-                    <button type="button" class="pos-product-edit" data-edit-product="${product.id}" title="Edit ${escapeHtml(product.name)}" aria-label="Edit produk ${escapeHtml(product.name)}">✏️</button>
+                    ${editBtn}
                 </div>
             `;
         }).join('');
     }
 
-    // Buka modal Produk langsung dalam mode edit untuk produk tertentu.
+    // Buka modal Produk langsung dalam mode edit untuk produk tertentu (khusus owner).
     function openProductEditor(productId) {
+        if (isCashier()) return;
         const product = findProduct(productId);
         resetProductForm();
         openModal('productsModal');
@@ -688,8 +693,8 @@
     function renderCart() {
         const totals = cartTotals();
         els.cartQty.textContent = formatQty(totals.qty);
-        els.cartCost.textContent = formatMoney(totals.cost);
-        els.cartProfit.textContent = formatMoney(totals.profit);
+        if (els.cartCost) els.cartCost.textContent = formatMoney(totals.cost);
+        if (els.cartProfit) els.cartProfit.textContent = formatMoney(totals.profit);
         els.cartTotal.textContent = formatMoney(totals.total);
         els.cartEmpty.hidden = state.cart.size > 0;
         els.btnCheckout.disabled = state.cart.size === 0;
@@ -801,6 +806,7 @@
     // ================= KULAKAN (STOK MASUK) =================
 
     function openPurchaseModal() {
+        if (isCashier()) return;
         els.purchaseError.hidden = true;
         els.purchaseNote.value = '';
         els.purchaseWallet.value = state.settings.cash_wallet || 'Tunai';
@@ -889,8 +895,13 @@
             els.spoilEstimate.textContent = '';
             return;
         }
+        const unit = product.unit || 'PCS';
+        if (isCashier()) {
+            els.spoilEstimate.textContent = `Stok akan dikurangi: ${formatQty(qty)} ${unit}`;
+            return;
+        }
         const loss = (Number(product.price_cost) || 0) * qty;
-        els.spoilEstimate.textContent = `Estimasi kerugian modal: ${formatMoney(loss)}`;
+        els.spoilEstimate.textContent = `Stok dikurangi: ${formatQty(qty)} ${unit} · Estimasi kerugian modal: ${formatMoney(loss)}`;
     }
 
     async function saveSpoilage() {
@@ -1098,8 +1109,6 @@
             <div class="pos-receipt-divider"></div>
             <div class="pos-receipt-row"><span>Metode</span><span>${isCash ? 'TUNAI' : 'QRIS'}</span></div>
             <div class="pos-receipt-row"><span>Saku Tujuan</span><span>${escapeHtml(sale.wallet)}</span></div>
-            <div class="pos-receipt-row"><span>Total HPP</span><span>${formatMoney(sale.total_cost)}</span></div>
-            <div class="pos-receipt-row"><span>Laba Kotor</span><span>${formatMoney(sale.gross_profit)}</span></div>
             <div class="pos-receipt-divider"></div>
             <div class="pos-receipt-row is-total"><span>TOTAL</span><span>${formatMoney(sale.total_amount)}</span></div>
             ${isCash ? `
@@ -1177,26 +1186,36 @@
     }
 
     function renderReportSummary(summary) {
-        const cards = [
-            ['Transaksi Lunas', String(summary.transactions)],
-            ['Omzet', formatMoney(summary.omzet)],
-            ['HPP', formatMoney(summary.hpp)],
-            ['Laba Kotor', formatMoney(summary.laba)],
-            ['Susut / Layu', formatMoney(summary.spoilageLoss)],
-            ['Laba Bersih', formatMoney(summary.netProfit ?? summary.laba)],
-            ['Belanja Kulakan', formatMoney(summary.purchaseTotal)],
-            ['Tunai', formatMoney(summary.cashTotal)],
-            ['QRIS', formatMoney(summary.qrisTotal)],
-            ['Pending', String(summary.pending)]
-        ];
+        const cards = isCashier()
+            ? [
+                ['Transaksi Lunas', String(summary.transactions)],
+                ['Total Penjualan', formatMoney(summary.omzet)],
+                ['Tunai', formatMoney(summary.cashTotal)],
+                ['QRIS', formatMoney(summary.qrisTotal)],
+                ['Pending', String(summary.pending)]
+            ]
+            : [
+                ['Transaksi Lunas', String(summary.transactions)],
+                ['Omzet', formatMoney(summary.omzet)],
+                ['HPP', formatMoney(summary.hpp)],
+                ['Laba Kotor', formatMoney(summary.laba)],
+                ['Susut / Layu', formatMoney(summary.spoilageLoss)],
+                ['Laba Bersih', formatMoney(summary.netProfit ?? summary.laba)],
+                ['Belanja Kulakan', formatMoney(summary.purchaseTotal)],
+                ['Tunai', formatMoney(summary.cashTotal)],
+                ['QRIS', formatMoney(summary.qrisTotal)],
+                ['Pending', String(summary.pending)]
+            ];
         els.reportSummary.innerHTML = cards.map(([label, value]) => `
             <div class="pos-summary-card"><span>${label}</span><strong>${value}</strong></div>
         `).join('');
     }
 
     function renderReportRows(sales) {
+        const cashier = isCashier();
+        const colSpan = cashier ? 6 : 7;
         if (sales.length === 0) {
-            els.reportTableBody.innerHTML = '<tr><td colspan="7">Belum ada transaksi pada rentang tanggal ini.</td></tr>';
+            els.reportTableBody.innerHTML = `<tr><td colspan="${colSpan}">Belum ada transaksi pada rentang tanggal ini.</td></tr>`;
             return;
         }
         els.reportTableBody.innerHTML = sales.map((sale) => {
@@ -1205,6 +1224,7 @@
             const payAction = sale.status === 'PENDING'
                 ? `<button type="button" class="pos-mini-button" data-pay-sale="${sale.id}">Lunas</button>`
                 : '';
+            const profitCol = cashier ? '' : `<td class="numeric">${formatMoney(sale.gross_profit)}</td>`;
             return `
                 <tr>
                     <td>
@@ -1214,7 +1234,7 @@
                     <td>${formatDateTime(sale.created_at)}</td>
                     <td>${escapeHtml(sale.payment_method)}</td>
                     <td class="numeric">${formatMoney(sale.total_amount)}</td>
-                    <td class="numeric">${formatMoney(sale.gross_profit)}</td>
+                    ${profitCol}
                     <td><span class="pos-status ${statusClass}">${escapeHtml(sale.status)}</span></td>
                     <td>
                         <div class="pos-row-actions">
@@ -1250,6 +1270,7 @@
     }
 
     async function exportReportCsv() {
+        if (isCashier()) return;
         try {
             const query = reportQuery();
             const response = await fetch(`${API_BASE_URL}/pos/export-excel${query ? `?${query}` : ''}`, {
@@ -1275,13 +1296,14 @@
         }
     }
 
-    // ================= MODE KASIR =================
+    // ================= MODE KASIR vs OWNER =================
 
     function isCashier() {
         return state.user?.role === 'cashier';
     }
 
-    // Kasir tidak boleh keluar dari modul POS: sembunyikan tautan dashboard & pengaturan.
+    // Kasir hanya melihat informasi & fitur operasional karyawan (tanpa HPP/modal/laba & tanpa menu owner).
+    // Owner mendapatkan akses penuh ke seluruh fitur.
     function applyRoleUi() {
         const cashier = isCashier();
         if (els.posBrandLink) {
@@ -1289,12 +1311,26 @@
             els.posBrandLink.title = cashier ? 'Saku Kasir' : 'Kembali ke dashboard keuangan';
         }
         if (els.btnSakuHarga) els.btnSakuHarga.hidden = cashier;
+        if (els.btnManageProducts) els.btnManageProducts.hidden = cashier;
+        if (els.btnPurchase) els.btnPurchase.hidden = cashier;
         if (els.btnSettings) els.btnSettings.hidden = cashier;
         if (els.cashierSection) els.cashierSection.hidden = cashier;
         if (els.gateLoginLink) els.gateLoginLink.hidden = cashier;
-        if (cashier) {
-            els.posUserName.textContent = `${state.user.fullName || state.user.full_name || state.user.username || 'Kasir'} · Kasir`;
+        if (els.btnExportCsv) els.btnExportCsv.hidden = cashier;
+        if (els.reportProfitHeader) els.reportProfitHeader.hidden = cashier;
+        if (els.reportsTitle) {
+            els.reportsTitle.textContent = cashier ? 'Riwayat Penjualan' : 'Riwayat & Laba';
         }
+        if (els.emptyCatalogHint) {
+            els.emptyCatalogHint.innerHTML = cashier
+                ? 'Hubungi pemilik toko untuk menambahkan produk dan stok.'
+                : 'Tambahkan produk, harga jual, dan stok lewat tombol <strong>Produk</strong>.';
+        }
+        const displayName = state.user?.fullName || state.user?.full_name || state.user?.username || (cashier ? 'Kasir' : 'Owner');
+        if (els.posUserName) {
+            els.posUserName.textContent = cashier ? `${displayName} · Kasir` : `${displayName} · Owner`;
+        }
+        renderCatalog();
     }
 
     async function loadCashiers() {
@@ -1391,6 +1427,7 @@
     }
 
     async function openSettings() {
+        if (isCashier()) return;
         els.settingsError.hidden = true;
         try {
             await loadSettings();
@@ -1726,6 +1763,7 @@
         els.btnSendWa.addEventListener('click', sendReceiptToWhatsApp);
 
         els.btnManageProducts.addEventListener('click', () => {
+            if (isCashier()) return;
             resetProductForm();
             loadProducts().catch((err) => showToast(err.message, true));
             openModal('productsModal');
@@ -1923,6 +1961,9 @@
             // Server adalah sumber kebenaran untuk peran akun (kasir vs pemilik).
             if (state.settings?.is_cashier && state.user.role !== 'cashier') {
                 state.user.role = 'cashier';
+                applyRoleUi();
+            } else if (state.settings?.is_cashier === false && state.user.role === 'cashier') {
+                state.user.role = 'user';
                 applyRoleUi();
             }
             els.reportFrom.value = firstDayOfMonthValue();

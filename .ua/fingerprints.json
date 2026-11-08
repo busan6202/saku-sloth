@@ -1,0 +1,1501 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "c690b90676239b9872e152bf95d1bede11b39a14",
+  "generatedAt": "2026-11-08T11:04:43.198Z",
+  "files": {
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "8cac21d602812383035b60964b42d237f1d10c747f847044f217dc8333eda83b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 603,
+      "hasStructuralAnalysis": false
+    },
+    "docs/superpowers/plans/2026-11-08-saku-harga-add-product.md": {
+      "filePath": "docs/superpowers/plans/2026-11-08-saku-harga-add-product.md",
+      "contentHash": "35c1b24dc3c634d13fe04e14cfaf7f1f715286e5cdc90e881a3a4788c7de5447",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 95,
+      "hasStructuralAnalysis": false
+    },
+    "docs/superpowers/specs/2026-11-08-saku-harga-add-product-design.md": {
+      "filePath": "docs/superpowers/specs/2026-11-08-saku-harga-add-product-design.md",
+      "contentHash": "2201906bd3e07315bb48ff21787e8f697c750a71d5bf7ec8e4db8dc5da37859e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 49,
+      "hasStructuralAnalysis": false
+    },
+    "harga.css": {
+      "filePath": "harga.css",
+      "contentHash": "7ca33db754dfc2af25719653709b24a82b24c86532050ec21b511a063188e880",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1213,
+      "hasStructuralAnalysis": false
+    },
+    "harga.html": {
+      "filePath": "harga.html",
+      "contentHash": "57fd2749284e749bff123e1f438b62879ced8ed57f9a80ac8c62a884e3e5ec5e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 365,
+      "hasStructuralAnalysis": false
+    },
+    "harga.js": {
+      "filePath": "harga.js",
+      "contentHash": "7972686280acf910380d3ae447663c038557de03ef38ca289c0e24987a754a50",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1434,
+      "hasStructuralAnalysis": true
+    },
+    "harga/index.html": {
+      "filePath": "harga/index.html",
+      "contentHash": "8a0a2b2667250f078ab88273d8e42252d06d844d8522497b24aa1b73b326522a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": false
+    },
+    "index.html": {
+      "filePath": "index.html",
+      "contentHash": "38e6cfa1b8a5f746744167d598ecaebd5d90352f7357d57ae104823b950393b1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1380,
+      "hasStructuralAnalysis": false
+    },
+    "lib/security.js": {
+      "filePath": "lib/security.js",
+      "contentHash": "67df96bf88f6946958f42a2f60d623e5924237db43f241b30bc34c64481ac777",
+      "functions": [
+        {
+          "name": "pbkdf2",
+          "params": [
+            "password",
+            "salt",
+            "iterations"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "hashPassword",
+          "params": [
+            "password"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "safeEqualString",
+          "params": [
+            "a",
+            "b"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "parseStoredPassword",
+          "params": [
+            "stored"
+          ],
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "verifyPassword",
+          "params": [
+            "password",
+            "stored"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "passwordNeedsRehash",
+          "params": [
+            "stored"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "generateSessionToken",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "parseCookies",
+          "params": [
+            "header"
+          ],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "isCrossSiteRequest",
+          "params": [
+            "req"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "buildSessionCookie",
+          "params": [
+            "req",
+            "token",
+            "maxAgeSeconds"
+          ],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "buildClearSessionCookie",
+          "params": [
+            "req"
+          ],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "readSessionToken",
+          "params": [
+            "req"
+          ],
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "buildUserScope",
+          "params": [
+            "user"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "createRateLimiter",
+          "params": [],
+          "exported": false,
+          "lineCount": 40
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 229,
+      "hasStructuralAnalysis": true
+    },
+    "manifest.webmanifest": {
+      "filePath": "manifest.webmanifest",
+      "contentHash": "189a8a6cbc4f271763531b87d3fe633697bf115b2a51e5c910638a8bf31ba2b7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 50,
+      "hasStructuralAnalysis": false
+    },
+    "package.json": {
+      "filePath": "package.json",
+      "contentHash": "b38902a4199c6ebcf0175be1db9320ffc28d96a26f6700c797d4557ea305e337",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": false
+    },
+    "pos.css": {
+      "filePath": "pos.css",
+      "contentHash": "e7b7aa615de27468c3860cadbd1839c0c7e70ee3dcd899be02cc4b61003696fe",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1608,
+      "hasStructuralAnalysis": false
+    },
+    "pos.html": {
+      "filePath": "pos.html",
+      "contentHash": "4468407b3c12571588d88a4b534abae6f621a394c255a50902a52f0adf433533",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 582,
+      "hasStructuralAnalysis": false
+    },
+    "pos.js": {
+      "filePath": "pos.js",
+      "contentHash": "d2cf59fe9bdea53f60f33fdd4b81c75eb70d69a5b0f66caa68daec2e69083ea2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1942,
+      "hasStructuralAnalysis": true
+    },
+    "pos/index.html": {
+      "filePath": "pos/index.html",
+      "contentHash": "368b895b73036f5b880cdea089e66dd0db54451bb36b5d1cdea5bd9a488e9a3b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": false
+    },
+    "sayur-nusantara.js": {
+      "filePath": "sayur-nusantara.js",
+      "contentHash": "2aaff1cfdd2203fa0ed45f827d435f2bd7b95c044a7b173b51ec9183f8f281a6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 271,
+      "hasStructuralAnalysis": true
+    },
+    "script.js": {
+      "filePath": "script.js",
+      "contentHash": "9c67dd592c54f724418c2e129e5e636e2fd79cda8cb7ad988590b29dcdadee53",
+      "functions": [
+        {
+          "name": "persistSessionToken",
+          "params": [
+            "token"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "readStoredSessionToken",
+          "params": [],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "escapeHtml",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "getWalletMeta",
+          "params": [
+            "walletName"
+          ],
+          "exported": false,
+          "lineCount": 25
+        },
+        {
+          "name": "localMonthValue",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "localDateKey",
+          "params": [],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "formatCurrency",
+          "params": [
+            "amount"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "formatCompactRp",
+          "params": [
+            "amount"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "formatTransactionDate",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "loadLocalEdits",
+          "params": [],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "saveLocalEdit",
+          "params": [
+            "id",
+            "patch"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "loadDeletedIds",
+          "params": [],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "markIdDeleted",
+          "params": [
+            "id"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "applyLocalOverrides",
+          "params": [
+            "list"
+          ],
+          "exported": false,
+          "lineCount": 22
+        },
+        {
+          "name": "loadBills",
+          "params": [],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "saveBills",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "getCategoryIcon",
+          "params": [
+            "category",
+            "type"
+          ],
+          "exported": false,
+          "lineCount": 39
+        },
+        {
+          "name": "classifyExpenseBucket",
+          "params": [
+            "category",
+            "desc"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "triggerCartoonCelebration",
+          "params": [],
+          "exported": false,
+          "lineCount": 24
+        },
+        {
+          "name": "updateMascotMood",
+          "params": [
+            "mood",
+            "customMessage"
+          ],
+          "exported": false,
+          "lineCount": 51
+        },
+        {
+          "name": "switchMascot",
+          "params": [
+            "name"
+          ],
+          "exported": false,
+          "lineCount": 31
+        },
+        {
+          "name": "setNotice",
+          "params": [
+            "message"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "selectedMonthTransactions",
+          "params": [],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "getDaysInMonth",
+          "params": [
+            "monthStr"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "renderWalletsSection",
+          "params": [
+            "monthTransactions"
+          ],
+          "exported": false,
+          "lineCount": 115
+        },
+        {
+          "name": "setFormWalletValue",
+          "params": [
+            "walletId"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "renderFormWalletDropdownMenu",
+          "params": [],
+          "exported": false,
+          "lineCount": 37
+        },
+        {
+          "name": "runFinancialPlannerEngine",
+          "params": [
+            "monthTransactions",
+            "income",
+            "expense"
+          ],
+          "exported": false,
+          "lineCount": 205
+        },
+        {
+          "name": "renderGoogleCalendarAndTimeline",
+          "params": [
+            "monthTransactions"
+          ],
+          "exported": false,
+          "lineCount": 133
+        },
+        {
+          "name": "renderDayInspector",
+          "params": [
+            "dateKey",
+            "dayTrx",
+            "dayBills"
+          ],
+          "exported": false,
+          "lineCount": 89
+        },
+        {
+          "name": "renderMonthlyTimeline",
+          "params": [
+            "selectedMonth",
+            "totalDays",
+            "trxByDate",
+            "billsByDate"
+          ],
+          "exported": false,
+          "lineCount": 121
+        },
+        {
+          "name": "renderBillsAndNotifications",
+          "params": [],
+          "exported": false,
+          "lineCount": 126
+        },
+        {
+          "name": "markBillPaidAndRecord",
+          "params": [
+            "billId"
+          ],
+          "exported": false,
+          "lineCount": 29
+        },
+        {
+          "name": "deleteBill",
+          "params": [
+            "billId"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "requestAndTestBrowserNotification",
+          "params": [],
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "updateSummary",
+          "params": [
+            "monthTransactions"
+          ],
+          "exported": false,
+          "lineCount": 59
+        },
+        {
+          "name": "renderCategories",
+          "params": [
+            "categoryTotals",
+            "totalExpense"
+          ],
+          "exported": false,
+          "lineCount": 43
+        },
+        {
+          "name": "createTransactionRow",
+          "params": [
+            "transaction"
+          ],
+          "exported": false,
+          "lineCount": 76
+        },
+        {
+          "name": "renderIcons",
+          "params": [],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "renderTransactions",
+          "params": [],
+          "exported": false,
+          "lineCount": 37
+        },
+        {
+          "name": "renderDashboard",
+          "params": [],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "getAuthHeaders",
+          "params": [],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "loadTransactions",
+          "params": [],
+          "exported": false,
+          "lineCount": 34
+        },
+        {
+          "name": "formatCurrencyId",
+          "params": [
+            "amount"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "formatDebtDate",
+          "params": [
+            "dateStr"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "loadDebts",
+          "params": [],
+          "exported": false,
+          "lineCount": 28
+        },
+        {
+          "name": "saveDebtLocalCache",
+          "params": [],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "createNewDebt",
+          "params": [],
+          "exported": false,
+          "lineCount": 46
+        },
+        {
+          "name": "updateDebt",
+          "params": [
+            "debtId",
+            "updates"
+          ],
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "deleteDebt",
+          "params": [
+            "debtId"
+          ],
+          "exported": false,
+          "lineCount": 17
+        },
+        {
+          "name": "openAddDebtDialog",
+          "params": [],
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "openEditDebtDialog",
+          "params": [
+            "debt"
+          ],
+          "exported": false,
+          "lineCount": 22
+        },
+        {
+          "name": "openPayDebtDialog",
+          "params": [
+            "debt"
+          ],
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "renderDebtsSummary",
+          "params": [
+            "debtsList"
+          ],
+          "exported": false,
+          "lineCount": 38
+        },
+        {
+          "name": "renderDebtsList",
+          "params": [
+            "debtsList"
+          ],
+          "exported": false,
+          "lineCount": 142
+        },
+        {
+          "name": "createNewTransaction",
+          "params": [],
+          "exported": false,
+          "lineCount": 62
+        },
+        {
+          "name": "updateExistingTransaction",
+          "params": [
+            "id"
+          ],
+          "exported": false,
+          "lineCount": 43
+        },
+        {
+          "name": "deleteTransactionById",
+          "params": [
+            "id"
+          ],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "openResetBalanceDialog",
+          "params": [],
+          "exported": false,
+          "lineCount": 44
+        },
+        {
+          "name": "executeResetBalance",
+          "params": [],
+          "exported": false,
+          "lineCount": 99
+        },
+        {
+          "name": "buildGoogleSheetsRows",
+          "params": [],
+          "exported": false,
+          "lineCount": 29
+        },
+        {
+          "name": "copyAndOpenGoogleSheets",
+          "params": [],
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "downloadGoogleSheetsCsv",
+          "params": [],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "syncToGoogleSheetsWebhook",
+          "params": [],
+          "exported": false,
+          "lineCount": 28
+        },
+        {
+          "name": "openTransactionDialog",
+          "params": [
+            "prefillDate",
+            "prefillWallet"
+          ],
+          "exported": false,
+          "lineCount": 22
+        },
+        {
+          "name": "openEditTransactionDialog",
+          "params": [
+            "trx"
+          ],
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "submitTransaction",
+          "params": [
+            "event"
+          ],
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "submitNewBill",
+          "params": [
+            "event"
+          ],
+          "exported": false,
+          "lineCount": 25
+        },
+        {
+          "name": "submitBudgetTarget",
+          "params": [
+            "event"
+          ],
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "shiftSelectedMonth",
+          "params": [
+            "delta"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "initializeCalendarViewTabs",
+          "params": [],
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "initializeTheme",
+          "params": [],
+          "exported": false,
+          "lineCount": 27
+        },
+        {
+          "name": "initializeNavigation",
+          "params": [],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "submitDebtForm",
+          "params": [
+            "event"
+          ],
+          "exported": false,
+          "lineCount": 45
+        },
+        {
+          "name": "submitDebtPayForm",
+          "params": [
+            "event"
+          ],
+          "exported": false,
+          "lineCount": 38
+        },
+        {
+          "name": "initializeMascot",
+          "params": [],
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "showAuthAlert",
+          "params": [
+            "message"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "hideAuthAlert",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "switchAuthTab",
+          "params": [
+            "tab"
+          ],
+          "exported": false,
+          "lineCount": 45
+        },
+        {
+          "name": "clearUserScopedStorage",
+          "params": [],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "canManageCashierAccounts",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "syncCashierMenuVisibility",
+          "params": [],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "renderCashierAccounts",
+          "params": [
+            "rows"
+          ],
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "loadCashierAccounts",
+          "params": [],
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "submitCashierForm",
+          "params": [
+            "event"
+          ],
+          "exported": false,
+          "lineCount": 38
+        },
+        {
+          "name": "resetCashierPassword",
+          "params": [
+            "cashierId"
+          ],
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "deleteCashierAccount",
+          "params": [
+            "cashierId"
+          ],
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "redirectCashierToPos",
+          "params": [
+            "user",
+            "token"
+          ],
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "setCurrentUser",
+          "params": [
+            "user",
+            "token"
+          ],
+          "exported": false,
+          "lineCount": 46
+        },
+        {
+          "name": "handleLogout",
+          "params": [],
+          "exported": false,
+          "lineCount": 27
+        },
+        {
+          "name": "handleLoginSubmit",
+          "params": [
+            "event"
+          ],
+          "exported": false,
+          "lineCount": 50
+        },
+        {
+          "name": "handleRegisterSubmit",
+          "params": [
+            "event"
+          ],
+          "exported": false,
+          "lineCount": 61
+        },
+        {
+          "name": "handleQuickDemo",
+          "params": [],
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "initializeAuth",
+          "params": [],
+          "exported": false,
+          "lineCount": 55
+        },
+        {
+          "name": "setupAuthEventListeners",
+          "params": [],
+          "exported": false,
+          "lineCount": 86
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 3811,
+      "hasStructuralAnalysis": true
+    },
+    "server.js": {
+      "filePath": "server.js",
+      "contentHash": "b99f2f23ed9656310c359276c7e42c281c25403293dd641f5743a6867048e2fd",
+      "functions": [
+        {
+          "name": "isOriginAllowed",
+          "params": [
+            "origin",
+            "req"
+          ],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "isCashierSession",
+          "params": [
+            "req"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "clientIp",
+          "params": [
+            "req"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "guardRateLimit",
+          "params": [
+            "limiter",
+            "req",
+            "res"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "setupTelegramBotCommands",
+          "params": [],
+          "exported": false,
+          "lineCount": 75
+        },
+        {
+          "name": "ensureDatabaseReady",
+          "params": [],
+          "exported": false,
+          "lineCount": 276
+        },
+        {
+          "name": "normalizeEmail",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "isValidEmail",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "slugifyUsername",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "generateUniqueUsername",
+          "params": [
+            "base"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "resolveAuthUser",
+          "params": [
+            "req"
+          ],
+          "exported": false,
+          "lineCount": 19
+        },
+        {
+          "name": "isCashier",
+          "params": [
+            "user"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "posOwnerId",
+          "params": [
+            "user"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "resolveTelegramUser",
+          "params": [
+            "chatId"
+          ],
+          "exported": false,
+          "lineCount": 31
+        },
+        {
+          "name": "isTelegramChatAllowed",
+          "params": [
+            "chatId"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "setEditSession",
+          "params": [
+            "chatId",
+            "trxId",
+            "field"
+          ],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "getEditSession",
+          "params": [
+            "chatId"
+          ],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "clearEditSession",
+          "params": [
+            "chatId"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "stripMarkdownFormatting",
+          "params": [
+            "text"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "sendTelegramMessage",
+          "params": [
+            "chatId",
+            "text"
+          ],
+          "exported": false,
+          "lineCount": 32
+        },
+        {
+          "name": "editTelegramMessage",
+          "params": [
+            "chatId",
+            "messageId",
+            "text"
+          ],
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "answerCallbackQuery",
+          "params": [
+            "callbackQueryId"
+          ],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "buildMainMenuInlineKeyboard",
+          "params": [],
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "buildQuickCategoryKeyboard",
+          "params": [
+            "typeKey"
+          ],
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "buildQuickNominalKeyboard",
+          "params": [
+            "typeKey",
+            "itemIdx"
+          ],
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "buildQuickWalletKeyboard",
+          "params": [
+            "typeKey",
+            "itemIdx",
+            "amount"
+          ],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "buildTransactionActionKeyboard",
+          "params": [
+            "trxId"
+          ],
+          "exported": false,
+          "lineCount": 22
+        },
+        {
+          "name": "buildEditFieldKeyboard",
+          "params": [
+            "trxId"
+          ],
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "buildWalletPickerKeyboard",
+          "params": [
+            "trxId"
+          ],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "buildCategoryPickerKeyboard",
+          "params": [
+            "trxId"
+          ],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "buildResetConfirmationKeyboard",
+          "params": [],
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "sanitizeSafeText",
+          "params": [
+            "val"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "formatTrxDetailMessage",
+          "params": [
+            "trx"
+          ],
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "getRunningBalanceSummary",
+          "params": [
+            "userId"
+          ],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "buildSaldoMessageText",
+          "params": [
+            "userId"
+          ],
+          "exported": false,
+          "lineCount": 37
+        },
+        {
+          "name": "buildSaldoInlineKeyboard",
+          "params": [],
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "buildDompetMessageText",
+          "params": [
+            "userId"
+          ],
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "buildHistoryMessagePayload",
+          "params": [
+            "userId"
+          ],
+          "exported": false,
+          "lineCount": 43
+        },
+        {
+          "name": "buildResetPromptText",
+          "params": [
+            "userId"
+          ],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "parseNaturalTransactionText",
+          "params": [
+            "rawText"
+          ],
+          "exported": false,
+          "lineCount": 62
+        },
+        {
+          "name": "callGeminiAPI",
+          "params": [
+            "prompt"
+          ],
+          "exported": false,
+          "lineCount": 32
+        },
+        {
+          "name": "callGeminiAudioAPI",
+          "params": [
+            "prompt",
+            "base64Audio"
+          ],
+          "exported": false,
+          "lineCount": 32
+        },
+        {
+          "name": "saveAndNotify",
+          "params": [
+            "trxData",
+            "chatId",
+            "existingMessageId",
+            "userId"
+          ],
+          "exported": false,
+          "lineCount": 37
+        },
+        {
+          "name": "toMoney",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "toQty",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "toUnitLabel",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "toCategoryLabel",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "normalizeIconValue",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "buildPosInvoiceNo",
+          "params": [],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "posWalletFor",
+          "params": [
+            "method"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "safeSecretEquals",
+          "params": [
+            "input",
+            "expected"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "parsePosDateRange",
+          "params": [
+            "req"
+          ],
+          "exported": false,
+          "lineCount": 17
+        },
+        {
+          "name": "isSafeWebhookUrl",
+          "params": [
+            "rawUrl"
+          ],
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "getPosSheetsWebhookUrl",
+          "params": [
+            "userId"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "syncPosSaleToSheets",
+          "params": [
+            "userId",
+            "saleId"
+          ],
+          "exported": false,
+          "lineCount": 57
+        },
+        {
+          "name": "markPosSalePaid",
+          "params": [
+            "saleId"
+          ],
+          "exported": false,
+          "lineCount": 73
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4102,
+      "hasStructuralAnalysis": true
+    },
+    "style.css": {
+      "filePath": "style.css",
+      "contentHash": "8f587d876a7334b4e269bbbf659d36a873bc89effda407634fe3a33c86905751",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 3302,
+      "hasStructuralAnalysis": false
+    },
+    "sw.js": {
+      "filePath": "sw.js",
+      "contentHash": "6884ae10b7f542c917f19fb58f54db9fd96de84af7eb4ebd6b0b01dc91f9de76",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 90,
+      "hasStructuralAnalysis": true
+    },
+    "test/harga.test.js": {
+      "filePath": "test/harga.test.js",
+      "contentHash": "1013f0c3888581e3b0c744e4f13e8a2e4605898f55fe0ea99c5b993ef759bfcd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 66,
+      "hasStructuralAnalysis": true
+    },
+    "test/security.test.js": {
+      "filePath": "test/security.test.js",
+      "contentHash": "7d648bd2914cd65ecd8e47091d59d99527a10033698f5631bee4d711d6a71089",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 133,
+      "hasStructuralAnalysis": true
+    },
+    "vercel.json": {
+      "filePath": "vercel.json",
+      "contentHash": "b5146d0fa1a03067824d9583cb80e29f08bc4416bbc974538dac191b5837f47c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 144,
+      "hasStructuralAnalysis": false
+    }
+  }
+}

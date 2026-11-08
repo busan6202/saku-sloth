@@ -1,0 +1,246 @@
+{
+    "name":  "saku-sloth",
+    "description":  "Aplikasi Kasir POS, Manajemen Harga Produk, dan Keuangan Harian berbasis PWA dengan backend Express Node.js",
+    "languages":  [
+                      "css",
+                      "html",
+                      "javascript",
+                      "json",
+                      "markdown"
+                  ],
+    "frameworks":  [
+                       "express",
+                       "node"
+                   ],
+    "files":  [
+                  {
+                      "path":  "README.md",
+                      "language":  "markdown",
+                      "sizeLines":  602,
+                      "fileCategory":  "docs"
+                  },
+                  {
+                      "path":  "docs/superpowers/plans/2026-11-08-saku-harga-add-product.md",
+                      "language":  "markdown",
+                      "sizeLines":  94,
+                      "fileCategory":  "docs"
+                  },
+                  {
+                      "path":  "docs/superpowers/specs/2026-11-08-saku-harga-add-product-design.md",
+                      "language":  "markdown",
+                      "sizeLines":  48,
+                      "fileCategory":  "docs"
+                  },
+                  {
+                      "path":  "harga.css",
+                      "language":  "css",
+                      "sizeLines":  1212,
+                      "fileCategory":  "markup"
+                  },
+                  {
+                      "path":  "harga.html",
+                      "language":  "html",
+                      "sizeLines":  364,
+                      "fileCategory":  "markup"
+                  },
+                  {
+                      "path":  "harga.js",
+                      "language":  "javascript",
+                      "sizeLines":  1433,
+                      "fileCategory":  "code"
+                  },
+                  {
+                      "path":  "harga/index.html",
+                      "language":  "html",
+                      "sizeLines":  14,
+                      "fileCategory":  "markup"
+                  },
+                  {
+                      "path":  "index.html",
+                      "language":  "html",
+                      "sizeLines":  1379,
+                      "fileCategory":  "markup"
+                  },
+                  {
+                      "path":  "lib/security.js",
+                      "language":  "javascript",
+                      "sizeLines":  228,
+                      "fileCategory":  "code"
+                  },
+                  {
+                      "path":  "manifest.webmanifest",
+                      "language":  "webmanifest",
+                      "sizeLines":  49,
+                      "fileCategory":  "code"
+                  },
+                  {
+                      "path":  "package.json",
+                      "language":  "json",
+                      "sizeLines":  18,
+                      "fileCategory":  "config"
+                  },
+                  {
+                      "path":  "pos.css",
+                      "language":  "css",
+                      "sizeLines":  1607,
+                      "fileCategory":  "markup"
+                  },
+                  {
+                      "path":  "pos.html",
+                      "language":  "html",
+                      "sizeLines":  581,
+                      "fileCategory":  "markup"
+                  },
+                  {
+                      "path":  "pos.js",
+                      "language":  "javascript",
+                      "sizeLines":  1941,
+                      "fileCategory":  "code"
+                  },
+                  {
+                      "path":  "pos/index.html",
+                      "language":  "html",
+                      "sizeLines":  14,
+                      "fileCategory":  "markup"
+                  },
+                  {
+                      "path":  "sayur-nusantara.js",
+                      "language":  "javascript",
+                      "sizeLines":  270,
+                      "fileCategory":  "code"
+                  },
+                  {
+                      "path":  "script.js",
+                      "language":  "javascript",
+                      "sizeLines":  3810,
+                      "fileCategory":  "code"
+                  },
+                  {
+                      "path":  "server.js",
+                      "language":  "javascript",
+                      "sizeLines":  4101,
+                      "fileCategory":  "code"
+                  },
+                  {
+                      "path":  "style.css",
+                      "language":  "css",
+                      "sizeLines":  3301,
+                      "fileCategory":  "markup"
+                  },
+                  {
+                      "path":  "sw.js",
+                      "language":  "javascript",
+                      "sizeLines":  89,
+                      "fileCategory":  "code"
+                  },
+                  {
+                      "path":  "test/harga.test.js",
+                      "language":  "javascript",
+                      "sizeLines":  65,
+                      "fileCategory":  "code"
+                  },
+                  {
+                      "path":  "test/security.test.js",
+                      "language":  "javascript",
+                      "sizeLines":  132,
+                      "fileCategory":  "code"
+                  },
+                  {
+                      "path":  "vercel.json",
+                      "language":  "json",
+                      "sizeLines":  143,
+                      "fileCategory":  "config"
+                  }
+              ],
+    "totalFiles":  23,
+    "filteredByIgnore":  1035,
+    "estimatedComplexity":  "small",
+    "stats":  {
+                  "filesScanned":  23,
+                  "byCategory":  {
+                                     "docs":  3,
+                                     "markup":  8,
+                                     "code":  10,
+                                     "config":  2
+                                 },
+                  "byLanguage":  {
+                                     "markdown":  3,
+                                     "css":  3,
+                                     "html":  5,
+                                     "javascript":  9,
+                                     "webmanifest":  1,
+                                     "json":  2
+                                 }
+              },
+    "importMap":  {
+                      "README.md":  [
+
+                                    ],
+                      "docs/superpowers/plans/2026-11-08-saku-harga-add-product.md":  [
+
+                                                                                      ],
+                      "docs/superpowers/specs/2026-11-08-saku-harga-add-product-design.md":  [
+
+                                                                                             ],
+                      "harga.css":  [
+
+                                    ],
+                      "harga.html":  [
+
+                                     ],
+                      "harga.js":  [
+
+                                   ],
+                      "harga/index.html":  [
+
+                                           ],
+                      "index.html":  [
+
+                                     ],
+                      "lib/security.js":  [
+
+                                          ],
+                      "manifest.webmanifest":  [
+
+                                               ],
+                      "package.json":  [
+
+                                       ],
+                      "pos.css":  [
+
+                                  ],
+                      "pos.html":  [
+
+                                   ],
+                      "pos.js":  [
+
+                                 ],
+                      "pos/index.html":  [
+
+                                         ],
+                      "sayur-nusantara.js":  [
+
+                                             ],
+                      "script.js":  [
+
+                                    ],
+                      "server.js":  [
+                                        "lib/security.js"
+                                    ],
+                      "style.css":  [
+
+                                    ],
+                      "sw.js":  [
+
+                                ],
+                      "test/harga.test.js":  [
+
+                                             ],
+                      "test/security.test.js":  [
+                                                    "lib/security.js"
+                                                ],
+                      "vercel.json":  [
+
+                                      ]
+                  }
+}

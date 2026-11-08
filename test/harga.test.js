@@ -63,3 +63,26 @@ test('kasir dibatasi: harga.html memiliki elemen blocked dan server menolak akse
     assert.match(serverCode, /app\.put\('\/api\/pos\/products\/:id'[\s\S]*?if \(isCashier\(user\)\) return res\.status\(403\)/);
     assert.match(serverCode, /app\.delete\('\/api\/pos\/products\/:id'[\s\S]*?if \(isCashier\(user\)\) return res\.status\(403\)/);
 });
+
+test('pos.html, pos.js, dan server.js menyembunyikan HPP/modal di kasir POS dan membuka semua fitur untuk owner', () => {
+    const posHtml = fs.readFileSync(path.join(__dirname, '..', 'pos.html'), 'utf8');
+    const posJs = fs.readFileSync(path.join(__dirname, '..', 'pos.js'), 'utf8');
+    const serverCode = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+
+    // Keranjang POS tidak lagi menampilkan Total HPP atau Laba Kotor
+    assert.doesNotMatch(posHtml, /id="cartCost"/);
+    assert.doesNotMatch(posHtml, /id="cartProfit"/);
+    assert.match(posHtml, /id="cartTotal"/);
+
+    // pos.js mengatur hak akses Kasir vs Owner
+    assert.match(posJs, /function applyRoleUi\(\)/);
+    assert.match(posJs, /if \(els\.btnExportCsv\) els\.btnExportCsv\.hidden = cashier/);
+    assert.match(posJs, /if \(els\.reportProfitHeader\) els\.reportProfitHeader\.hidden = cashier/);
+    assert.match(posJs, /\$\{displayName\} · Kasir` : `\$\{displayName\} · Owner`/);
+
+    // server.js menyaring HPP/modal & laba dari payload API untuk kasir
+    assert.match(serverCode, /function sanitizePosProductForUser\(row, user\)/);
+    assert.match(serverCode, /function sanitizePosSaleForUser\(sale, user\)/);
+    assert.match(serverCode, /app\.post\('\/api\/pos\/purchases'[\s\S]*?if \(isCashier\(user\)\) return res\.status\(403\)/);
+    assert.match(serverCode, /app\.get\('\/api\/pos\/export-excel'[\s\S]*?if \(isCashier\(user\)\) return res\.status\(403\)/);
+});

@@ -84,7 +84,7 @@
                 <div class="pos-empty" id="emptyCatalog" hidden>
                     <p class="pos-empty-emoji" aria-hidden="true">📦</p>
                     <h3>Belum ada produk</h3>
-                    <p>Tambahkan produk, harga jual, HPP, dan stok lewat tombol <strong>Produk</strong>.</p>
+                    <p id="emptyCatalogHint">Tambahkan produk, harga jual, dan stok lewat tombol <strong>Produk</strong>.</p>
                 </div>
             </section>
 
@@ -104,14 +104,6 @@
                 </div>
 
                 <div class="pos-cart-totals">
-                    <div class="pos-total-row">
-                        <span>Total HPP</span>
-                        <strong id="cartCost">Rp 0</strong>
-                    </div>
-                    <div class="pos-total-row">
-                        <span>Laba Kotor</span>
-                        <strong class="pos-profit" id="cartProfit">Rp 0</strong>
-                    </div>
                     <div class="pos-total-row pos-total-grand">
                         <span>Total Bayar</span>
                         <strong id="cartTotal">Rp 0</strong>
@@ -371,7 +363,7 @@
                             <th>Waktu</th>
                             <th>Metode</th>
                             <th>Total</th>
-                            <th>Laba</th>
+                            <th id="reportProfitHeader">Laba</th>
                             <th>Status</th>
                             <th></th>
                         </tr>

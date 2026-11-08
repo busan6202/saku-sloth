@@ -1,0 +1,1040 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "saku-sloth",
+    "languages": [
+      "css",
+      "html",
+      "javascript",
+      "json",
+      "markdown"
+    ],
+    "frameworks": [
+      "express",
+      "node"
+    ],
+    "description": "Aplikasi Kasir POS, Manajemen Harga Produk, dan Keuangan Harian berbasis PWA dengan backend Express Node.js",
+    "analyzedAt": "2026-11-08T11:03:51Z",
+    "gitCommitHash": "c690b90676239b9872e152bf95d1bede11b39a14"
+  },
+  "nodes": [
+    {
+      "id": "file:lib/security.js",
+      "type": "file",
+      "name": "security.js",
+      "filePath": "lib/security.js",
+      "summary": "Modul keamanan inti untuk otentikasi admin, hashing password PBKDF2, proteksi rate-limit, validasi session cookie, dan proteksi CSRF.",
+      "tags": [
+        "security",
+        "authentication",
+        "crypto",
+        "utility",
+        "tested"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:lib/security.js:hashPassword",
+      "type": "function",
+      "name": "hashPassword",
+      "filePath": "lib/security.js",
+      "lineRange": [
+        27,
+        31
+      ],
+      "summary": "Menghasilkan hash password aman menggunakan algoritma PBKDF2 dengan salt acak berukuran 16 byte.",
+      "tags": [
+        "crypto",
+        "password",
+        "security"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:lib/security.js:verifyPassword",
+      "type": "function",
+      "name": "verifyPassword",
+      "filePath": "lib/security.js",
+      "lineRange": [
+        63,
+        68
+      ],
+      "summary": "Memverifikasi kecocokan password teks polos terhadap hash tersimpan dengan perbandingan timing-safe.",
+      "tags": [
+        "crypto",
+        "verification",
+        "security"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:lib/security.js:generateSessionToken",
+      "type": "function",
+      "name": "generateSessionToken",
+      "filePath": "lib/security.js",
+      "lineRange": [
+        77,
+        79
+      ],
+      "summary": "Menghasilkan token sesi acak aman berukuran 32 byte dalam format heksadesimal.",
+      "tags": [
+        "session",
+        "token",
+        "crypto"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:lib/security.js:parseCookies",
+      "type": "function",
+      "name": "parseCookies",
+      "filePath": "lib/security.js",
+      "lineRange": [
+        81,
+        98
+      ],
+      "summary": "Mem-parsing header Cookie HTTP dari request masuk menjadi pasangan key-value objek JavaScript.",
+      "tags": [
+        "cookie",
+        "parser",
+        "http"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:lib/security.js:isCrossSiteRequest",
+      "type": "function",
+      "name": "isCrossSiteRequest",
+      "filePath": "lib/security.js",
+      "lineRange": [
+        100,
+        109
+      ],
+      "summary": "Mendeteksi apakah request HTTP berasal dari domain luar (cross-site) guna mencegah serangan CSRF.",
+      "tags": [
+        "csrf",
+        "security",
+        "validation"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:lib/security.js:buildSessionCookie",
+      "type": "function",
+      "name": "buildSessionCookie",
+      "filePath": "lib/security.js",
+      "lineRange": [
+        117,
+        129
+      ],
+      "summary": "Membuat string Set-Cookie aman dengan atribut HttpOnly, Secure, dan SameSite untuk session token.",
+      "tags": [
+        "cookie",
+        "session",
+        "http"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:server.js",
+      "type": "file",
+      "name": "server.js",
+      "filePath": "server.js",
+      "summary": "Server backend Node.js Express yang menangani REST API kasir POS, sinkronisasi produk, otentikasi, database PostgreSQL, dan integrasi bot Telegram.",
+      "tags": [
+        "entry-point",
+        "server",
+        "api-handler",
+        "express"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:server.js:isOriginAllowed",
+      "type": "function",
+      "name": "isOriginAllowed",
+      "filePath": "server.js",
+      "lineRange": [
+        32,
+        44
+      ],
+      "summary": "Memvalidasi origin permintaan CORS terhadap daftar domain yang diizinkan untuk keamanan browser.",
+      "tags": [
+        "cors",
+        "security",
+        "middleware"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:server.js:isCashierSession",
+      "type": "function",
+      "name": "isCashierSession",
+      "filePath": "server.js",
+      "lineRange": [
+        102,
+        110
+      ],
+      "summary": "Memverifikasi apakah token sesi aktif milik akun kasir yang valid.",
+      "tags": [
+        "authentication",
+        "session",
+        "authorization"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:server.js:guardRateLimit",
+      "type": "function",
+      "name": "guardRateLimit",
+      "filePath": "server.js",
+      "lineRange": [
+        199,
+        207
+      ],
+      "summary": "Middleware pembatas laju permintaan (rate limiting) untuk mencegah serangan brute-force dan spam.",
+      "tags": [
+        "middleware",
+        "rate-limit",
+        "security"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:server.js:setupTelegramBotCommands",
+      "type": "function",
+      "name": "setupTelegramBotCommands",
+      "filePath": "server.js",
+      "lineRange": [
+        222,
+        296
+      ],
+      "summary": "Menginisialisasi webhook dan perintah interaktif untuk integrasi Telegram Bot notifikasi transaksi keuangan.",
+      "tags": [
+        "telegram",
+        "bot",
+        "webhook",
+        "integration"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:server.js:ensureDatabaseReady",
+      "type": "function",
+      "name": "ensureDatabaseReady",
+      "filePath": "server.js",
+      "lineRange": [
+        301,
+        576
+      ],
+      "summary": "Memeriksa koneksi PostgreSQL dan menjalankan skema migrasi tabel awal (users, products, transactions, sessions).",
+      "tags": [
+        "database",
+        "migration",
+        "postgresql"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:test/security.test.js",
+      "type": "file",
+      "name": "security.test.js",
+      "filePath": "test/security.test.js",
+      "summary": "Rangkaian pengujian unit otomatis menggunakan runner bawaan node:test untuk memvalidasi fungsi di lib/security.js.",
+      "tags": [
+        "test",
+        "unit-test",
+        "security"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "README.md",
+      "summary": "Dokumentasi arsitektur, panduan konfigurasi environment, integrasi bot Telegram, dan petunjuk deployment Saku Sloth.",
+      "tags": [
+        "documentation",
+        "readme",
+        "architecture"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:harga.css",
+      "type": "file",
+      "name": "harga.css",
+      "filePath": "harga.css",
+      "summary": "Stylesheet responsif antarmuka Saku Harga yang mengatur tampilan tabel harga, badge keuntungan/modal, modal tambah produk, dan dark mode.",
+      "tags": [
+        "css",
+        "styling",
+        "markup",
+        "dark-mode"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:harga.html",
+      "type": "file",
+      "name": "harga.html",
+      "filePath": "harga.html",
+      "summary": "Halaman web PWA Saku Harga untuk admin/owner dalam mengelola harga jual produk, memantau modal, margin profit, dan menambah produk baru.",
+      "tags": [
+        "html",
+        "pwa",
+        "ui",
+        "admin"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:index.html",
+      "type": "file",
+      "name": "index.html",
+      "filePath": "index.html",
+      "summary": "Halaman beranda utama dan dashboard pengeluaran harian SlothUI dengan kartu navigasi cepat ke Kasir POS dan Saku Harga.",
+      "tags": [
+        "entry-point",
+        "html",
+        "dashboard",
+        "pwa"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "config:package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "package.json",
+      "summary": "Manifest paket npm yang mendefinisikan dependensi backend (Express, pg, cors, dotenv) dan skrip pengujian/eksekusi node.",
+      "tags": [
+        "config",
+        "npm",
+        "package",
+        "dependencies"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:pos.css",
+      "type": "file",
+      "name": "pos.css",
+      "filePath": "pos.css",
+      "summary": "Stylesheet antarmuka kasir POS yang dioptimalkan untuk mobile/tablet, mengatur grid produk, panel keranjang, kalkulator, dan modal struk.",
+      "tags": [
+        "css",
+        "styling",
+        "pos",
+        "responsive"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:pos.html",
+      "type": "file",
+      "name": "pos.html",
+      "filePath": "pos.html",
+      "summary": "Antarmuka aplikasi kasir POS (Point of Sales) PWA dengan katalog produk, filter kategori, keranjang belanja, dan pembayaran cepat.",
+      "tags": [
+        "html",
+        "pos",
+        "pwa",
+        "cashier"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:style.css",
+      "type": "file",
+      "name": "style.css",
+      "filePath": "style.css",
+      "summary": "Sistem desain CSS SlothUI utama yang menyediakan variabel tema, tipografi, utility classes, komponen kartu, dan layout responsif.",
+      "tags": [
+        "css",
+        "design-system",
+        "theme",
+        "styling"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "config:vercel.json",
+      "type": "config",
+      "name": "vercel.json",
+      "filePath": "vercel.json",
+      "summary": "Konfigurasi routing serverless Vercel, headers keamanan, rewrite URL statis, dan proxy API ke server Node.js.",
+      "tags": [
+        "config",
+        "deployment",
+        "vercel",
+        "routing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/superpowers/plans/2026-11-08-saku-harga-add-product.md",
+      "type": "document",
+      "name": "2026-11-08-saku-harga-add-product.md",
+      "filePath": "docs/superpowers/plans/2026-11-08-saku-harga-add-product.md",
+      "summary": "Dokumen rencana implementasi langkah-demi-langkah fitur penambahan produk baru pada modul Saku Harga.",
+      "tags": [
+        "documentation",
+        "plan",
+        "spec"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/superpowers/specs/2026-11-08-saku-harga-add-product-design.md",
+      "type": "document",
+      "name": "2026-11-08-saku-harga-add-product-design.md",
+      "filePath": "docs/superpowers/specs/2026-11-08-saku-harga-add-product-design.md",
+      "summary": "Spesifikasi desain arsitektur antarmuka dan validasi input modal tambah produk di halaman harga.",
+      "tags": [
+        "documentation",
+        "spec",
+        "design"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:harga.js",
+      "type": "file",
+      "name": "harga.js",
+      "filePath": "harga.js",
+      "summary": "Logika interaktif frontend Saku Harga untuk merender daftar produk, kalkulasi margin laba, filter kategori, kontrol hak akses admin, dan modal tambah produk baru.",
+      "tags": [
+        "javascript",
+        "pwa",
+        "pricing",
+        "admin",
+        "tested"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:harga.js:renderProducts",
+      "type": "function",
+      "name": "renderProducts",
+      "filePath": "harga.js",
+      "summary": "Merender elemen baris daftar produk dengan informasi harga modal, harga jual, margin keuntungan, dan tombol aksi.",
+      "tags": [
+        "ui",
+        "render",
+        "pricing"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:harga.js:calculateMargin",
+      "type": "function",
+      "name": "calculateMargin",
+      "filePath": "harga.js",
+      "summary": "Menghitung persentase margin keuntungan produk berdasarkan selisih harga jual terhadap harga modal.",
+      "tags": [
+        "math",
+        "calculation",
+        "utility"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:harga.js:handleAddProduct",
+      "type": "function",
+      "name": "handleAddProduct",
+      "filePath": "harga.js",
+      "summary": "Memvalidasi input form modal tambah produk baru lalu menyimpannya ke database server atau local storage.",
+      "tags": [
+        "form",
+        "validation",
+        "product"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:harga/index.html",
+      "type": "file",
+      "name": "index.html",
+      "filePath": "harga/index.html",
+      "summary": "Redirect wrapper subdirektori /harga/ ke dokumen utama harga.html di root proyek.",
+      "tags": [
+        "html",
+        "redirect",
+        "routing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:manifest.webmanifest",
+      "type": "file",
+      "name": "manifest.webmanifest",
+      "filePath": "manifest.webmanifest",
+      "summary": "Manifest Progressive Web App (PWA) yang mendefinisikan nama aplikasi, tema warna, ikon, dan mode standalone display.",
+      "tags": [
+        "pwa",
+        "manifest",
+        "config"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:pos.js",
+      "type": "file",
+      "name": "pos.js",
+      "filePath": "pos.js",
+      "summary": "Modul aplikasi kasir POS (Point of Sales) yang menangani keranjang transaksi, kalkulator kembalian, diskon, pembayaran tunai/QRIS, dan cetak struk.",
+      "tags": [
+        "javascript",
+        "pos",
+        "cashier",
+        "checkout"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:pos.js:addToCart",
+      "type": "function",
+      "name": "addToCart",
+      "filePath": "pos.js",
+      "summary": "Menambahkan item produk terpilih ke dalam keranjang belanja kasir atau menambah kuantitasnya jika sudah ada.",
+      "tags": [
+        "cart",
+        "pos",
+        "transaction"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:pos.js:processPayment",
+      "type": "function",
+      "name": "processPayment",
+      "filePath": "pos.js",
+      "summary": "Memproses pembayaran transaksi, menghitung uang kembalian, dan mengirim data penjualan ke backend API.",
+      "tags": [
+        "payment",
+        "pos",
+        "api-call"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:pos/index.html",
+      "type": "file",
+      "name": "index.html",
+      "filePath": "pos/index.html",
+      "summary": "Redirect wrapper subdirektori /pos/ ke dokumen utama pos.html di root proyek.",
+      "tags": [
+        "html",
+        "redirect",
+        "routing"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:sayur-nusantara.js",
+      "type": "file",
+      "name": "sayur-nusantara.js",
+      "filePath": "sayur-nusantara.js",
+      "summary": "Dataset katalog produk awal yang berisi daftar sayuran, sembako, dan harga acuan pasar tradisional nusantara.",
+      "tags": [
+        "data",
+        "catalog",
+        "products"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:script.js",
+      "type": "file",
+      "name": "script.js",
+      "filePath": "script.js",
+      "summary": "Logika interaktif utama dashboard keuangan harian SlothUI, pencatatan transaksi masuk/keluar, grafik pengeluaran, dan manajemen dompet.",
+      "tags": [
+        "javascript",
+        "dashboard",
+        "finance",
+        "ui"
+      ],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:script.js:formatCurrency",
+      "type": "function",
+      "name": "formatCurrency",
+      "filePath": "script.js",
+      "lineRange": [
+        541,
+        543
+      ],
+      "summary": "Memformat nilai angka numerik menjadi format mata uang Rupiah Indonesia (Rp).",
+      "tags": [
+        "utility",
+        "currency",
+        "formatting"
+      ],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:script.js:getWalletMeta",
+      "type": "function",
+      "name": "getWalletMeta",
+      "filePath": "script.js",
+      "lineRange": [
+        505,
+        529
+      ],
+      "summary": "Mengambil informasi metadata dan status saldo akun dompet keuangan aktif pengguna.",
+      "tags": [
+        "wallet",
+        "finance",
+        "state"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:sw.js",
+      "type": "file",
+      "name": "sw.js",
+      "filePath": "sw.js",
+      "summary": "Service Worker PWA yang menyediakan kemampuan offline browsing, caching asset statis (HTML/CSS/JS), dan sinkronisasi data latar belakang.",
+      "tags": [
+        "service-worker",
+        "pwa",
+        "cache",
+        "offline"
+      ],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:test/harga.test.js",
+      "type": "file",
+      "name": "harga.test.js",
+      "filePath": "test/harga.test.js",
+      "summary": "Pengujian unit otomatis untuk memverifikasi perhitungan margin harga, validasi input harga, dan kontrol akses halaman harga.",
+      "tags": [
+        "test",
+        "unit-test",
+        "pricing"
+      ],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:lib/security.js",
+      "target": "function:lib/security.js:hashPassword",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:lib/security.js",
+      "target": "function:lib/security.js:verifyPassword",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:lib/security.js",
+      "target": "function:lib/security.js:generateSessionToken",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:lib/security.js",
+      "target": "function:lib/security.js:parseCookies",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:lib/security.js",
+      "target": "function:lib/security.js:isCrossSiteRequest",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:lib/security.js",
+      "target": "function:lib/security.js:buildSessionCookie",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:server.js",
+      "target": "function:server.js:isOriginAllowed",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:server.js",
+      "target": "function:server.js:isCashierSession",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:server.js",
+      "target": "function:server.js:guardRateLimit",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:server.js",
+      "target": "function:server.js:setupTelegramBotCommands",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:server.js",
+      "target": "function:server.js:ensureDatabaseReady",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:server.js",
+      "target": "file:lib/security.js",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:test/security.test.js",
+      "target": "file:lib/security.js",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:lib/security.js",
+      "target": "file:test/security.test.js",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:package.json",
+      "target": "file:server.js",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:vercel.json",
+      "target": "file:server.js",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:README.md",
+      "target": "file:index.html",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:harga.html",
+      "target": "file:harga.css",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:pos.html",
+      "target": "file:pos.css",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:index.html",
+      "target": "file:style.css",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:index.html",
+      "target": "file:pos.html",
+      "type": "routes",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:index.html",
+      "target": "file:harga.html",
+      "type": "routes",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:harga.js",
+      "target": "function:harga.js:renderProducts",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:harga.js",
+      "target": "function:harga.js:calculateMargin",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:harga.js",
+      "target": "function:harga.js:handleAddProduct",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:pos.js",
+      "target": "function:pos.js:addToCart",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:pos.js",
+      "target": "function:pos.js:processPayment",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:script.js",
+      "target": "function:script.js:formatCurrency",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:script.js",
+      "target": "function:script.js:getWalletMeta",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1
+    },
+    {
+      "source": "file:harga.html",
+      "target": "file:harga.js",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:pos.html",
+      "target": "file:pos.js",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:index.html",
+      "target": "file:script.js",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:pos.js",
+      "target": "file:sayur-nusantara.js",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:harga.js",
+      "target": "file:sayur-nusantara.js",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:harga.js",
+      "target": "file:test/harga.test.js",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:index.html",
+      "target": "file:sw.js",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:index.html",
+      "target": "file:manifest.webmanifest",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:harga/index.html",
+      "target": "file:harga.html",
+      "type": "routes",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:pos/index.html",
+      "target": "file:pos.html",
+      "type": "routes",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:docs/superpowers/plans/2026-11-08-saku-harga-add-product.md",
+      "target": "file:harga.js",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/superpowers/specs/2026-11-08-saku-harga-add-product-design.md",
+      "target": "file:harga.js",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:frontend-ui",
+      "name": "Antarmuka Pengguna & PWA Shell",
+      "description": "Halaman beranda utama, tema SlothUI, Service Worker offline caching, dan manifest aplikasi PWA.",
+      "nodeIds": [
+        "file:index.html",
+        "file:style.css",
+        "file:script.js",
+        "file:manifest.webmanifest",
+        "file:sw.js"
+      ]
+    },
+    {
+      "id": "layer:pos-system",
+      "name": "Sistem Kasir POS (Point of Sales)",
+      "description": "Antarmuka kasir, manajemen keranjang transaksi, pembayaran cepat, cetak struk, dan katalog produk awal.",
+      "nodeIds": [
+        "file:pos.html",
+        "file:pos.css",
+        "file:pos.js",
+        "file:pos/index.html",
+        "file:sayur-nusantara.js"
+      ]
+    },
+    {
+      "id": "layer:pricing-management",
+      "name": "Manajemen Harga & Produk",
+      "description": "Modul manajemen harga jual, kalkulasi margin keuntungan, kontrol akses owner/admin, dan fitur tambah produk baru.",
+      "nodeIds": [
+        "file:harga.html",
+        "file:harga.css",
+        "file:harga.js",
+        "file:harga/index.html"
+      ]
+    },
+    {
+      "id": "layer:backend-core",
+      "name": "Layanan Backend & Keamanan",
+      "description": "Server API Express, integrasi database PostgreSQL, bot Telegram, modul keamanan otentikasi, serta konfigurasi deployment.",
+      "nodeIds": [
+        "file:server.js",
+        "file:lib/security.js",
+        "config:package.json",
+        "config:vercel.json"
+      ]
+    },
+    {
+      "id": "layer:testing-quality",
+      "name": "Pengujian & Verifikasi Kualitas",
+      "description": "Rangkaian unit test otomatis untuk memvalidasi logika keamanan backend dan kalkulasi margin harga.",
+      "nodeIds": [
+        "file:test/security.test.js",
+        "file:test/harga.test.js"
+      ]
+    },
+    {
+      "id": "layer:documentation",
+      "name": "Dokumentasi & Spesifikasi Desain",
+      "description": "Dokumen petunjuk proyek README serta spesifikasi dan rencana implementasi modul.",
+      "nodeIds": [
+        "document:README.md",
+        "document:docs/superpowers/plans/2026-11-08-saku-harga-add-product.md",
+        "document:docs/superpowers/specs/2026-11-08-saku-harga-add-product-design.md"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Gambaran Umum & Arsitektur Proyek",
+      "description": "Pelajari tujuan aplikasi Saku Sloth, alur kerja sistem kasir, manajemen keuangan harian, dan petunjuk konfigurasi dari README.md.",
+      "nodeIds": [
+        "document:README.md"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "Beranda Utama & PWA Shell",
+      "description": "Titik masuk pengguna dengan antarmuka SlothUI, script interaktif dashboard, tema desain, dan Service Worker untuk dukungan offline.",
+      "nodeIds": [
+        "file:index.html",
+        "file:style.css",
+        "file:script.js",
+        "file:sw.js"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "Aplikasi Kasir POS (Point of Sales)",
+      "description": "Antarmuka kasir toko untuk memilih item dari katalog produk nusantara, mengelola keranjang transaksi, pembayaran cepat, dan cetak struk.",
+      "nodeIds": [
+        "file:pos.html",
+        "file:pos.css",
+        "file:pos.js",
+        "file:sayur-nusantara.js"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "Manajemen Harga & Fitur Produk Baru",
+      "description": "Antarmuka admin/owner untuk memantau harga modal, mengubah harga jual produk, menghitung margin keuntungan, serta menambah produk baru.",
+      "nodeIds": [
+        "file:harga.html",
+        "file:harga.css",
+        "file:harga.js"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "Server Backend & Lapisan Keamanan",
+      "description": "Server Express yang menangani REST API, integrasi database PostgreSQL, webhook bot Telegram, proteksi CSRF/rate-limit, dan verifikasi sesi.",
+      "nodeIds": [
+        "file:server.js",
+        "file:lib/security.js"
+      ]
+    },
+    {
+      "order": 6,
+      "title": "Pengujian Otomatis & Penjaminan Kualitas",
+      "description": "Pengujian unit otomatis untuk memvalidasi algoritma otentikasi token, hashing password, serta perhitungan kalkulasi margin harga.",
+      "nodeIds": [
+        "file:test/security.test.js",
+        "file:test/harga.test.js"
+      ]
+    }
+  ]
+}

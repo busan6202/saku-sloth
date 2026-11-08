@@ -2103,6 +2103,26 @@ app.get('/harga', async (req, res, next) => {
     }
 });
 
+// Sembunyikan HPP / harga modal & laba dari response API bila pengguna adalah akun kasir (karyawan).
+// Pemilik toko (owner) tetap menerima seluruh data lengkap.
+function sanitizePosProductForUser(row, user) {
+    if (!row || !isCashier(user)) return row;
+    const { price_cost: _omitCost, ...safe } = row;
+    return safe;
+}
+
+function sanitizePosSaleForUser(sale, user) {
+    if (!sale || !isCashier(user)) return sale;
+    const { total_cost: _omitTotalCost, gross_profit: _omitGrossProfit, ...safe } = sale;
+    return safe;
+}
+
+function sanitizePosSaleItemForUser(item, user) {
+    if (!item || !isCashier(user)) return item;
+    const { unit_cost: _uc1, unitCost: _uc2, subtotal_cost: _sc1, subtotalCost: _sc2, profit: _p, ...safe } = item;
+    return safe;
+}
+
 // API: Daftar produk POS (pencarian nama/SKU/barcode)
 app.get('/api/pos/products', async (req, res) => {
     try {
@@ -2121,7 +2141,7 @@ app.get('/api/pos/products', async (req, res) => {
         }
         query += ' ORDER BY name ASC';
         const result = await pool.query(query, params);
-        res.json(result.rows);
+        res.json(result.rows.map((row) => sanitizePosProductForUser(row, user)));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -2149,7 +2169,10 @@ app.get('/api/pos/products/price-sync', async (req, res) => {
         }
         query += ' ORDER BY name ASC';
         const result = await pool.query(query, params);
-        res.json({ serverTime: Date.now(), products: result.rows });
+        res.json({
+            serverTime: Date.now(),
+            products: result.rows.map((row) => sanitizePosProductForUser(row, user))
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -2171,7 +2194,7 @@ app.get('/api/pos/products/lookup', async (req, res) => {
             [posOwnerId(user), code]
         );
         if (result.rows.length === 0) return res.status(404).json({ error: 'Produk dengan barcode tersebut tidak ditemukan.' });
-        res.json(result.rows[0]);
+        res.json(sanitizePosProductForUser(result.rows[0], user));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -2631,7 +2654,11 @@ app.post('/api/pos/checkout', async (req, res) => {
         }
 
         if (method === 'QRIS') {
-            return res.status(201).json({ sale, items: saleItems, status: 'PENDING' });
+            return res.status(201).json({
+                sale: sanitizePosSaleForUser(sale, user),
+                items: saleItems.map((item) => sanitizePosSaleItemForUser(item, user)),
+                status: 'PENDING'
+            });
         }
 
         let paidResult;
@@ -2646,7 +2673,11 @@ app.post('/api/pos/checkout', async (req, res) => {
             return res.status(409).json({ error: 'Transaksi gagal diproses. Silakan ulangi.' });
         }
         syncPosSaleToSheets(posOwnerId(user), sale.id).catch(() => {});
-        res.status(201).json({ sale: paidResult.sale, items: paidResult.items, status: 'PAID' });
+        res.status(201).json({
+            sale: sanitizePosSaleForUser(paidResult.sale, user),
+            items: (paidResult.items || []).map((item) => sanitizePosSaleItemForUser(item, user)),
+            status: 'PAID'
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -2669,7 +2700,12 @@ app.post('/api/pos/sales/:id/pay', async (req, res) => {
         if (result.error) return res.status(409).json({ error: 'Transaksi tidak dapat dibayar pada status saat ini.' });
 
         if (!result.alreadyPaid) syncPosSaleToSheets(posOwnerId(user), saleId).catch(() => {});
-        res.json({ sale: result.sale, items: result.items, status: 'PAID', alreadyPaid: Boolean(result.alreadyPaid) });
+        res.json({
+            sale: sanitizePosSaleForUser(result.sale, user),
+            items: (result.items || []).map((item) => sanitizePosSaleItemForUser(item, user)),
+            status: 'PAID',
+            alreadyPaid: Boolean(result.alreadyPaid)
+        });
     } catch (err) {
         res.status(409).json({ error: err.message });
     }
@@ -2721,7 +2757,7 @@ app.get('/api/pos/sales', async (req, res) => {
              LIMIT $${values.length}`,
             values
         );
-        res.json(result.rows);
+        res.json(result.rows.map((row) => sanitizePosSaleForUser(row, user)));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -2738,7 +2774,10 @@ app.get('/api/pos/sales/:id', async (req, res) => {
         const saleRes = await pool.query('SELECT * FROM pos_sales WHERE id = $1 AND user_id = $2', [saleId, posOwnerId(user)]);
         if (saleRes.rows.length === 0) return res.status(404).json({ error: 'Transaksi tidak ditemukan.' });
         const itemsRes = await pool.query('SELECT * FROM pos_sale_items WHERE sale_id = $1 ORDER BY id', [saleId]);
-        res.json({ sale: saleRes.rows[0], items: itemsRes.rows });
+        res.json({
+            sale: sanitizePosSaleForUser(saleRes.rows[0], user),
+            items: itemsRes.rows.map((item) => sanitizePosSaleItemForUser(item, user))
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -2786,6 +2825,15 @@ app.get('/api/pos/summary', async (req, res) => {
             values
         );
         const row = paidRes.rows[0] || {};
+        if (isCashier(user)) {
+            return res.json({
+                transactions: Number(row.transactions || 0),
+                omzet: Number(row.omzet || 0),
+                cashTotal: Number(row.cash_total || 0),
+                qrisTotal: Number(row.qris_total || 0),
+                pending: Number(pendingRes.rows[0]?.pending || 0)
+            });
+        }
         const laba = Number(row.laba || 0);
 
         // Susut/layu & belanja kulakan dihitung terpisah agar laba bersih akurat.
@@ -2829,6 +2877,7 @@ app.get('/api/pos/export-excel', async (req, res) => {
         await ensureDatabaseReady();
         const user = await resolveAuthUser(req);
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        if (isCashier(user)) return res.status(403).json({ error: 'Hanya pemilik toko yang dapat mengunduh laporan Excel/CSV.' });
         const { clauses, params } = parsePosDateRange(req, 2);
         const conditions = ['s.user_id = $1', ...clauses.map((c) => `s.${c}`)];
         const result = await pool.query(
@@ -2908,7 +2957,12 @@ app.post('/api/pos/spoilage', async (req, res) => {
                 [posOwnerId(user), product.id, product.name, product.unit || 'PCS', qtyLost, lossAmount, reason || null]
             );
             await client.query('COMMIT');
-            res.status(201).json(logRes.rows[0]);
+            const row = logRes.rows[0];
+            if (isCashier(user)) {
+                const { loss_amount: _omitLoss, ...safeRow } = row;
+                return res.status(201).json(safeRow);
+            }
+            res.status(201).json(row);
         } catch (err) {
             await client.query('ROLLBACK').catch(() => {});
             throw err;
@@ -2933,7 +2987,11 @@ app.get('/api/pos/spoilage', async (req, res) => {
              ORDER BY created_at DESC, id DESC LIMIT 200`,
             [posOwnerId(user), ...params]
         );
-        res.json(result.rows);
+        res.json(result.rows.map((row) => {
+            if (!isCashier(user)) return row;
+            const { loss_amount: _omitLoss, ...safeRow } = row;
+            return safeRow;
+        }));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -2945,6 +3003,7 @@ app.post('/api/pos/purchases', async (req, res) => {
         await ensureDatabaseReady();
         const user = await resolveAuthUser(req);
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
+        if (isCashier(user)) return res.status(403).json({ error: 'Hanya pemilik toko yang dapat mencatat kulakan.' });
 
         const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
         if (rawItems.length === 0) return res.status(400).json({ error: 'Daftar kulakan masih kosong.' });
