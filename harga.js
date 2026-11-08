@@ -62,6 +62,10 @@
 
     const $ = (id) => document.getElementById(id);
 
+    const qtyFmt = new Intl.NumberFormat('id-ID', {
+        maximumFractionDigits: 3
+    });
+
     const state = {
         token: '',
         user: null,
@@ -73,7 +77,13 @@
         lastSyncAt: 0,
         pollCount: 0,
         syncing: false,
-        deferredInstallPrompt: null
+        deferredInstallPrompt: null,
+        liveSales: {
+            summary: { transactions: 0, omzet: 0, hpp: 0, laba: 0, cashTotal: 0, qrisTotal: 0, pending: 0 },
+            recent: []
+        },
+        liveFeedExpanded: true,
+        knownSaleIds: new Set()
     };
 
     const els = {};
@@ -97,13 +107,18 @@
             'staleNotice', 'productList', 'emptyState', 'emptyTitle', 'emptyCopy', 'btnEmptyAdd',
             'syncBar', 'syncDot', 'syncText', 'btnRefresh',
             'statTotalProducts', 'statAverageMargin', 'statMissingCost', 'cardMissingHpp',
+            'liveSalesSection', 'liveSalesTitle', 'liveSalesUpdated', 'btnToggleLiveFeed',
+            'liveSalesOmzet', 'liveSalesBreakdown', 'liveSalesProfit', 'liveSalesHpp',
+            'liveSalesCount', 'liveSalesPending', 'liveSalesFeedWrap', 'liveSalesList', 'liveSalesEmpty',
             'editorSheet', 'editorName', 'editorMeta', 'sellUnitNote', 'editorThumb',
+            'btnEditorFullEdit', 'btnEditorDelete',
             'editorSell', 'quickSell', 'editorCost', 'editorMargin', 'editorMarginPct',
             'editorMarginFill', 'editorMarginCard', 'editorError', 'editorSave',
-            'addProductSheet', 'addProductForm', 'addThumb', 'addSheetTitle', 'addSheetMeta',
-            'addName', 'addNameHint', 'addCategory', 'addUnit', 'addIsWeighable',
+            'addProductSheet', 'addProductForm', 'addProductId', 'addThumb', 'addSheetTitle', 'addSheetMeta',
+            'btnFormDelete', 'addName', 'addNameHint', 'addSku', 'addCategory', 'addUnit', 'addIsWeighable',
             'addSell', 'addSellUnitNote', 'addCost', 'addMarginCard', 'addMarginPct',
-            'addMarginFill', 'addMargin', 'addStock', 'addError', 'addSave',
+            'addMarginFill', 'addMargin', 'addStock', 'addStockLabel', 'addStockHint', 'addError', 'addSave',
+            'saleDetailSheet', 'saleDetailTitle', 'saleDetailMeta', 'saleDetailBody',
             'hargaBlocked', 'blockedMessage', 'btnBlockedPos', 'btnBlockedLogout',
             'hargaToast', 'toastText', 'toastAction'
         ].forEach((id) => { els[id] = $(id); });
@@ -122,6 +137,10 @@
         return rupiah.format(Math.round(Number(value) || 0));
     }
 
+    function formatQty(value) {
+        return qtyFmt.format(Number(value) || 0);
+    }
+
     function formatNumericInput(value) {
         const n = Math.max(0, Math.round(Number(value) || 0));
         return n === 0 ? '0' : numberFmt.format(n);
@@ -134,6 +153,13 @@
         return Number.isFinite(num) ? Math.max(0, Math.round(num)) : 0;
     }
 
+    function parseStockInput(raw) {
+        const cleaned = String(raw ?? '').trim().replace(',', '.').replace(/[^0-9.]/g, '');
+        if (!cleaned) return 0;
+        const num = Number(cleaned);
+        return Number.isFinite(num) ? Math.max(0, Math.round(num * 1000) / 1000) : 0;
+    }
+
     function formatClock(ts) {
         if (!ts) return '';
         return new Date(ts).toLocaleTimeString('id-ID', {
@@ -141,6 +167,20 @@
             minute: '2-digit',
             second: '2-digit'
         });
+    }
+
+    function formatShortTime(ts) {
+        if (!ts) return '';
+        return new Date(ts).toLocaleTimeString('id-ID', {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    }
+
+    function startOfTodayIso() {
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        return d.toISOString();
     }
 
     function categoryName(code) {
@@ -298,6 +338,12 @@
             state.products = raw.products;
             state.lastUpdatedMs = Number(raw.lastUpdatedMs) || 0;
             state.lastSyncAt = Number(raw.savedAt) || 0;
+            if (raw.liveSales && typeof raw.liveSales === 'object') {
+                state.liveSales = {
+                    summary: { ...(state.liveSales.summary || {}), ...(raw.liveSales.summary || {}) },
+                    recent: Array.isArray(raw.liveSales.recent) ? raw.liveSales.recent : []
+                };
+            }
             return state.products.length > 0;
         } catch {
             return false;
@@ -308,6 +354,7 @@
         try {
             localStorage.setItem(cacheKey(), JSON.stringify({
                 products: state.products,
+                liveSales: state.liveSales,
                 lastUpdatedMs: state.lastUpdatedMs,
                 savedAt: state.lastSyncAt || Date.now()
             }));
@@ -517,15 +564,214 @@
             id: Number(row.id),
             name: String(row.name || ''),
             sku: String(row.sku || ''),
+            barcode: String(row.barcode || ''),
             unit: String(row.unit || 'PCS').toUpperCase(),
             category: String(row.category || 'UMUM').toUpperCase(),
             is_weighable: Boolean(row.is_weighable),
             is_active: row.is_active !== false,
             price_sell: Math.max(0, Math.round(Number(row.price_sell) || 0)),
             price_cost: Math.max(0, Math.round(Number(row.price_cost) || 0)),
+            stock: Math.max(0, Math.round((Number(row.stock) || 0) * 1000) / 1000),
+            min_stock: Math.max(0, Math.round((Number(row.min_stock) || 0) * 1000) / 1000),
             icon_url: row.icon_url || null,
             updated_ms: Number(row.updated_ms) || (row.updated_at ? new Date(row.updated_at).getTime() : Date.now())
         };
+    }
+
+    function applyLiveSales(liveSales) {
+        if (!liveSales || typeof liveSales !== 'object') return;
+        const incomingRecent = Array.isArray(liveSales.recent) ? liveSales.recent : [];
+        const hadKnown = state.knownSaleIds.size > 0;
+        let newestNewSale = null;
+
+        for (const sale of incomingRecent) {
+            const key = `${sale.id}:${sale.status}`;
+            if (!state.knownSaleIds.has(key)) {
+                state.knownSaleIds.add(key);
+                if (hadKnown && !newestNewSale) {
+                    newestNewSale = sale;
+                }
+            }
+        }
+
+        state.liveSales = {
+            summary: {
+                transactions: Number(liveSales.summary?.transactions) || 0,
+                omzet: Number(liveSales.summary?.omzet) || 0,
+                hpp: Number(liveSales.summary?.hpp) || 0,
+                laba: Number(liveSales.summary?.laba) || 0,
+                cashTotal: Number(liveSales.summary?.cashTotal) || 0,
+                qrisTotal: Number(liveSales.summary?.qrisTotal) || 0,
+                pending: Number(liveSales.summary?.pending) || 0
+            },
+            recent: incomingRecent
+        };
+
+        renderLiveSales();
+
+        if (newestNewSale) {
+            const cashier = newestNewSale.cashier_name || 'Kasir';
+            const statusText = newestNewSale.status === 'PAID' ? 'Lunas' : 'Menunggu QRIS';
+            showToast(`🧾 ${cashier}: ${newestNewSale.invoice_no} · ${formatMoney(newestNewSale.total_amount)} (${statusText})`);
+        }
+    }
+
+    function renderLiveSales() {
+        if (!els.liveSalesSection) return;
+        const summary = state.liveSales?.summary || {};
+        const recent = Array.isArray(state.liveSales?.recent) ? state.liveSales.recent : [];
+
+        if (els.liveSalesOmzet) els.liveSalesOmzet.textContent = formatMoney(summary.omzet || 0);
+        if (els.liveSalesBreakdown) {
+            els.liveSalesBreakdown.textContent = `Tunai ${formatMoney(summary.cashTotal || 0)} · QRIS ${formatMoney(summary.qrisTotal || 0)}`;
+        }
+        if (els.liveSalesProfit) {
+            const laba = Number(summary.laba) || 0;
+            els.liveSalesProfit.textContent = `${laba > 0 ? '+' : ''}${formatMoney(laba)}`;
+        }
+        if (els.liveSalesHpp) {
+            els.liveSalesHpp.textContent = `HPP ${formatMoney(summary.hpp || 0)}`;
+        }
+        if (els.liveSalesCount) {
+            els.liveSalesCount.textContent = `${Number(summary.transactions) || 0} Lunas`;
+        }
+        if (els.liveSalesPending) {
+            const pendingCount = Number(summary.pending) || 0;
+            els.liveSalesPending.textContent = `${pendingCount} Pending QRIS`;
+        }
+        if (els.liveSalesUpdated) {
+            const timeLabel = state.lastSyncAt ? `Realtime · ${formatClock(state.lastSyncAt)}` : 'Memantau penjualan kasir…';
+            els.liveSalesUpdated.textContent = timeLabel;
+        }
+        if (els.liveSalesFeedWrap) {
+            els.liveSalesFeedWrap.hidden = !state.liveFeedExpanded;
+        }
+        if (els.btnToggleLiveFeed) {
+            els.btnToggleLiveFeed.textContent = state.liveFeedExpanded ? 'Rincian ▴' : 'Rincian ▾';
+            els.btnToggleLiveFeed.setAttribute('aria-expanded', state.liveFeedExpanded ? 'true' : 'false');
+        }
+
+        if (!els.liveSalesList || !els.liveSalesEmpty) return;
+
+        if (recent.length === 0) {
+            els.liveSalesList.innerHTML = '';
+            els.liveSalesEmpty.hidden = false;
+            return;
+        }
+
+        els.liveSalesEmpty.hidden = true;
+        els.liveSalesList.innerHTML = recent.map((sale) => {
+            const isPaid = sale.status === 'PAID';
+            const badgeText = `${sale.payment_method || 'CASH'} · ${isPaid ? 'LUNAS' : 'PENDING'}`;
+            const timeStr = formatShortTime(sale.paid_at || sale.created_at);
+            const cashierName = sale.cashier_name || 'Kasir';
+            const itemsDesc = sale.items_summary || `${Number(sale.item_count) || 0} item terjual`;
+            const profitVal = Number(sale.gross_profit) || 0;
+            const profitSign = profitVal > 0 ? '+' : '';
+
+            return `
+                <button type="button" class="harga-live-item" role="listitem" data-sale-id="${sale.id}">
+                    <div class="harga-live-item-main">
+                        <div class="harga-live-item-top">
+                            <span class="harga-live-inv">${escapeHtml(sale.invoice_no)}</span>
+                            <span class="harga-live-cashier">🧑‍🍳 ${escapeHtml(cashierName)}</span>
+                            <span class="harga-live-badge ${isPaid ? '' : 'is-pending'}">${escapeHtml(badgeText)}</span>
+                            <span class="harga-sub-hint">${escapeHtml(timeStr)}</span>
+                        </div>
+                        <div class="harga-live-items-desc">${escapeHtml(itemsDesc)}</div>
+                    </div>
+                    <div class="harga-live-item-right">
+                        <span class="harga-live-amount">${formatMoney(sale.total_amount)}</span>
+                        <span class="harga-live-profit">Laba ${profitSign}${formatMoney(profitVal)}</span>
+                    </div>
+                </button>
+            `;
+        }).join('');
+    }
+
+    function toggleLiveFeed() {
+        state.liveFeedExpanded = !state.liveFeedExpanded;
+        renderLiveSales();
+    }
+
+    async function openSaleDetail(saleId) {
+        if (!saleId || !els.saleDetailSheet) return;
+        closeEditor();
+        closeAddProductSheet();
+        closeMenu();
+
+        els.saleDetailTitle.textContent = 'Memuat Nota…';
+        els.saleDetailMeta.textContent = '';
+        els.saleDetailBody.innerHTML = '<p class="harga-sub-hint">Mengambil rincian item dari server…</p>';
+        els.saleDetailSheet.hidden = false;
+        document.body.style.overflow = 'hidden';
+
+        try {
+            const detail = await api(`/api/pos/sales/${encodeURIComponent(saleId)}`, { method: 'GET' });
+            const sale = detail?.sale || {};
+            const items = Array.isArray(detail?.items) ? detail.items : [];
+            const isPaid = sale.status === 'PAID';
+            const cashier = sale.cashier_name || 'Kasir';
+            const timeStr = new Date(sale.paid_at || sale.created_at || Date.now()).toLocaleString('id-ID', {
+                day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+            });
+
+            els.saleDetailTitle.textContent = sale.invoice_no || `Nota #${saleId}`;
+            els.saleDetailMeta.textContent = `${timeStr} · Kasir: ${cashier} · ${sale.payment_method || 'CASH'} (${isPaid ? 'LUNAS' : 'PENDING'})`;
+
+            const rowsHtml = items.length === 0
+                ? '<p class="harga-sub-hint">Tidak ada rincian item.</p>'
+                : items.map((item) => {
+                    const pName = item.product_name || item.productName || 'Produk';
+                    const unit = item.unit || 'PCS';
+                    const qty = formatQty(item.qty);
+                    const unitPrice = formatMoney(item.unit_price ?? item.unitPrice);
+                    const subtotal = formatMoney(item.subtotal);
+                    const profit = Number(item.profit) || 0;
+                    return `
+                        <div class="harga-sale-detail-row">
+                            <div>
+                                <strong>${escapeHtml(pName)}</strong>
+                                <div class="harga-sub-hint">${escapeHtml(qty)} ${escapeHtml(unit)} × ${escapeHtml(unitPrice)}</div>
+                            </div>
+                            <div style="text-align:right">
+                                <strong>${escapeHtml(subtotal)}</strong>
+                                <div class="harga-live-profit">Laba ${profit >= 0 ? '+' : ''}${formatMoney(profit)}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            els.saleDetailBody.innerHTML = `
+                <div class="harga-sale-detail-meta-grid">
+                    <div><span class="harga-sub-hint">Kasir</span><br><strong>🧑‍🍳 ${escapeHtml(cashier)}</strong></div>
+                    <div><span class="harga-sub-hint">Metode &amp; Saku</span><br><strong>${escapeHtml(sale.payment_method || 'CASH')} (${escapeHtml(sale.wallet || 'Tunai')})</strong></div>
+                </div>
+                <div class="harga-sale-detail-items">${rowsHtml}</div>
+                <div class="harga-sale-detail-totals">
+                    <div class="harga-sale-detail-total-row">
+                        <span>Total HPP (Modal)</span>
+                        <span>${formatMoney(sale.total_cost || 0)}</span>
+                    </div>
+                    <div class="harga-sale-detail-total-row">
+                        <span>Laba Kotor Transaksi</span>
+                        <span class="harga-live-profit">+${formatMoney(sale.gross_profit || 0)}</span>
+                    </div>
+                    <div class="harga-sale-detail-total-row is-grand">
+                        <span>Total Penjualan</span>
+                        <span>${formatMoney(sale.total_amount || 0)}</span>
+                    </div>
+                </div>
+            `;
+        } catch (err) {
+            els.saleDetailBody.innerHTML = `<p class="harga-message is-error">${escapeHtml(err.message || 'Gagal memuat rincian transaksi.')}</p>`;
+        }
+    }
+
+    function closeSaleDetailSheet() {
+        if (!els.saleDetailSheet) return;
+        els.saleDetailSheet.hidden = true;
+        document.body.style.overflow = '';
     }
 
     function updateSummaryMetrics() {
@@ -561,7 +807,10 @@
         if (!silent) setSyncStatus('busy', 'Menyinkronkan harga…');
 
         const useDelta = !full && state.products.length > 0 && state.lastUpdatedMs > 0;
-        const query = useDelta ? `?since=${encodeURIComponent(Math.floor(state.lastUpdatedMs))}` : '';
+        const params = new URLSearchParams();
+        if (useDelta) params.set('since', String(Math.floor(state.lastUpdatedMs)));
+        params.set('todayFrom', startOfTodayIso());
+        const query = `?${params.toString()}`;
 
         try {
             const data = await api(`/api/pos/products/price-sync${query}`, { method: 'GET' });
@@ -569,6 +818,11 @@
             const changedCount = rows.length;
             mergeProducts(rows, !useDelta);
             state.lastSyncAt = Date.now();
+            if (data?.liveSales) {
+                applyLiveSales(data.liveSales);
+            } else {
+                renderLiveSales();
+            }
             saveCachedProducts();
 
             els.staleNotice.hidden = true;
@@ -716,9 +970,13 @@
                 : '<span class="harga-tag-cost is-missing">Belum ada modal</span>';
 
             const skuPart = item.sku ? ` · ${escapeHtml(item.sku)}` : '';
+            const stockVal = Number(item.stock) || 0;
+            const stockBadge = stockVal <= 0
+                ? `<span class="harga-stock-badge is-empty">Stok 0 ${escapeHtml(item.unit)}</span>`
+                : `<span class="harga-stock-badge">Stok ${escapeHtml(formatQty(stockVal))} ${escapeHtml(item.unit)}</span>`;
 
             return `
-                <button type="button" class="harga-tag" role="listitem" data-product-id="${item.id}">
+                <div class="harga-tag" role="listitem" tabindex="0" data-product-id="${item.id}">
                     <div class="harga-tag-thumb" aria-hidden="true">
                         ${renderProductThumbnail(item)}
                     </div>
@@ -727,16 +985,23 @@
                         <span class="harga-tag-meta">
                             <span class="harga-tag-cat">${escapeHtml(categoryName(item.category))}</span>
                             <span class="harga-tag-unit">per ${escapeHtml(item.unit)}</span>
+                            ${stockBadge}
                             ${skuPart ? `<span>${skuPart}</span>` : ''}
                         </span>
                     </div>
-                    <div class="harga-tag-prices">
-                        <span class="harga-tag-sell">${formatMoney(item.price_sell)}</span>
-                        <span class="harga-tag-cost ${isLoss ? 'is-loss' : ''}">
-                            ${costText} ${marginPill}
-                        </span>
+                    <div class="harga-tag-right">
+                        <div class="harga-tag-prices">
+                            <span class="harga-tag-sell">${formatMoney(item.price_sell)}</span>
+                            <span class="harga-tag-cost ${isLoss ? 'is-loss' : ''}">
+                                ${costText} ${marginPill}
+                            </span>
+                        </div>
+                        <div class="harga-tag-actions">
+                            <button type="button" class="harga-card-btn" data-edit-product="${item.id}" title="Edit produk ${escapeHtml(item.name)}" aria-label="Edit produk ${escapeHtml(item.name)}">✏️</button>
+                            <button type="button" class="harga-card-btn is-danger" data-delete-product="${item.id}" title="Hapus produk ${escapeHtml(item.name)}" aria-label="Hapus produk ${escapeHtml(item.name)}">🗑️</button>
+                        </div>
                     </div>
-                </button>
+                </div>
             `;
         }).join('');
     }
@@ -928,20 +1193,29 @@
         }
     }
 
-    // ================= PANEL TAMBAH PRODUK BARU =================
+    // ================= PANEL TAMBAH / EDIT & HAPUS PRODUK =================
 
     function openAddProductSheet(initialName = '') {
         closeEditor();
+        closeSaleDetailSheet();
         closeMenu();
 
         if (els.addProductForm) els.addProductForm.reset();
+        if (els.addProductId) els.addProductId.value = '';
+        if (els.addSheetTitle) els.addSheetTitle.textContent = 'Tambah Produk Baru';
+        if (els.addSheetMeta) els.addSheetMeta.textContent = 'Daftarkan produk langsung dari ponsel';
+        if (els.btnFormDelete) els.btnFormDelete.hidden = true;
         if (els.addName) els.addName.value = initialName || '';
+        if (els.addSku) els.addSku.value = '';
         if (els.addCategory) els.addCategory.value = 'UMUM';
         if (els.addUnit) els.addUnit.value = 'PCS';
         if (els.addIsWeighable) els.addIsWeighable.checked = false;
         if (els.addSell) els.addSell.value = '';
         if (els.addCost) els.addCost.value = '';
         if (els.addStock) els.addStock.value = '';
+        if (els.addStockLabel) els.addStockLabel.textContent = 'Stok Awal';
+        if (els.addStockHint) els.addStockHint.textContent = 'Boleh 0 jika belum dihitung';
+        if (els.addSave) els.addSave.textContent = 'Simpan Produk Baru';
         if (els.addError) {
             els.addError.hidden = true;
             els.addError.textContent = '';
@@ -964,21 +1238,64 @@
         }
     }
 
+    function openEditProductSheet(productId) {
+        const product = findProduct(productId);
+        if (!product) return;
+        closeEditor();
+        closeSaleDetailSheet();
+        closeMenu();
+
+        if (els.addProductForm) els.addProductForm.reset();
+        if (els.addProductId) els.addProductId.value = String(product.id);
+        if (els.addSheetTitle) els.addSheetTitle.textContent = 'Edit Produk';
+        if (els.addSheetMeta) els.addSheetMeta.textContent = `Perbarui detail ${product.name}`;
+        if (els.btnFormDelete) els.btnFormDelete.hidden = false;
+        if (els.addName) els.addName.value = product.name || '';
+        if (els.addSku) els.addSku.value = product.sku || '';
+        if (els.addCategory) els.addCategory.value = product.category || 'UMUM';
+        if (els.addUnit) els.addUnit.value = product.unit || 'PCS';
+        if (els.addIsWeighable) els.addIsWeighable.checked = Boolean(product.is_weighable);
+        if (els.addSell) els.addSell.value = formatNumericInput(product.price_sell);
+        if (els.addCost) els.addCost.value = formatNumericInput(product.price_cost);
+        if (els.addStock) els.addStock.value = Number(product.stock) || 0;
+        if (els.addStockLabel) els.addStockLabel.textContent = 'Stok Saat Ini';
+        if (els.addStockHint) els.addStockHint.textContent = `Satuan ${product.unit || 'PCS'}`;
+        if (els.addSave) els.addSave.textContent = 'Simpan Perubahan';
+        if (els.addError) {
+            els.addError.hidden = true;
+            els.addError.textContent = '';
+        }
+        if (els.addSellUnitNote) els.addSellUnitNote.textContent = `per ${product.unit || 'PCS'}`;
+
+        updateAddThumb(product.icon_url);
+        updateAddMarginPreview();
+
+        if (els.addProductSheet) {
+            els.addProductSheet.hidden = false;
+            document.body.style.overflow = 'hidden';
+            setTimeout(() => {
+                els.addName?.focus();
+            }, 60);
+        }
+    }
+
     function closeAddProductSheet() {
         if (!els.addProductSheet) return;
         els.addProductSheet.hidden = true;
         document.body.style.overflow = '';
     }
 
-    function updateAddThumb() {
+    function updateAddThumb(customIconUrl = null) {
         if (!els.addThumb) return;
         const name = (els.addName?.value || '').trim();
         const category = els.addCategory?.value || 'UMUM';
+        const editId = Number(els.addProductId?.value) || 0;
+        const existingProduct = editId ? findProduct(editId) : null;
 
         const dummyProduct = {
             name,
             category,
-            icon_url: null
+            icon_url: customIconUrl || existingProduct?.icon_url || null
         };
 
         els.addThumb.innerHTML = renderProductThumbnail(dummyProduct);
@@ -1044,6 +1361,9 @@
     async function saveNewProduct(e) {
         if (e && typeof e.preventDefault === 'function') e.preventDefault();
 
+        const editId = Number(els.addProductId?.value) || 0;
+        const existingProduct = editId ? findProduct(editId) : null;
+
         const name = (els.addName?.value || '').trim();
         if (!name) {
             if (els.addError) {
@@ -1064,14 +1384,15 @@
             return;
         }
 
+        const sku = (els.addSku?.value || '').trim() || null;
         const cost = parseMoneyInput(els.addCost?.value);
-        const stock = parseMoneyInput(els.addStock?.value);
+        const stock = parseStockInput(els.addStock?.value);
         const category = els.addCategory?.value || 'UMUM';
         const unit = els.addUnit?.value || 'PCS';
         const isWeighable = Boolean(els.addIsWeighable?.checked);
 
         // Cari tahu icon_url otomatis jika terdeteksi sayur/bumbu
-        let iconUrl = null;
+        let iconUrl = existingProduct?.icon_url || null;
         const nameLower = name.toLowerCase();
         const sayurMatch = window.SayurIcons?.findByName(nameLower);
         if (sayurMatch?.id) {
@@ -1089,24 +1410,37 @@
         try {
             const payload = {
                 name,
+                sku,
                 category,
                 unit,
                 is_weighable: isWeighable,
                 price_sell: sell,
                 price_cost: cost,
                 stock,
-                min_stock: 0,
+                min_stock: existingProduct?.min_stock || 0,
                 icon_url: iconUrl
             };
 
-            const created = await api('/api/pos/products', {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
+            let saved;
+            if (editId > 0) {
+                saved = await api(`/api/pos/products/${editId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                saved = await api('/api/pos/products', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+            }
 
-            const norm = normalizeProduct(created);
-            // Tambahkan produk baru ke daftar lokal
-            state.products.unshift(norm);
+            const norm = normalizeProduct(saved);
+            if (editId > 0) {
+                mergeProducts([norm], false);
+            } else {
+                state.products.unshift(norm);
+                state.products.sort((a, b) => a.name.localeCompare(b.name, 'id'));
+            }
             if (norm.updated_ms > state.lastUpdatedMs) {
                 state.lastUpdatedMs = norm.updated_ms;
             }
@@ -1120,14 +1454,73 @@
             notifyPriceUpdated(norm);
 
             closeAddProductSheet();
-            showToast(`Produk "${norm.name}" (${formatMoney(norm.price_sell)}) berhasil ditambahkan!`);
+            if (editId > 0) {
+                showToast(`Produk "${norm.name}" berhasil diperbarui!`);
+            } else {
+                showToast(`Produk "${norm.name}" (${formatMoney(norm.price_sell)}) berhasil ditambahkan!`);
+            }
         } catch (err) {
             if (els.addError) {
-                els.addError.textContent = err.message || 'Gagal menambahkan produk.';
+                els.addError.textContent = err.message || 'Gagal menyimpan produk.';
                 els.addError.hidden = false;
             }
         } finally {
             if (els.addSave) els.addSave.disabled = false;
+        }
+    }
+
+    async function restoreDeletedProduct(productId) {
+        const product = findProduct(productId);
+        if (!product) return;
+        try {
+            const restored = await api(`/api/pos/products/${product.id}`, {
+                method: 'PUT',
+                body: JSON.stringify({ is_active: true })
+            });
+            const norm = normalizeProduct(restored);
+            mergeProducts([norm], false);
+            state.lastSyncAt = Date.now();
+            saveCachedProducts();
+            renderCategoryFilters();
+            renderProductList();
+            updateSummaryMetrics();
+            notifyPriceUpdated(norm);
+            showToast(`Produk "${norm.name}" berhasil dikembalikan.`);
+        } catch (err) {
+            showToast(err.message || 'Gagal mengembalikan produk.', { isError: true });
+        }
+    }
+
+    async function deleteProduct(productId) {
+        const product = findProduct(productId);
+        if (!product) return;
+        const confirmed = window.confirm(`Hapus produk "${product.name}"? Riwayat penjualan sebelumnya tetap aman tersimpan.`);
+        if (!confirmed) return;
+
+        try {
+            await api(`/api/pos/products/${product.id}`, { method: 'DELETE' });
+            product.is_active = false;
+            product.updated_ms = Date.now();
+            state.lastSyncAt = Date.now();
+            saveCachedProducts();
+
+            closeEditor();
+            closeAddProductSheet();
+            renderCategoryFilters();
+            renderProductList();
+            updateSummaryMetrics();
+            setSyncStatus('live', `Tersinkron · ${formatClock(state.lastSyncAt)}`);
+            notifyPriceUpdated({ ...product, is_active: false });
+
+            showToast(`Produk "${product.name}" dihapus.`, {
+                actionLabel: 'Urungkan',
+                duration: 6000,
+                onAction: () => {
+                    restoreDeletedProduct(product.id);
+                }
+            });
+        } catch (err) {
+            showToast(err.message || 'Gagal menghapus produk.', { isError: true });
         }
     }
 
@@ -1233,10 +1626,62 @@
         }
 
         els.productList.addEventListener('click', (event) => {
+            const editBtn = event.target.closest('[data-edit-product]');
+            if (editBtn) {
+                event.stopPropagation();
+                openEditProductSheet(editBtn.dataset.editProduct);
+                return;
+            }
+            const delBtn = event.target.closest('[data-delete-product]');
+            if (delBtn) {
+                event.stopPropagation();
+                deleteProduct(delBtn.dataset.deleteProduct);
+                return;
+            }
             const card = event.target.closest('[data-product-id]');
             if (!card) return;
             openEditor(card.dataset.productId);
         });
+
+        els.productList.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            if (event.target.closest('button')) return;
+            const card = event.target.closest('[data-product-id]');
+            if (!card) return;
+            event.preventDefault();
+            openEditor(card.dataset.productId);
+        });
+
+        if (els.btnEditorFullEdit) {
+            els.btnEditorFullEdit.addEventListener('click', () => {
+                if (state.editingId) openEditProductSheet(state.editingId);
+            });
+        }
+
+        if (els.btnEditorDelete) {
+            els.btnEditorDelete.addEventListener('click', () => {
+                if (state.editingId) deleteProduct(state.editingId);
+            });
+        }
+
+        if (els.btnFormDelete) {
+            els.btnFormDelete.addEventListener('click', () => {
+                const editId = Number(els.addProductId?.value);
+                if (editId) deleteProduct(editId);
+            });
+        }
+
+        if (els.btnToggleLiveFeed) {
+            els.btnToggleLiveFeed.addEventListener('click', toggleLiveFeed);
+        }
+
+        if (els.liveSalesList) {
+            els.liveSalesList.addEventListener('click', (event) => {
+                const row = event.target.closest('[data-sale-id]');
+                if (!row) return;
+                openSaleDetail(row.dataset.saleId);
+            });
+        }
 
         document.querySelectorAll('[data-close-sheet]').forEach((el) => {
             el.addEventListener('click', closeEditor);
@@ -1244,6 +1689,10 @@
 
         document.querySelectorAll('[data-close-add-sheet]').forEach((el) => {
             el.addEventListener('click', closeAddProductSheet);
+        });
+
+        document.querySelectorAll('[data-close-sale-sheet]').forEach((el) => {
+            el.addEventListener('click', closeSaleDetailSheet);
         });
 
         if (els.addProductForm) {
@@ -1271,11 +1720,6 @@
             els.addCost.addEventListener('input', () => {
                 formatInputInPlace(els.addCost);
                 updateAddMarginPreview();
-            });
-        }
-        if (els.addStock) {
-            els.addStock.addEventListener('input', () => {
-                formatInputInPlace(els.addStock);
             });
         }
 
@@ -1332,7 +1776,8 @@
 
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
-                if (els.addProductSheet && !els.addProductSheet.hidden) closeAddProductSheet();
+                if (els.saleDetailSheet && !els.saleDetailSheet.hidden) closeSaleDetailSheet();
+                else if (els.addProductSheet && !els.addProductSheet.hidden) closeAddProductSheet();
                 else if (!els.editorSheet.hidden) closeEditor();
                 else if (!els.menuPanel.hidden) closeMenu();
             }
@@ -1353,15 +1798,41 @@
             setSyncStatus('offline', 'Ponsel sedang luring');
         });
 
+        const handleRealtimeMessage = (payload) => {
+            if (!payload) return;
+            if (payload.type === 'price-updated' && payload.product) {
+                if (payload.product.is_active === false) {
+                    state.products = state.products.filter((item) => item.id !== Number(payload.product.id));
+                } else {
+                    mergeProducts([payload.product], false);
+                }
+                renderCategoryFilters();
+                renderProductList();
+                updateSummaryMetrics();
+            } else if (payload.type === 'sale-updated') {
+                syncPrices({ silent: true });
+            }
+        };
+
         if (priceChannel) {
             priceChannel.addEventListener('message', (event) => {
-                if (event.data?.type === 'price-updated' && event.data.product) {
-                    mergeProducts([event.data.product], false);
-                    renderProductList();
-                    updateSummaryMetrics();
-                }
+                handleRealtimeMessage(event.data);
             });
         }
+
+        window.addEventListener('storage', (event) => {
+            if (event.key !== PRICE_BUMP_KEY || !event.newValue) return;
+            try {
+                const parsed = JSON.parse(event.newValue);
+                if (parsed?.product) {
+                    handleRealtimeMessage({ type: 'price-updated', product: parsed.product });
+                } else if (parsed?.type === 'sale-updated') {
+                    handleRealtimeMessage(parsed);
+                }
+            } catch {
+                // Abaikan format lama
+            }
+        });
     }
 
     // ================= MASUK KE APLIKASI =================
@@ -1374,7 +1845,10 @@
             renderCategoryFilters();
             renderProductList();
             updateSummaryMetrics();
+            renderLiveSales();
             setSyncStatus('idle', `Data tersimpan · ${formatClock(state.lastSyncAt)}`);
+        } else {
+            renderLiveSales();
         }
 
         await syncPrices({ full: true });

@@ -2157,9 +2157,10 @@ app.get('/api/pos/products/price-sync', async (req, res) => {
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
 
         res.setHeader('Cache-Control', 'no-store');
-        const params = [posOwnerId(user)];
-        let query = `SELECT id, name, sku, unit, category, is_weighable, is_active,
-                            price_sell, price_cost, icon_url,
+        const ownerId = posOwnerId(user);
+        const params = [ownerId];
+        let query = `SELECT id, name, sku, barcode, unit, category, is_weighable, is_active,
+                            price_sell, price_cost, stock, min_stock, icon_url,
                             EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_ms
                      FROM pos_products WHERE user_id = $1`;
         const since = Number(req.query.since);
@@ -2169,9 +2170,68 @@ app.get('/api/pos/products/price-sync', async (req, res) => {
         }
         query += ' ORDER BY name ASC';
         const result = await pool.query(query, params);
+
+        let liveSales = null;
+        if (!isCashier(user)) {
+            const rawToday = req.query.todayFrom;
+            let todayStart;
+            if (rawToday && !Number.isNaN(new Date(rawToday).getTime())) {
+                todayStart = new Date(rawToday);
+            } else {
+                todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0);
+            }
+            const [summaryRes, recentRes] = await Promise.all([
+                pool.query(
+                    `SELECT COALESCE(SUM(CASE WHEN status = 'PAID' THEN 1 ELSE 0 END), 0)::int AS transactions,
+                            COALESCE(SUM(CASE WHEN status = 'PAID' THEN total_amount ELSE 0 END), 0) AS omzet,
+                            COALESCE(SUM(CASE WHEN status = 'PAID' THEN total_cost ELSE 0 END), 0) AS hpp,
+                            COALESCE(SUM(CASE WHEN status = 'PAID' THEN gross_profit ELSE 0 END), 0) AS laba,
+                            COALESCE(SUM(CASE WHEN status = 'PAID' AND payment_method = 'CASH' THEN total_amount ELSE 0 END), 0) AS cash_total,
+                            COALESCE(SUM(CASE WHEN status = 'PAID' AND payment_method = 'QRIS' THEN total_amount ELSE 0 END), 0) AS qris_total,
+                            COALESCE(SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END), 0)::int AS pending
+                     FROM pos_sales
+                     WHERE user_id = $1 AND created_at >= $2`,
+                    [ownerId, todayStart]
+                ),
+                pool.query(
+                    `SELECT s.id, s.invoice_no, s.status, s.payment_method, s.wallet,
+                            s.total_amount, s.total_cost, s.gross_profit,
+                            s.paid_amount, s.change_amount, s.customer_name,
+                            s.cashier_id, s.cashier_name, s.created_at, s.paid_at,
+                            (SELECT COUNT(*) FROM pos_sale_items i WHERE i.sale_id = s.id)::int AS item_count,
+                            (SELECT STRING_AGG(
+                                i.product_name || ' ×' ||
+                                TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM i.qty::text)) ||
+                                ' ' || COALESCE(i.unit, 'PCS'),
+                                ', ' ORDER BY i.id
+                             ) FROM pos_sale_items i WHERE i.sale_id = s.id) AS items_summary
+                     FROM pos_sales s
+                     WHERE s.user_id = $1 AND s.created_at >= $2 AND s.status IN ('PAID', 'PENDING')
+                     ORDER BY COALESCE(s.paid_at, s.created_at) DESC, s.id DESC
+                     LIMIT 20`,
+                    [ownerId, todayStart]
+                )
+            ]);
+            const sRow = summaryRes.rows[0] || {};
+            liveSales = {
+                summary: {
+                    transactions: Number(sRow.transactions || 0),
+                    omzet: Number(sRow.omzet || 0),
+                    hpp: Number(sRow.hpp || 0),
+                    laba: Number(sRow.laba || 0),
+                    cashTotal: Number(sRow.cash_total || 0),
+                    qrisTotal: Number(sRow.qris_total || 0),
+                    pending: Number(sRow.pending || 0)
+                },
+                recent: recentRes.rows
+            };
+        }
+
         res.json({
             serverTime: Date.now(),
-            products: result.rows.map((row) => sanitizePosProductForUser(row, user))
+            products: result.rows.map((row) => sanitizePosProductForUser(row, user)),
+            liveSales
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -2319,8 +2379,8 @@ app.put('/api/pos/products/:id/price', async (req, res) => {
             `UPDATE pos_products
              SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP
              WHERE id = $${values.length - 1} AND user_id = $${values.length}
-             RETURNING id, name, sku, unit, category, is_weighable, is_active,
-                       price_sell, price_cost, icon_url,
+             RETURNING id, name, sku, barcode, unit, category, is_weighable, is_active,
+                       price_sell, price_cost, stock, min_stock, icon_url,
                        EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_ms`,
             values
         );
@@ -2750,7 +2810,14 @@ app.get('/api/pos/sales', async (req, res) => {
         }
         values.push(limit);
         const result = await pool.query(
-            `SELECT s.*, (SELECT COUNT(*) FROM pos_sale_items i WHERE i.sale_id = s.id)::int AS item_count
+            `SELECT s.*,
+                    (SELECT COUNT(*) FROM pos_sale_items i WHERE i.sale_id = s.id)::int AS item_count,
+                    (SELECT STRING_AGG(
+                        i.product_name || ' ×' ||
+                        TRIM(TRAILING '.' FROM TRIM(TRAILING '0' FROM i.qty::text)) ||
+                        ' ' || COALESCE(i.unit, 'PCS'),
+                        ', ' ORDER BY i.id
+                     ) FROM pos_sale_items i WHERE i.sale_id = s.id) AS items_summary
              FROM pos_sales s
              WHERE ${conditions.join(' AND ')}
              ORDER BY s.created_at DESC, s.id DESC

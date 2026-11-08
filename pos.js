@@ -300,22 +300,31 @@
             }
             const nextSell = Number(row.price_sell);
             const nextCost = Number(row.price_cost);
+            const nextStock = row.stock !== undefined ? Number(row.stock) : Number(target.stock);
             if (
                 Number(target.price_sell) !== nextSell ||
                 Number(target.price_cost) !== nextCost ||
+                Number(target.stock) !== nextStock ||
                 target.name !== row.name ||
+                target.sku !== row.sku ||
                 target.unit !== row.unit ||
                 target.category !== row.category ||
-                Boolean(target.is_active) !== Boolean(row.is_active)
+                Boolean(target.is_weighable) !== Boolean(row.is_weighable) ||
+                Boolean(target.is_active) !== Boolean(row.is_active) ||
+                (row.icon_url !== undefined && target.icon_url !== row.icon_url)
             ) {
                 target.price_sell = nextSell;
                 target.price_cost = nextCost;
+                if (row.stock !== undefined) target.stock = nextStock;
+                if (row.min_stock !== undefined) target.min_stock = Number(row.min_stock);
                 if (row.name !== undefined) target.name = row.name;
                 if (row.sku !== undefined) target.sku = row.sku;
+                if (row.barcode !== undefined) target.barcode = row.barcode;
                 if (row.unit !== undefined) target.unit = row.unit;
                 if (row.category !== undefined) target.category = row.category;
                 if (row.is_weighable !== undefined) target.is_weighable = Boolean(row.is_weighable);
                 if (row.is_active !== undefined) target.is_active = Boolean(row.is_active);
+                if (row.icon_url !== undefined) target.icon_url = row.icon_url;
                 changed = true;
             }
         }
@@ -1023,6 +1032,16 @@
         await finishPayment(result.sale, result.items);
     }
 
+    function notifySaleUpdated(sale = null) {
+        const payload = {
+            type: 'sale-updated',
+            sale,
+            at: Date.now()
+        };
+        try { priceChannel?.postMessage(payload); } catch {}
+        try { localStorage.setItem(PRICE_BUMP_KEY, JSON.stringify(payload)); } catch {}
+    }
+
     async function createQrisPending() {
         const result = await api('/api/pos/checkout', {
             method: 'POST',
@@ -1040,6 +1059,7 @@
         els.checkoutError.hidden = true;
         await renderQris();
         await loadProducts();
+        notifySaleUpdated(result.sale);
         showToast(`Tagihan ${result.sale.invoice_no} dibuat. Menunggu pembayaran.`);
     }
 
@@ -1060,6 +1080,7 @@
         openModal('receiptModal');
         clearCart();
         await loadProducts();
+        notifySaleUpdated(sale);
     }
 
     async function handleConfirmPayment() {
@@ -1261,8 +1282,9 @@
 
     async function markSalePaid(saleId) {
         try {
-            await api(`/api/pos/sales/${saleId}/pay`, { method: 'POST' });
+            const result = await api(`/api/pos/sales/${saleId}/pay`, { method: 'POST' });
             showToast('Transaksi ditandai lunas dan masuk ke saku keuangan.');
+            notifySaleUpdated(result?.sale || { id: saleId });
             await Promise.all([loadReport(), loadProducts()]);
         } catch (err) {
             showToast(err.message, true);

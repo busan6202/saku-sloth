@@ -133,6 +133,49 @@
             <!-- Offline / Stale Notice -->
             <p class="harga-stale" id="staleNotice" hidden></p>
 
+            <!-- Hasil Penjualan Realtime Kasir -->
+            <section class="harga-live-sales" id="liveSalesSection" aria-labelledby="liveSalesTitle">
+                <div class="harga-live-head">
+                    <div class="harga-live-title-wrap">
+                        <span class="harga-live-pulse" aria-hidden="true"></span>
+                        <div>
+                            <h2 class="harga-live-title" id="liveSalesTitle">Penjualan Kasir Hari Ini</h2>
+                            <p class="harga-live-sub" id="liveSalesUpdated">Memantau transaksi kasir secara realtime…</p>
+                        </div>
+                    </div>
+                    <div class="harga-live-actions">
+                        <button type="button" class="harga-mini-btn" id="btnToggleLiveFeed" aria-expanded="true">Rincian ▴</button>
+                    </div>
+                </div>
+
+                <div class="harga-live-kpis">
+                    <div class="harga-live-kpi">
+                        <span class="harga-live-kpi-label">Omzet Hari Ini</span>
+                        <span class="harga-live-kpi-val" id="liveSalesOmzet">Rp 0</span>
+                        <span class="harga-live-kpi-meta" id="liveSalesBreakdown">Tunai Rp 0 · QRIS Rp 0</span>
+                    </div>
+                    <div class="harga-live-kpi">
+                        <span class="harga-live-kpi-label">Laba Kotor</span>
+                        <span class="harga-live-kpi-val is-profit" id="liveSalesProfit">Rp 0</span>
+                        <span class="harga-live-kpi-meta" id="liveSalesHpp">HPP Rp 0</span>
+                    </div>
+                    <div class="harga-live-kpi">
+                        <span class="harga-live-kpi-label">Nota Kasir</span>
+                        <span class="harga-live-kpi-val" id="liveSalesCount">0 Lunas</span>
+                        <span class="harga-live-kpi-meta" id="liveSalesPending">0 Pending</span>
+                    </div>
+                </div>
+
+                <div class="harga-live-feed-wrap" id="liveSalesFeedWrap">
+                    <div class="harga-live-feed-head">
+                        <span>Aktivitas Kasir Terbaru</span>
+                        <span class="harga-live-feed-hint">Ketuk nota untuk rincian item</span>
+                    </div>
+                    <div class="harga-live-list" id="liveSalesList" role="list"></div>
+                    <p class="harga-live-empty" id="liveSalesEmpty">Belum ada transaksi kasir hari ini. Penjualan baru dari layar POS akan muncul otomatis di sini secara realtime.</p>
+                </div>
+            </section>
+
             <!-- Metrics Strip -->
             <div class="harga-summary-strip" id="summaryStrip">
                 <div class="harga-summary-card">
@@ -179,6 +222,10 @@
                 <div class="harga-editor-titles">
                     <h2 class="harga-sheet-name" id="editorName">Produk</h2>
                     <p class="harga-sheet-meta" id="editorMeta"></p>
+                </div>
+                <div class="harga-editor-head-actions">
+                    <button type="button" class="harga-mini-btn" id="btnEditorFullEdit" title="Edit nama, kategori, satuan &amp; stok">✏️ Edit</button>
+                    <button type="button" class="harga-mini-btn is-danger" id="btnEditorDelete" title="Hapus produk ini">🗑️ Hapus</button>
                 </div>
             </div>
 
@@ -232,7 +279,7 @@
         </div>
     </div>
 
-    <!-- ===================== PANEL TAMBAH PRODUK BARU (BOTTOM SHEET) ===================== -->
+    <!-- ===================== PANEL TAMBAH / EDIT PRODUK (BOTTOM SHEET) ===================== -->
     <div class="harga-sheet" id="addProductSheet" hidden>
         <div class="harga-sheet-backdrop" data-close-add-sheet></div>
         <div class="harga-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="addSheetTitle">
@@ -244,10 +291,13 @@
                     <h2 class="harga-sheet-name" id="addSheetTitle">Tambah Produk Baru</h2>
                     <p class="harga-sheet-meta" id="addSheetMeta">Daftarkan produk langsung dari ponsel</p>
                 </div>
+                <button type="button" class="harga-mini-btn is-danger" id="btnFormDelete" hidden title="Hapus produk ini">🗑️ Hapus</button>
             </div>
 
-            <!-- Form Tambah Produk -->
+            <!-- Form Tambah / Edit Produk -->
             <form id="addProductForm" novalidate>
+                <input type="hidden" id="addProductId" value="">
+
                 <!-- Nama Produk -->
                 <div class="harga-field">
                     <label class="harga-field-label" for="addName">
@@ -257,6 +307,18 @@
                     <div class="harga-field-input">
                         <span class="harga-field-prefix" aria-hidden="true">🏷️</span>
                         <input id="addName" type="text" autocomplete="off" placeholder="Misal: Bayam Hijau, Cabai Rawit…" required>
+                    </div>
+                </div>
+
+                <!-- SKU / Barcode (Opsional) -->
+                <div class="harga-field">
+                    <label class="harga-field-label" for="addSku">
+                        <span>SKU / Kode Produk</span>
+                        <span class="harga-sub-hint">Opsional</span>
+                    </label>
+                    <div class="harga-field-input">
+                        <span class="harga-field-prefix" aria-hidden="true">#</span>
+                        <input id="addSku" type="text" autocomplete="off" placeholder="Misal: SYR-01">
                     </div>
                 </div>
 
@@ -332,15 +394,15 @@
                     <p class="harga-margin-detail" id="addMargin">Laba per satuan: —</p>
                 </div>
 
-                <!-- Stok Awal -->
+                <!-- Stok -->
                 <div class="harga-field">
                     <label class="harga-field-label" for="addStock">
-                        <span>Stok Awal</span>
-                        <span class="harga-sub-hint">Boleh 0 jika belum dihitung</span>
+                        <span id="addStockLabel">Stok Awal</span>
+                        <span class="harga-sub-hint" id="addStockHint">Boleh 0 jika belum dihitung</span>
                     </label>
                     <div class="harga-field-input">
                         <span class="harga-field-prefix" aria-hidden="true">📦</span>
-                        <input id="addStock" type="text" inputmode="numeric" autocomplete="off" enterkeyhint="done" placeholder="0">
+                        <input id="addStock" type="number" step="0.001" min="0" inputmode="decimal" autocomplete="off" enterkeyhint="done" placeholder="0">
                     </div>
                 </div>
 
@@ -352,6 +414,25 @@
                     <button type="submit" class="harga-btn harga-btn-primary" id="addSave">Simpan Produk Baru</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- ===================== PANEL RINCIAN NOTA KASIR (BOTTOM SHEET) ===================== -->
+    <div class="harga-sheet" id="saleDetailSheet" hidden>
+        <div class="harga-sheet-backdrop" data-close-sale-sheet></div>
+        <div class="harga-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="saleDetailTitle">
+            <div class="harga-sheet-grip" aria-hidden="true" data-close-sale-sheet></div>
+            <div class="harga-editor-header">
+                <div class="harga-editor-thumb" aria-hidden="true">🧾</div>
+                <div class="harga-editor-titles">
+                    <h2 class="harga-sheet-name" id="saleDetailTitle">Rincian Transaksi</h2>
+                    <p class="harga-sheet-meta" id="saleDetailMeta"></p>
+                </div>
+            </div>
+            <div class="harga-sale-detail-body" id="saleDetailBody"></div>
+            <div class="harga-sheet-actions">
+                <button type="button" class="harga-btn harga-btn-ghost" data-close-sale-sheet>Tutup</button>
+            </div>
         </div>
     </div>
 

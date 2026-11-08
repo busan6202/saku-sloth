@@ -5,7 +5,7 @@
    API (tidak di-cache di sini) supaya angka selalu segar.
    ========================================================================== */
 
-const CACHE_NAME = 'saku-harga-shell-v2';
+const CACHE_NAME = 'saku-harga-shell-v3';
 const SHELL_ASSETS = [
     '/harga',
     '/harga.html',

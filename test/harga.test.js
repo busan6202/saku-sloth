@@ -86,3 +86,38 @@ test('pos.html, pos.js, dan server.js menyembunyikan HPP/modal di kasir POS dan 
     assert.match(serverCode, /app\.post\('\/api\/pos\/purchases'[\s\S]*?if \(isCashier\(user\)\) return res\.status\(403\)/);
     assert.match(serverCode, /app\.get\('\/api\/pos\/export-excel'[\s\S]*?if \(isCashier\(user\)\) return res\.status\(403\)/);
 });
+
+test('harga.html memiliki fitur edit produk, hapus produk, dan pantauan penjualan kasir realtime', () => {
+    const hargaHtml = fs.readFileSync(path.join(__dirname, '..', 'harga.html'), 'utf8');
+    const hargaJs = fs.readFileSync(path.join(__dirname, '..', 'harga.js'), 'utf8');
+    const posJs = fs.readFileSync(path.join(__dirname, '..', 'pos.js'), 'utf8');
+    const serverCode = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+
+    // Elemen Penjualan Kasir Realtime di harga.html
+    assert.match(hargaHtml, /id="liveSalesSection"/);
+    assert.match(hargaHtml, /id="liveSalesOmzet"/);
+    assert.match(hargaHtml, /id="liveSalesProfit"/);
+    assert.match(hargaHtml, /id="liveSalesCount"/);
+    assert.match(hargaHtml, /id="liveSalesList"/);
+    assert.match(hargaHtml, /id="saleDetailSheet"/);
+
+    // Elemen Edit & Hapus Produk di harga.html
+    assert.match(hargaHtml, /id="btnEditorFullEdit"/);
+    assert.match(hargaHtml, /id="btnEditorDelete"/);
+    assert.match(hargaHtml, /id="addProductId"/);
+    assert.match(hargaHtml, /id="addSku"/);
+    assert.match(hargaHtml, /id="btnFormDelete"/);
+
+    // Fungsi Edit, Hapus, & Penjualan Realtime di harga.js
+    assert.match(hargaJs, /function openEditProductSheet\(productId\)/);
+    assert.match(hargaJs, /async function deleteProduct\(productId\)/);
+    assert.match(hargaJs, /async function restoreDeletedProduct\(productId\)/);
+    assert.match(hargaJs, /function renderLiveSales\(\)/);
+    assert.match(hargaJs, /async function openSaleDetail\(saleId\)/);
+    assert.match(hargaJs, /data-edit-product=/);
+    assert.match(hargaJs, /data-delete-product=/);
+
+    // Notifikasi realtime transaksi dari pos.js & liveSales dari server.js
+    assert.match(posJs, /function notifySaleUpdated\(/);
+    assert.match(serverCode, /liveSales = \{/);
+});
