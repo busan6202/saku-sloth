@@ -560,18 +560,12 @@
 
 .harga-tag-sell {
     font-family: var(--font-outlier);
-    font-size: 15.5px;
+    font-size: 16px;
     font-weight: 700;
+    color: var(--ink);
     white-space: nowrap;
-    padding: 2px 7px;
-    border-radius: 6px;
     letter-spacing: -0.01em;
     font-variant-numeric: tabular-nums;
-    background: linear-gradient(
-        to top,
-        color-mix(in srgb, var(--color-accent) 70%, transparent) 0 46%,
-        transparent 46%
-    );
 }
 
 .harga-tag-cost {
@@ -1184,14 +1178,6 @@
 }
 
 /* ============================== DARK MODE REFINEMENT ============================== */
-
-[data-theme="dark"] .harga-tag-sell {
-    background: linear-gradient(
-        to top,
-        color-mix(in srgb, var(--color-accent) 40%, transparent) 0 46%,
-        transparent 46%
-    );
-}
 
 [data-theme="dark"] .harga-sheet-panel {
     box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.6);
