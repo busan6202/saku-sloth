@@ -2093,7 +2093,7 @@ app.get('/dashboard', (req, res) => {
 });
 
 // PWA "Saku Harga" — ubah harga produk cepat dari ponsel (khusus pemilik toko).
-app.get('/harga', async (req, res, next) => {
+app.get(['/harga', '/harga/'], async (req, res, next) => {
     try {
         if (await isCashierSession(req)) return res.redirect('/pos');
         res.sendFile(path.join(__dirname, 'harga.html'));

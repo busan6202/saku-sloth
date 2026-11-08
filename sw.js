@@ -5,12 +5,13 @@
    API (tidak di-cache di sini) supaya angka selalu segar.
    ========================================================================== */
 
-const CACHE_NAME = 'saku-harga-shell-v1';
+const CACHE_NAME = 'saku-harga-shell-v2';
 const SHELL_ASSETS = [
     '/harga',
     '/harga.html',
     '/harga.css',
     '/harga.js',
+    '/sayur-nusantara.js',
     '/style.css',
     '/manifest.webmanifest',
     '/icons/app-icon.svg',

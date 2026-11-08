@@ -87,15 +87,19 @@
     function cacheElements() {
         [
             'hargaGate', 'gateLoginForm', 'gateEmail', 'gatePassword', 'gateError', 'gateSubmit',
-            'hargaApp', 'btnInstall', 'btnTheme', 'btnMenu', 'menuPanel',
+            'hargaApp', 'btnAddProduct', 'btnInstall', 'btnTheme', 'btnMenu', 'menuPanel',
             'menuPos', 'menuDash', 'menuRefresh', 'menuLogout',
             'hargaSearch', 'btnClearSearch', 'categoryFilters',
-            'staleNotice', 'productList', 'emptyState', 'emptyTitle', 'emptyCopy',
+            'staleNotice', 'productList', 'emptyState', 'emptyTitle', 'emptyCopy', 'btnEmptyAdd',
             'syncBar', 'syncDot', 'syncText', 'btnRefresh',
             'statTotalProducts', 'statAverageMargin', 'statMissingCost', 'cardMissingHpp',
             'editorSheet', 'editorName', 'editorMeta', 'sellUnitNote', 'editorThumb',
             'editorSell', 'quickSell', 'editorCost', 'editorMargin', 'editorMarginPct',
             'editorMarginFill', 'editorMarginCard', 'editorError', 'editorSave',
+            'addProductSheet', 'addProductForm', 'addThumb', 'addSheetTitle', 'addSheetMeta',
+            'addName', 'addNameHint', 'addCategory', 'addUnit', 'addIsWeighable',
+            'addSell', 'addSellUnitNote', 'addCost', 'addMarginCard', 'addMarginPct',
+            'addMarginFill', 'addMargin', 'addStock', 'addError', 'addSave',
             'hargaToast', 'toastText', 'toastAction'
         ].forEach((id) => { els[id] = $(id); });
     }
@@ -491,7 +495,7 @@
             price_sell: Math.max(0, Math.round(Number(row.price_sell) || 0)),
             price_cost: Math.max(0, Math.round(Number(row.price_cost) || 0)),
             icon_url: row.icon_url || null,
-            updated_ms: Number(row.updated_ms) || 0
+            updated_ms: Number(row.updated_ms) || (row.updated_at ? new Date(row.updated_at).getTime() : Date.now())
         };
     }
 
@@ -650,10 +654,15 @@
             els.emptyState.hidden = false;
             if (state.products.length === 0) {
                 els.emptyTitle.textContent = 'Belum ada produk';
-                els.emptyCopy.textContent = 'Tambahkan produk lewat layar kasir, lalu kembali ke halaman ini untuk mengatur harganya.';
+                els.emptyCopy.textContent = 'Tambahkan produk pertama Anda untuk mulai mengatur harga dan modal.';
+                if (els.btnEmptyAdd) els.btnEmptyAdd.textContent = '＋ Tambah Produk Baru';
             } else {
                 els.emptyTitle.textContent = 'Produk tidak ditemukan';
-                els.emptyCopy.textContent = 'Coba kata kunci lain atau pilih kategori "Semua".';
+                const searchQ = state.search.trim();
+                els.emptyCopy.textContent = searchQ
+                    ? `Tidak ada produk yang cocok dengan "${searchQ}".`
+                    : 'Tidak ada produk untuk filter ini.';
+                if (els.btnEmptyAdd) els.btnEmptyAdd.textContent = searchQ ? `＋ Tambah "${searchQ}"` : '＋ Tambah Produk Baru';
             }
             return;
         }
@@ -890,6 +899,209 @@
         }
     }
 
+    // ================= PANEL TAMBAH PRODUK BARU =================
+
+    function openAddProductSheet(initialName = '') {
+        closeEditor();
+        closeMenu();
+
+        if (els.addProductForm) els.addProductForm.reset();
+        if (els.addName) els.addName.value = initialName || '';
+        if (els.addCategory) els.addCategory.value = 'UMUM';
+        if (els.addUnit) els.addUnit.value = 'PCS';
+        if (els.addIsWeighable) els.addIsWeighable.checked = false;
+        if (els.addSell) els.addSell.value = '';
+        if (els.addCost) els.addCost.value = '';
+        if (els.addStock) els.addStock.value = '';
+        if (els.addError) {
+            els.addError.hidden = true;
+            els.addError.textContent = '';
+        }
+        if (els.addSellUnitNote) els.addSellUnitNote.textContent = 'per PCS';
+
+        updateAddThumb();
+        updateAddMarginPreview();
+
+        if (els.addProductSheet) {
+            els.addProductSheet.hidden = false;
+            document.body.style.overflow = 'hidden';
+            setTimeout(() => {
+                if (initialName && els.addSell) {
+                    els.addSell.focus();
+                } else if (els.addName) {
+                    els.addName.focus();
+                }
+            }, 60);
+        }
+    }
+
+    function closeAddProductSheet() {
+        if (!els.addProductSheet) return;
+        els.addProductSheet.hidden = true;
+        document.body.style.overflow = '';
+    }
+
+    function updateAddThumb() {
+        if (!els.addThumb) return;
+        const name = (els.addName?.value || '').trim();
+        const category = els.addCategory?.value || 'UMUM';
+
+        const dummyProduct = {
+            name,
+            category,
+            icon_url: null
+        };
+
+        els.addThumb.innerHTML = renderProductThumbnail(dummyProduct);
+
+        if (els.addNameHint) {
+            const vegFile = vegIconFile(name.toLowerCase());
+            const sayur = window.SayurIcons?.findByName(name.toLowerCase());
+            if (vegFile || sayur) {
+                els.addNameHint.textContent = 'Ikon sayur terdeteksi ✓';
+                els.addNameHint.style.color = 'var(--green)';
+            } else {
+                els.addNameHint.textContent = 'Ikon otomatis';
+                els.addNameHint.style.color = '';
+            }
+        }
+    }
+
+    function updateAddMarginPreview() {
+        if (!els.addMargin) return;
+        const unit = els.addUnit?.value || 'PCS';
+        const sell = parseMoneyInput(els.addSell?.value);
+        const cost = parseMoneyInput(els.addCost?.value);
+
+        els.addMargin.classList.remove('is-loss', 'is-flat');
+        if (els.addMarginFill) {
+            els.addMarginFill.classList.remove('is-loss', 'is-flat');
+        }
+
+        if (cost <= 0) {
+            els.addMargin.classList.add('is-flat');
+            els.addMargin.textContent = `Laba per ${unit}: isi HPP untuk melihat estimasi laba`;
+            if (els.addMarginPct) els.addMarginPct.textContent = '0%';
+            if (els.addMarginFill) els.addMarginFill.style.width = '0%';
+            return;
+        }
+
+        const diff = sell - cost;
+        const pct = Math.round((diff / cost) * 100);
+        const displayPct = `${pct >= 0 ? '+' : ''}${pct}%`;
+        if (els.addMarginPct) els.addMarginPct.textContent = displayPct;
+
+        if (diff > 0) {
+            els.addMargin.textContent = `Laba kotor per ${unit}: ${formatMoney(diff)} (${displayPct})`;
+            const fillWidth = Math.min(100, Math.max(5, pct));
+            if (els.addMarginFill) els.addMarginFill.style.width = `${fillWidth}%`;
+        } else if (diff < 0) {
+            els.addMargin.classList.add('is-loss');
+            if (els.addMarginFill) {
+                els.addMarginFill.classList.add('is-loss');
+                els.addMarginFill.style.width = '100%';
+            }
+            els.addMargin.textContent = `Potensi rugi per ${unit}: -${formatMoney(Math.abs(diff))} (${displayPct}) — harga jual di bawah modal`;
+        } else {
+            els.addMargin.classList.add('is-flat');
+            if (els.addMarginFill) {
+                els.addMarginFill.classList.add('is-flat');
+                els.addMarginFill.style.width = '5%';
+            }
+            els.addMargin.textContent = `Impas (Rp 0) · harga jual sama dengan modal`;
+        }
+    }
+
+    async function saveNewProduct(e) {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+
+        const name = (els.addName?.value || '').trim();
+        if (!name) {
+            if (els.addError) {
+                els.addError.textContent = 'Nama produk wajib diisi.';
+                els.addError.hidden = false;
+            }
+            els.addName?.focus();
+            return;
+        }
+
+        const sell = parseMoneyInput(els.addSell?.value);
+        if (sell <= 0) {
+            if (els.addError) {
+                els.addError.textContent = 'Harga jual harus lebih dari Rp 0.';
+                els.addError.hidden = false;
+            }
+            els.addSell?.focus();
+            return;
+        }
+
+        const cost = parseMoneyInput(els.addCost?.value);
+        const stock = parseMoneyInput(els.addStock?.value);
+        const category = els.addCategory?.value || 'UMUM';
+        const unit = els.addUnit?.value || 'PCS';
+        const isWeighable = Boolean(els.addIsWeighable?.checked);
+
+        // Cari tahu icon_url otomatis jika terdeteksi sayur/bumbu
+        let iconUrl = null;
+        const nameLower = name.toLowerCase();
+        const sayurMatch = window.SayurIcons?.findByName(nameLower);
+        if (sayurMatch?.id) {
+            iconUrl = `sayur:${sayurMatch.id}`;
+        } else {
+            const vegFile = vegIconFile(nameLower);
+            if (vegFile) {
+                iconUrl = `icons/vegetables/${vegFile}.png`;
+            }
+        }
+
+        if (els.addError) els.addError.hidden = true;
+        if (els.addSave) els.addSave.disabled = true;
+
+        try {
+            const payload = {
+                name,
+                category,
+                unit,
+                is_weighable: isWeighable,
+                price_sell: sell,
+                price_cost: cost,
+                stock,
+                min_stock: 0,
+                icon_url: iconUrl
+            };
+
+            const created = await api('/api/pos/products', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+
+            const norm = normalizeProduct(created);
+            // Tambahkan produk baru ke daftar lokal
+            state.products.unshift(norm);
+            if (norm.updated_ms > state.lastUpdatedMs) {
+                state.lastUpdatedMs = norm.updated_ms;
+            }
+            state.lastSyncAt = Date.now();
+            saveCachedProducts();
+
+            renderCategoryFilters();
+            renderProductList();
+            updateSummaryMetrics();
+            setSyncStatus('live', `Tersinkron · ${formatClock(state.lastSyncAt)}`);
+            notifyPriceUpdated(norm);
+
+            closeAddProductSheet();
+            showToast(`Produk "${norm.name}" (${formatMoney(norm.price_sell)}) berhasil ditambahkan!`);
+        } catch (err) {
+            if (els.addError) {
+                els.addError.textContent = err.message || 'Gagal menambahkan produk.';
+                els.addError.hidden = false;
+            }
+        } finally {
+            if (els.addSave) els.addSave.disabled = false;
+        }
+    }
+
     // ================= MENU & PWA INSTALL =================
 
     function toggleMenu() {
@@ -941,6 +1153,8 @@
         els.gateLoginForm.addEventListener('submit', handleGateLogin);
         els.btnTheme.addEventListener('click', toggleTheme);
         els.btnInstall.addEventListener('click', triggerInstall);
+        if (els.btnAddProduct) els.btnAddProduct.addEventListener('click', () => openAddProductSheet());
+        if (els.btnEmptyAdd) els.btnEmptyAdd.addEventListener('click', () => openAddProductSheet(state.search));
 
         els.btnMenu.addEventListener('click', (event) => {
             event.stopPropagation();
@@ -998,6 +1212,43 @@
             el.addEventListener('click', closeEditor);
         });
 
+        document.querySelectorAll('[data-close-add-sheet]').forEach((el) => {
+            el.addEventListener('click', closeAddProductSheet);
+        });
+
+        if (els.addProductForm) {
+            els.addProductForm.addEventListener('submit', saveNewProduct);
+        }
+        if (els.addName) {
+            els.addName.addEventListener('input', updateAddThumb);
+        }
+        if (els.addCategory) {
+            els.addCategory.addEventListener('change', updateAddThumb);
+        }
+        if (els.addUnit) {
+            els.addUnit.addEventListener('change', () => {
+                if (els.addSellUnitNote) els.addSellUnitNote.textContent = `per ${els.addUnit.value || 'PCS'}`;
+                updateAddMarginPreview();
+            });
+        }
+        if (els.addSell) {
+            els.addSell.addEventListener('input', () => {
+                formatInputInPlace(els.addSell);
+                updateAddMarginPreview();
+            });
+        }
+        if (els.addCost) {
+            els.addCost.addEventListener('input', () => {
+                formatInputInPlace(els.addCost);
+                updateAddMarginPreview();
+            });
+        }
+        if (els.addStock) {
+            els.addStock.addEventListener('input', () => {
+                formatInputInPlace(els.addStock);
+            });
+        }
+
         els.editorSell.addEventListener('input', () => {
             formatInputInPlace(els.editorSell);
             updateMarginPreview();
@@ -1051,7 +1302,8 @@
 
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
-                if (!els.editorSheet.hidden) closeEditor();
+                if (els.addProductSheet && !els.addProductSheet.hidden) closeAddProductSheet();
+                else if (!els.editorSheet.hidden) closeEditor();
                 else if (!els.menuPanel.hidden) closeMenu();
             }
         });

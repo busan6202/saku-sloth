@@ -963,6 +963,104 @@
     color: var(--muted);
 }
 
+.harga-top-add-btn {
+    appearance: none;
+    border: var(--rule-hair) solid var(--color-accent-deep);
+    background: var(--color-accent);
+    color: var(--color-accent-ink);
+    border-radius: var(--radius-pill);
+    height: 38px;
+    padding: 0 14px;
+    font-size: 13.5px;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 2px 0 var(--color-accent-deep);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    flex: none;
+    transition: transform 120ms var(--ease-snap), box-shadow 120ms var(--ease-snap), opacity 120ms;
+}
+
+.harga-top-add-btn:active {
+    transform: translateY(2px);
+    box-shadow: 0 0 0 var(--color-accent-deep);
+}
+
+.harga-grid-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.harga-select {
+    width: 100%;
+    height: 48px;
+    border-radius: var(--h-radius-btn);
+    border: var(--rule-hair) solid var(--line);
+    background: var(--color-card);
+    color: var(--ink);
+    padding: 0 12px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: inset 0 1px 2px rgba(22, 27, 38, 0.04);
+}
+
+.harga-select:focus {
+    outline: none;
+    border-color: var(--color-accent-2);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.harga-toggle-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    border-radius: var(--h-radius-btn);
+    background: var(--surface-soft);
+    border: var(--rule-hair) solid var(--line);
+    cursor: pointer;
+    user-select: none;
+}
+
+.harga-toggle-check {
+    width: 18px;
+    height: 18px;
+    margin-top: 3px;
+    accent-color: var(--color-accent-2);
+    cursor: pointer;
+    flex: none;
+}
+
+.harga-toggle-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13.5px;
+    color: var(--ink);
+}
+
+.harga-toggle-text small {
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
+.harga-empty .harga-btn {
+    margin-top: 14px;
+    max-width: 260px;
+}
+
+#addProductForm {
+    display: grid;
+    gap: 14px;
+}
+
 /* Buttons & Actions */
 .harga-message {
     margin: 0;
