@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "caveman": {
+      "source": "juliusbrussee/caveman",
+      "sourceType": "github",
+      "skillPath": "skills/caveman/SKILL.md",
+      "computedHash": "71b600c88c8d1d36f18c4875db23b53c5d6cb9ba3195e19451d6b1bb67db07c4"
+    },
+    "codegraph": {
+      "source": "onsager-ai/dev-skills",
+      "sourceType": "github",
+      "skillPath": "skills/codegraph/SKILL.md",
+      "computedHash": "3e8ff28792f90f2f9b33517a07ad5214e563fa0ee904e6215e2a9b18ffe8377b"
+    },
+    "headroom": {
+      "source": "headroomlabs-ai/headroom",
+      "sourceType": "github",
+      "skillPath": "skills/headroom/SKILL.md",
+      "computedHash": "34e8d324edb9f45ec9f4870b5c75ef175f94d2b425f928cd61a7285e8ea164f3"
+    },
+    "rtk": {
+      "source": "akillness/jeo-skills",
+      "sourceType": "github",
+      "skillPath": ".agent-skills/rtk/SKILL.md",
+      "computedHash": "fc31feecd77995e2bbc7747c865c054e3566b8580a9e86cdb1293ffb325722cb"
+    }
+  }
+}

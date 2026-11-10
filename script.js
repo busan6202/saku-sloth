@@ -5,7 +5,7 @@ const TRANSACTIONS_URL = `${API_BASE_URL}/transactions`;
 const DEBTS_URL = `${API_BASE_URL}/debts`;
 const AUTH_URL = `${API_BASE_URL}/auth`;
 const VISIBLE_TRANSACTION_LIMIT = 6;
-const CATEGORY_COLORS = ['#89bd5c', '#e9756a', '#6b96d6', '#f5b942', '#9b7ede', '#57b8a6', '#e79a5a'];
+const CATEGORY_COLORS = ['#E8EA46', '#8E63F9', '#44B6FF', '#F47368', '#D264F5', '#62E6B5', '#F9A570'];
 
 // Saat frontend di-hosting terpisah (mis. GitHub Pages) API berada di domain lain.
 // Browser memblokir cookie pihak ketiga, jadi mode lintas origin memakai Bearer token
@@ -2894,7 +2894,12 @@ function initializeCalendarViewTabs() {
 
 function initializeTheme() {
     const savedTheme = localStorage.getItem(STORAGE_KEYS.theme);
-    if (savedTheme === 'dark') document.documentElement.dataset.theme = 'dark';
+    const isDarkInit = savedTheme ? savedTheme === 'dark' : true;
+    if (isDarkInit) {
+        document.documentElement.dataset.theme = 'dark';
+    } else {
+        delete document.documentElement.dataset.theme;
+    }
 
     const themeButton = document.getElementById('themeToggle');
     const updateThemeButton = (isDark) => {
@@ -2905,7 +2910,7 @@ function initializeTheme() {
         themeButton.setAttribute('aria-label', isDark ? 'Gunakan tema terang' : 'Gunakan tema gelap');
         renderIcons();
     };
-    updateThemeButton(savedTheme === 'dark');
+    updateThemeButton(isDarkInit);
 
     themeButton.addEventListener('click', () => {
         const isDark = document.documentElement.dataset.theme === 'dark';

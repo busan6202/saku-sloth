@@ -1,17 +1,16 @@
 <!doctype html>
-<html lang="id">
+<html lang="id" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f5f6f2">
+    <meta name="theme-color" content="#0A0D14">
     <meta name="description" content="Saku Harian Smart Planner — Aplikasi perencana keuangan harian dengan kalender bulanan, rekomendasi finansial pintar, pengingat tagihan, dan ekspor Google Sheets.">
-    <title>Saku Harian — Smart Daily Financial Planner</title>
+    <title>Saku Harian — Ethereal Smart Financial Dashboard</title>
     <link rel="preconnect" href="https://api.fontshare.com">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Hallmark Hum Theme Typography: Chillax & Geist Mono -->
-    <link href="https://api.fontshare.com/v2/css?f[]=chillax@500,600,700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+    <!-- Ethereal Fintech Typography: Plus Jakarta Sans, Manrope & Geist Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Manrope:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/simple-statistics@7.8.8/dist/simple-statistics.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
@@ -262,11 +261,48 @@
 
         <main class="main-content" id="overview">
             <header class="topbar">
-                <div class="breadcrumb">
-                    <span>Smart Daily Planner</span>
-                    <span aria-hidden="true">/</span>
-                    <strong id="activeSectionTitle">Ringkasan Harian</strong>
+                <div class="topbar-brand-cluster">
+                    <a class="eth-brand-mark" href="#overview" aria-label="Saku Ethereal Dashboard">
+                        <span class="eth-logo-glyph" aria-hidden="true">
+                            <span></span><span></span><span></span>
+                        </span>
+                        <span class="eth-logo-word">ethereal<span>saku</span></span>
+                    </a>
+                    <div class="breadcrumb">
+                        <span>My Dashboard</span>
+                        <span aria-hidden="true">/</span>
+                        <strong id="activeSectionTitle">Ringkasan Harian</strong>
+                    </div>
                 </div>
+
+                <!-- Ethereal Top Center Pill Navigation -->
+                <nav class="eth-top-pill-nav" aria-label="Navigasi utama Ethereal">
+                    <a class="eth-pill-tab is-active" href="#overview" data-nav="overview">
+                        <span class="eth-pill-dot" aria-hidden="true"></span>
+                        <span>Dashboard</span>
+                    </a>
+                    <a class="eth-pill-tab" href="#insights" data-nav="insights">
+                        <span class="eth-pill-dot" aria-hidden="true"></span>
+                        <span>Statistics</span>
+                    </a>
+                    <a class="eth-pill-tab" href="#transactions" data-nav="transactions">
+                        <span class="eth-pill-dot" aria-hidden="true"></span>
+                        <span>Transactions</span>
+                    </a>
+                    <a class="eth-pill-tab" href="#wallets" data-nav="wallets">
+                        <span class="eth-pill-dot" aria-hidden="true"></span>
+                        <span>My wallet</span>
+                    </a>
+                    <a class="eth-pill-tab" href="#calendar-section" data-nav="calendar-section">
+                        <span class="eth-pill-dot" aria-hidden="true"></span>
+                        <span>Kalender</span>
+                    </a>
+                    <a class="eth-pill-tab" href="#bills" data-nav="bills">
+                        <span class="eth-pill-dot" aria-hidden="true"></span>
+                        <span>Subscriptions</span>
+                    </a>
+                </nav>
+
                 <div class="topbar-actions">
                     <label class="month-control" title="Pilih bulan kalender dan laporan">
                         <span class="sr-only">Pilih bulan laporan</span>
@@ -293,7 +329,7 @@
                         <span class="export-label">Google Sheets</span>
                     </button>
                     <button class="icon-button" id="refreshButton" type="button" aria-label="Muat ulang data" title="Muat ulang data"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
-                    <button class="icon-button theme-button" id="themeToggle" type="button" aria-label="Ganti tema" title="Ganti tema"><i data-lucide="moon" aria-hidden="true"></i></button>
+                    <button class="icon-button theme-button" id="themeToggle" type="button" aria-label="Ganti tema" title="Ganti tema"><i data-lucide="sun" aria-hidden="true"></i></button>
 
                     <!-- User Menu Dropdown Button -->
                     <div class="user-menu-wrap" id="userMenuWrap">
@@ -326,15 +362,15 @@
                 </div>
             </header>
 
-            <!-- HERO BANNER DENGAN KARTUN INTERAKTIF & SMART PLANNER (HALLMARK HUM THEME) -->
+            <!-- HERO BANNER DENGAN KARTUN INTERAKTIF & SMART PLANNER (ETHEREAL FINTECH THEME) -->
             <section class="hero-planner-banner" aria-labelledby="page-title">
                 <div class="hero-copy-col">
                     <div class="hero-pill-row">
                         <span class="eyebrow-pill" id="todayLabel">HARI INI</span>
                         <span class="planner-status-pill" id="plannerMoodBadge">✨ Mode Hemat Aktif</span>
-                        <span class="hum-craft-tag">🐮 Edisi Hum Farm & Craft</span>
+                        <span class="hum-craft-tag">⚡ Ethereal Fintech Edition</span>
                     </div>
-                    <h1 id="page-title">Smart Planner <mark class="hum-mark">Keuangan Harianmu.</mark></h1>
+                    <h1 id="page-title">My Dashboard <mark class="hum-mark">Keuangan Harianmu.</mark></h1>
                     <p class="welcome-copy" id="mascotSpeech">Halo! Aku Moo-Moo si Sapi Finansial. Rezeki itu seperti susu segar, yuk pantau jatah belanja harian dan tagihanmu agar tabungan makin melimpah!</p>
                     <div class="hero-actions">
                         <button class="button button-primary" id="openTransaction" type="button">
@@ -543,8 +579,34 @@
                 </div>
             </div>
 
-            <!-- SMART DAILY PLANNER PULSE (4 KARTU UTAMA) -->
+            <!-- SMART DAILY PLANNER PULSE (4 KARTU UTAMA — ETHEREAL BENTO) -->
             <section class="summary-grid" aria-label="Ringkasan Smart Daily Financial Planner">
+                <article class="summary-card balance-card eth-hero-balance-card">
+                    <div class="eth-hero-geo" aria-hidden="true">
+                        <span class="geo-layer-1"></span>
+                        <span class="geo-layer-2"></span>
+                    </div>
+                    <div class="summary-head">
+                        <span class="summary-label">Total balance · Sisa Bersih Bulanan</span>
+                        <div class="summary-head-actions">
+                            <span class="card-orbit" aria-hidden="true">↗</span>
+                        </div>
+                    </div>
+                    <p class="summary-value" id="balanceValue">Rp 0</p>
+                    <div class="summary-foot"><span class="balance-dot"></span><span id="balanceCaption">Pemasukan dikurangi pengeluaran</span></div>
+                    <div class="eth-hero-card-actions">
+                        <button class="eth-dark-capsule-btn" type="button" data-open-form>
+                            <span>Transfer / Catat</span>
+                        </button>
+                        <button class="eth-connected-pill card-reset-pill" id="openResetFromBalanceCardBtn" type="button" title="Hapus atau Reset Saldo Berjalan ke Rp 0">
+                            <span class="eth-cp-label">Reset Saldo</span>
+                            <span class="eth-cp-bridge" aria-hidden="true"></span>
+                            <span class="eth-cp-circle" aria-hidden="true">🔄</span>
+                        </button>
+                    </div>
+                    <div class="balance-decoration" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                </article>
+
                 <article class="summary-card safe-spend-card">
                     <div class="summary-head">
                         <span class="summary-label">Jatah Aman Hari Ini (Safe-to-Spend)</span>
@@ -560,77 +622,104 @@
                     </div>
                 </article>
 
-                <article class="summary-card balance-card">
-                    <div class="summary-head">
-                        <span class="summary-label">Sisa Bersih Bulanan</span>
-                        <div class="summary-head-actions">
-                            <button class="card-reset-pill" id="openResetFromBalanceCardBtn" type="button" title="Hapus atau Reset Saldo Berjalan ke Rp 0">
-                                🔄 Hapus Saldo
-                            </button>
-                            <span class="card-orbit" aria-hidden="true">↗</span>
-                        </div>
-                    </div>
-                    <p class="summary-value" id="balanceValue">Rp 0</p>
-                    <div class="summary-foot"><span class="balance-dot"></span><span id="balanceCaption">Pemasukan dikurangi pengeluaran</span></div>
-                    <div class="balance-decoration" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-                </article>
-
-                <article class="summary-card">
-                    <div class="summary-head"><span class="summary-label">Pemasukan Bulan Ini</span><span class="metric-icon income-icon" aria-hidden="true">↙</span></div>
+                <article class="summary-card eth-metric-card eth-income-card">
+                    <div class="summary-head"><span class="summary-label">Income · Pemasukan Bulan Ini</span><span class="metric-icon income-icon" aria-hidden="true">↙</span></div>
                     <p class="summary-value" id="incomeValue">Rp 0</p>
-                    <div class="summary-foot"><span class="metric-indicator income-indicator"></span><span id="incomeCount">0 transaksi</span></div>
+                    <div class="summary-foot eth-metric-foot">
+                        <span class="eth-foot-caption"><span class="metric-indicator income-indicator"></span>Pemasukan bulan ini</span>
+                        <span class="eth-trend-pill up" id="incomeCount">0 transaksi</span>
+                    </div>
                 </article>
 
-                <article class="summary-card">
-                    <div class="summary-head"><span class="summary-label">Pengeluaran Bulan Ini</span><span class="metric-icon expense-icon" aria-hidden="true">↗</span></div>
+                <article class="summary-card eth-metric-card eth-expense-card">
+                    <div class="summary-head"><span class="summary-label">Expense · Pengeluaran Bulan Ini</span><span class="metric-icon expense-icon" aria-hidden="true">↗</span></div>
                     <p class="summary-value" id="expenseValue">Rp 0</p>
-                    <div class="summary-foot"><span class="metric-indicator expense-indicator"></span><span id="expenseCount">0 transaksi</span></div>
+                    <div class="summary-foot eth-metric-foot">
+                        <span class="eth-foot-caption"><span class="metric-indicator expense-indicator"></span>Pengeluaran bulan ini</span>
+                        <span class="eth-trend-pill down" id="expenseCount">0 transaksi</span>
+                    </div>
                 </article>
             </section>
 
-            <!-- ================= KANTONG DANA / BANK & E-WALLET (COMPACT DROPDOWN BAR) ================= -->
+            <!-- ================= KANTONG DANA / BANK & E-WALLET (ETHEREAL MY CARDS STACK + DROPDOWN) ================= -->
             <section class="panel wallets-panel" id="wallets" aria-label="Kantong dana bank dan e-wallet">
-                <div class="wallet-compact-bar">
-                    <div class="wallet-bar-left">
-                        <div class="wallets-title-group">
-                            <span class="wallet-cartoon-badge" id="activeWalletHeroLogo" aria-hidden="true"></span>
-                            <div>
-                                <p class="eyebrow">KANTONG DANA · BANK & E-WALLET</p>
-                                <h2>Pilih Dompet Digital / Rekening</h2>
+                <div class="eth-wallets-bento">
+                    <!-- Left: Interactive Wallet Selector & Live Stats -->
+                    <div class="wallet-compact-bar">
+                        <div class="wallet-bar-left">
+                            <div class="wallets-title-group">
+                                <span class="wallet-cartoon-badge" id="activeWalletHeroLogo" aria-hidden="true"></span>
+                                <div>
+                                    <p class="eyebrow">KANTONG DANA · BANK & E-WALLET</p>
+                                    <h2>Pilih Dompet Digital / Rekening</h2>
+                                </div>
+                            </div>
+
+                            <!-- Custom Dropdown dengan Logo Aplikasi E-Wallet / Bank -->
+                            <div class="custom-wallet-dropdown" id="dashboardWalletDropdown">
+                                <button type="button" class="wallet-dropdown-trigger" id="walletDropdownTrigger" aria-haspopup="listbox" aria-expanded="false">
+                                    <span class="w-trig-left" id="walletDropdownTriggerContent"></span>
+                                    <i data-lucide="chevron-down" aria-hidden="true"></i>
+                                </button>
+                                <div class="wallet-dropdown-menu" id="walletDropdownMenu" role="listbox" hidden></div>
                             </div>
                         </div>
 
-                        <!-- Custom Dropdown dengan Logo Aplikasi E-Wallet / Bank -->
-                        <div class="custom-wallet-dropdown" id="dashboardWalletDropdown">
-                            <button type="button" class="wallet-dropdown-trigger" id="walletDropdownTrigger" aria-haspopup="listbox" aria-expanded="false">
-                                <span class="w-trig-left" id="walletDropdownTriggerContent"></span>
-                                <i data-lucide="chevron-down" aria-hidden="true"></i>
-                            </button>
-                            <div class="wallet-dropdown-menu" id="walletDropdownMenu" role="listbox" hidden></div>
+                        <div class="wallet-bar-stats">
+                            <div class="w-stat-item">
+                                <span>Saldo Kantong</span>
+                                <strong id="selectedWalletBalance">Rp 0</strong>
+                            </div>
+                            <div class="w-stat-item">
+                                <span>Masuk</span>
+                                <strong class="text-success" id="selectedWalletIncome">+Rp 0</strong>
+                            </div>
+                            <div class="w-stat-item">
+                                <span>Keluar</span>
+                                <strong class="text-danger" id="selectedWalletExpense">-Rp 0</strong>
+                            </div>
+                            <div class="w-stat-actions">
+                                <button class="button button-primary button-sm" id="addTrxInSelectedWalletBtn" type="button">
+                                    <i data-lucide="plus" aria-hidden="true"></i> Catat
+                                </button>
+                                <button class="button button-danger-soft button-sm" id="openResetFromWalletBtn" type="button" title="Hapus / Nolkan Saldo">
+                                    <i data-lucide="rotate-ccw" aria-hidden="true"></i> Hapus Saldo
+                                </button>
+                                <button class="button button-secondary button-sm" id="resetWalletFilterBtn" type="button" hidden>Semua</button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="wallet-bar-stats">
-                        <div class="w-stat-item">
-                            <span>Saldo Kantong</span>
-                            <strong id="selectedWalletBalance">Rp 0</strong>
-                        </div>
-                        <div class="w-stat-item">
-                            <span>Masuk</span>
-                            <strong class="text-success" id="selectedWalletIncome">+Rp 0</strong>
-                        </div>
-                        <div class="w-stat-item">
-                            <span>Keluar</span>
-                            <strong class="text-danger" id="selectedWalletExpense">-Rp 0</strong>
-                        </div>
-                        <div class="w-stat-actions">
-                            <button class="button button-primary button-sm" id="addTrxInSelectedWalletBtn" type="button">
-                                <i data-lucide="plus" aria-hidden="true"></i> Catat
+                    <!-- Right: Ethereal "My cards" Stacked Credit / E-Wallet Visual -->
+                    <div class="eth-my-cards-showcase" aria-label="Visual kartu dompet digital">
+                        <div class="eth-my-cards-head">
+                            <h3>My cards <sup>4</sup></h3>
+                            <button type="button" class="eth-connected-pill eth-add-card-pill" data-open-form title="Catat transaksi di kantong dana">
+                                <span class="eth-cp-label">Add</span>
+                                <span class="eth-cp-bridge" aria-hidden="true"></span>
+                                <span class="eth-cp-circle" aria-hidden="true">+</span>
                             </button>
-                            <button class="button button-danger-soft button-sm" id="openResetFromWalletBtn" type="button" title="Hapus / Nolkan Saldo">
-                                <i data-lucide="rotate-ccw" aria-hidden="true"></i> Hapus Saldo
-                            </button>
-                            <button class="button button-secondary button-sm" id="resetWalletFilterBtn" type="button" hidden>Semua</button>
+                        </div>
+                        <div class="eth-card-stack" aria-hidden="true">
+                            <div class="eth-stack-card eth-card-peach">
+                                <span class="eth-card-brand-dot"></span>
+                                <span class="eth-card-mask">**** 2148</span>
+                            </div>
+                            <div class="eth-stack-card eth-card-mint">
+                                <span class="eth-card-brand-text">E-Wallet</span>
+                                <span class="eth-card-mask">**** 4352</span>
+                            </div>
+                            <div class="eth-stack-card eth-card-lavender">
+                                <span class="eth-card-brand-visa">VISA</span>
+                                <span class="eth-card-mask">**** 6902</span>
+                            </div>
+                            <div class="eth-stack-card eth-card-glass">
+                                <div class="eth-glass-number">4156 6727 1439 6902</div>
+                                <div class="eth-glass-meta">
+                                    <span>Saku Smart Holder</span>
+                                    <span>07/28</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -806,17 +895,24 @@
                 <div class="recommendations-grid" id="recommendationsGrid" aria-live="polite"></div>
             </section>
 
-            <!-- ================= PENGINGAT TAGIHAN BULANAN & NOTIFIKASI ================= -->
+            <!-- ================= PENGINGAT TAGIHAN BULANAN & NOTIFIKASI (ETHEREAL SUBSCRIPTIONS) ================= -->
             <section class="panel bills-panel" id="bills" aria-label="Pengingat tagihan bulanan">
                 <div class="panel-heading bills-heading">
                     <div class="bills-title-wrap">
                         <div class="cartoon-bell-avatar" aria-hidden="true">⏰</div>
                         <div>
-                            <p class="eyebrow">PENGINGAT TAGIHAN & JATUH TEMPO BULANAN</p>
-                            <h2>Jadwal Tagihan Rutin</h2>
+                            <p class="eyebrow">SUBSCRIPTIONS · PENGINGAT TAGIHAN BULANAN</p>
+                            <h2>Subscriptions & Jadwal Tagihan Rutin</h2>
                         </div>
                     </div>
                     <div class="bills-actions">
+                        <div class="eth-sub-avatars" aria-hidden="true">
+                            <span class="eth-sub-circle sub-discord">🎮</span>
+                            <span class="eth-sub-circle sub-apple">🍎</span>
+                            <span class="eth-sub-circle sub-spotify">🎵</span>
+                            <span class="eth-sub-circle sub-utility">⚡</span>
+                            <span class="eth-sub-circle sub-telegram">✈️</span>
+                        </div>
                         <button class="button button-secondary button-sm" id="testNotificationBtn" type="button">
                             <i data-lucide="bell-ring" aria-hidden="true"></i> Tes Notifikasi
                         </button>
@@ -844,14 +940,30 @@
                 <div class="bills-grid" id="billsGrid" aria-live="polite"></div>
             </section>
 
-            <!-- ================= ANALISIS ARUS KAS & KATEGORI ================= -->
+            <!-- ================= ANALISIS ARUS KAS & KATEGORI (ETHEREAL REVENUE FLOW & EXPENSE SPLIT) ================= -->
             <section class="content-grid" id="insights">
                 <article class="panel flow-panel">
                     <div class="panel-heading">
-                        <div><p class="eyebrow">ARUS KAS</p><h2>Uang masuk & keluar</h2></div>
-                        <span class="period-chip" id="flowPeriod">Bulan ini</span>
+                        <div><p class="eyebrow">REVENUE FLOW · ARUS KAS</p><h2>Revenue flow</h2></div>
+                        <div class="eth-flow-head-right">
+                            <span class="period-chip" id="flowPeriod">Bulan ini</span>
+                            <span class="eth-arrow-circle" aria-hidden="true">↗</span>
+                        </div>
                     </div>
                     <div class="flow-total" id="flowTotal">Rp 0 <span>total pergerakan</span></div>
+
+                    <!-- Ethereal Vertical Pill Bars Visual + Live Income/Expense Track -->
+                    <div class="eth-revenue-bars" aria-hidden="true">
+                        <div class="eth-rev-col" style="--bar-h: 68%;"><span>Apr</span></div>
+                        <div class="eth-rev-col" style="--bar-h: 82%;"><span>Mei</span></div>
+                        <div class="eth-rev-col" style="--bar-h: 54%;"><span>Jun</span></div>
+                        <div class="eth-rev-col" style="--bar-h: 44%;"><span>Jul</span></div>
+                        <div class="eth-rev-col is-active" style="--bar-h: 78%;">
+                            <i class="eth-rev-node"></i>
+                            <span>Agu</span>
+                        </div>
+                    </div>
+
                     <div class="flow-track" aria-label="Perbandingan pemasukan dan pengeluaran">
                         <span class="flow-income" id="incomeBar"></span><span class="flow-expense" id="expenseBar"></span>
                     </div>
@@ -864,8 +976,8 @@
 
                 <article class="panel category-panel">
                     <div class="panel-heading">
-                        <div><p class="eyebrow">KE MANA UANGMU?</p><h2>Pengeluaran per kategori</h2></div>
-                        <span class="panel-menu" aria-hidden="true">···</span>
+                        <div><p class="eyebrow">EXPENSE SPLIT · KE MANA UANGMU?</p><h2>Expense split</h2></div>
+                        <span class="period-chip">Kategori</span>
                     </div>
                     <div class="category-content">
                         <div class="donut-wrap">
