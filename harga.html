@@ -108,6 +108,7 @@
                         <div class="harga-menu-panel" id="menuPanel" role="menu" hidden>
                             <a role="menuitem" href="pos.html" id="menuPos" target="_blank" rel="noopener noreferrer">🛒 Layar Kasir POS</a>
                             <a role="menuitem" href="index.html" id="menuDash" target="_blank" rel="noopener noreferrer">📊 Dashboard Keuangan</a>
+                            <button type="button" role="menuitem" id="menuStoreSettings">🏪 Pengaturan Toko &amp; Struk</button>
                             <button type="button" role="menuitem" id="menuRefresh">🔄 Muat Ulang Penuh</button>
                             <button type="button" role="menuitem" class="is-danger" id="menuLogout">🚪 Keluar dari Akun</button>
                         </div>
@@ -433,6 +434,75 @@
             <div class="harga-sheet-actions">
                 <button type="button" class="harga-btn harga-btn-ghost" data-close-sale-sheet>Tutup</button>
             </div>
+        </div>
+    </div>
+
+    <!-- ===================== PANEL PENGATURAN TOKO & STRUK (BOTTOM SHEET) ===================== -->
+    <div class="harga-sheet" id="storeSettingsSheet" hidden>
+        <div class="harga-sheet-backdrop" data-close-store-sheet></div>
+        <div class="harga-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="storeSheetTitle">
+            <div class="harga-sheet-grip" aria-hidden="true" data-close-store-sheet></div>
+
+            <div class="harga-editor-header">
+                <div class="harga-editor-thumb" id="storeLogoThumb" aria-hidden="true">🏪</div>
+                <div class="harga-editor-titles">
+                    <h2 class="harga-sheet-name" id="storeSheetTitle">Pengaturan Toko &amp; Struk</h2>
+                    <p class="harga-sheet-meta" id="storeSheetMeta">Atur logo, nama, dan alamat pada nota belanja kasir</p>
+                </div>
+            </div>
+
+            <!-- Form Pengaturan Toko -->
+            <form id="storeSettingsForm" novalidate>
+                <!-- Foto / Logo Toko -->
+                <div class="harga-field">
+                    <label class="harga-field-label">
+                        <span>Logo Struk Penjualan</span>
+                        <span class="harga-sub-hint">Maks 500KB (PNG/JPG/WebP)</span>
+                    </label>
+                    <div class="harga-store-logo-uploader" style="display: flex; align-items: center; gap: 14px; margin-top: 6px;">
+                        <div id="storeLogoPreviewBox" style="width: 58px; height: 58px; border-radius: 12px; background: var(--input-bg); border: 1px dashed var(--input-border); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
+                            <span id="storeLogoPlaceholder" style="font-size: 26px;">🏪</span>
+                            <img id="storeLogoImg" src="" alt="Logo Toko" style="width: 100%; height: 100%; object-fit: contain; display: none;">
+                        </div>
+                        <div style="flex: 1; display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                            <label class="harga-btn harga-btn-ghost" style="padding: 7px 14px; font-size: 12px; cursor: pointer;">
+                                <span>📁 Pilih Logo</span>
+                                <input type="file" id="storeLogoInput" accept="image/*" style="display: none;">
+                            </label>
+                            <button type="button" class="harga-mini-btn is-danger" id="btnRemoveLogo" hidden style="font-size: 12px; height: 32px; padding: 0 12px;">Hapus Logo</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Nama Toko -->
+                <div class="harga-field">
+                    <label class="harga-field-label" for="storeName">
+                        <span>Nama Toko</span>
+                        <span class="harga-sub-hint">Muncul di kop paling atas struk</span>
+                    </label>
+                    <div class="harga-field-input">
+                        <span class="harga-field-prefix" aria-hidden="true">🏪</span>
+                        <input id="storeName" type="text" maxlength="120" placeholder="Contoh: Toko Sayur Berkah" autocomplete="off">
+                    </div>
+                </div>
+
+                <!-- Alamat Toko -->
+                <div class="harga-field">
+                    <label class="harga-field-label" for="storeAddress">
+                        <span>Alamat &amp; Kontak Toko</span>
+                        <span class="harga-sub-hint">Alamat, telp, atau catatan di bawah nama toko</span>
+                    </label>
+                    <textarea id="storeAddress" rows="3" class="harga-textarea" placeholder="Contoh: Jl. Diponegoro No. 45, Bandung&#10;WA: 0812-3456-7890" style="width: 100%; padding: 10px 14px; border-radius: 12px; background: var(--input-bg); border: 1px solid var(--input-border); color: inherit; font-family: inherit; font-size: 13px; resize: vertical; box-sizing: border-box; margin-top: 4px;"></textarea>
+                </div>
+
+                <p class="harga-message is-error" id="storeSettingsError" hidden></p>
+
+                <!-- Sheet Actions -->
+                <div class="harga-sheet-actions">
+                    <button type="button" class="harga-btn harga-btn-ghost" data-close-store-sheet>Batal</button>
+                    <button type="submit" class="harga-btn harga-btn-primary" id="btnSaveStoreSettings">Simpan Pengaturan</button>
+                </div>
+            </form>
         </div>
     </div>
 

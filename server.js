@@ -92,6 +92,7 @@ const PUBLIC_STATIC_FILES = new Set([
     'harga.html',
     'harga.css',
     'harga.js',
+    'struk.html',
     'sw.js',
     'sayur-nusantara.js',
     'favicon.ico',
@@ -109,10 +110,14 @@ async function isCashierSession(req) {
     }
 }
 
+app.get('/struk', (req, res) => res.sendFile(path.join(__dirname, 'struk.html')));
+app.get('/struk/:invoice', (req, res) => res.sendFile(path.join(__dirname, 'struk.html')));
+
 app.get('/:file', async (req, res, next) => {
     try {
         const name = String(req.params.file || '');
         if (name === 'pos') return res.sendFile(path.join(__dirname, 'pos.html'));
+        if (name === 'struk') return res.sendFile(path.join(__dirname, 'struk.html'));
         if (name === 'harga') {
             if (await isCashierSession(req)) return res.redirect('/pos');
             return res.sendFile(path.join(__dirname, 'harga.html'));
@@ -547,9 +552,15 @@ async function ensureDatabaseReady() {
                     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
                     qris_payload TEXT,
                     sheets_webhook_url TEXT,
+                    store_name VARCHAR(120),
+                    store_address TEXT,
+                    store_logo TEXT,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
+            await pool.query(`ALTER TABLE pos_settings ADD COLUMN IF NOT EXISTS store_name VARCHAR(120)`);
+            await pool.query(`ALTER TABLE pos_settings ADD COLUMN IF NOT EXISTS store_address TEXT`);
+            await pool.query(`ALTER TABLE pos_settings ADD COLUMN IF NOT EXISTS store_logo TEXT`);
 
             // Tidak ada lagi akun admin/password default yang ditanam otomatis.
             // Akun admin (bila ada) dibuat manual dan wajib memakai kata sandi kuat.
@@ -2411,16 +2422,22 @@ app.delete('/api/pos/products/:id', async (req, res) => {
     }
 });
 
-// API: Pengaturan POS (payload QRIS & webhook Google Sheets)
+// API: Pengaturan POS (payload QRIS, webhook Google Sheets, & identitas toko/struk)
 app.get('/api/pos/settings', async (req, res) => {
     try {
         await ensureDatabaseReady();
         const user = await resolveAuthUser(req);
         if (!user) return res.status(401).json({ error: 'Silakan masuk terlebih dahulu.' });
-        const result = await pool.query('SELECT qris_payload, sheets_webhook_url, updated_at FROM pos_settings WHERE user_id = $1', [posOwnerId(user)]);
+        const result = await pool.query(
+            'SELECT qris_payload, sheets_webhook_url, store_name, store_address, store_logo, updated_at FROM pos_settings WHERE user_id = $1',
+            [posOwnerId(user)]
+        );
         res.json({
             qris_payload: result.rows[0]?.qris_payload || '',
             sheets_webhook_url: result.rows[0]?.sheets_webhook_url || '',
+            store_name: result.rows[0]?.store_name || '',
+            store_address: result.rows[0]?.store_address || '',
+            store_logo: result.rows[0]?.store_logo || '',
             env_sheets_webhook: Boolean(POS_SHEETS_WEBHOOK_URL),
             cash_wallet: POS_CASH_WALLET,
             qris_wallet: POS_QRIS_WALLET,
@@ -2439,24 +2456,119 @@ app.put('/api/pos/settings', async (req, res) => {
         if (isCashier(user)) {
             return res.status(403).json({ error: 'Hanya pemilik toko yang dapat mengubah pengaturan POS.' });
         }
-        const qrisPayload = String(req.body?.qris_payload || '').trim();
-        const sheetsWebhook = String(req.body?.sheets_webhook_url || '').trim();
+
+        const existingRes = await pool.query(
+            'SELECT qris_payload, sheets_webhook_url, store_name, store_address, store_logo FROM pos_settings WHERE user_id = $1',
+            [posOwnerId(user)]
+        );
+        const existing = existingRes.rows[0] || {};
+
+        const qrisPayload = req.body?.qris_payload !== undefined
+            ? (String(req.body.qris_payload).trim() || null)
+            : (existing.qris_payload || null);
+        const sheetsWebhook = req.body?.sheets_webhook_url !== undefined
+            ? (String(req.body.sheets_webhook_url).trim() || null)
+            : (existing.sheets_webhook_url || null);
+        const storeName = req.body?.store_name !== undefined
+            ? (String(req.body.store_name).trim().slice(0, 120) || null)
+            : (existing.store_name || null);
+        const storeAddress = req.body?.store_address !== undefined
+            ? (String(req.body.store_address).trim() || null)
+            : (existing.store_address || null);
+        const storeLogo = req.body?.store_logo !== undefined
+            ? (String(req.body.store_logo).trim() || null)
+            : (existing.store_logo || null);
+
         if (sheetsWebhook && !isSafeWebhookUrl(sheetsWebhook)) {
             return res.status(400).json({ error: 'URL webhook tidak valid atau mengarah ke jaringan privat.' });
         }
+
         const result = await pool.query(
-            `INSERT INTO pos_settings (user_id, qris_payload, sheets_webhook_url, updated_at)
-             VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+            `INSERT INTO pos_settings (user_id, qris_payload, sheets_webhook_url, store_name, store_address, store_logo, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
              ON CONFLICT (user_id)
              DO UPDATE SET qris_payload = EXCLUDED.qris_payload,
                            sheets_webhook_url = EXCLUDED.sheets_webhook_url,
+                           store_name = EXCLUDED.store_name,
+                           store_address = EXCLUDED.store_address,
+                           store_logo = EXCLUDED.store_logo,
                            updated_at = CURRENT_TIMESTAMP
-             RETURNING qris_payload, sheets_webhook_url, updated_at`,
-            [posOwnerId(user), qrisPayload || null, sheetsWebhook || null]
+             RETURNING qris_payload, sheets_webhook_url, store_name, store_address, store_logo, updated_at`,
+            [posOwnerId(user), qrisPayload, sheetsWebhook, storeName, storeAddress, storeLogo]
         );
         res.json(result.rows[0]);
     } catch (err) {
         res.status(400).json({ error: err.message });
+    }
+});
+
+// Rate limiter untuk cek struk belanja publik oleh pembeli (anti spam / brute-force)
+const publicReceiptLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 60, blockMs: 60 * 1000 });
+
+// API Publik: Melihat struk belanja digital tanpa perlu login (diakses via QR code oleh pembeli)
+app.get('/api/pos/public/receipt/:invoice', async (req, res) => {
+    try {
+        if (!guardRateLimit(publicReceiptLimiter, req, res)) return;
+        await ensureDatabaseReady();
+
+        const rawInvoice = String(req.params.invoice || '').trim();
+        if (!rawInvoice || rawInvoice.length > 48 || !/^[\w-]+$/.test(rawInvoice)) {
+            return res.status(400).json({ error: 'Nomor invoice tidak valid.' });
+        }
+
+        const saleRes = await pool.query(
+            `SELECT s.id, s.invoice_no, s.status, s.payment_method, s.wallet,
+                    s.total_amount, s.paid_amount, s.change_amount,
+                    s.customer_name, s.note, s.cashier_name,
+                    s.created_at, s.paid_at,
+                    p.store_name, p.store_address, p.store_logo
+             FROM pos_sales s
+             LEFT JOIN pos_settings p ON p.user_id = s.user_id
+             WHERE s.invoice_no = $1
+             LIMIT 1`,
+            [rawInvoice]
+        );
+
+        if (saleRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Struk penjualan tidak ditemukan.' });
+        }
+
+        const sale = saleRes.rows[0];
+        const itemsRes = await pool.query(
+            `SELECT product_name, sku, unit, qty, unit_price, subtotal
+             FROM pos_sale_items
+             WHERE sale_id = $1
+             ORDER BY id ASC`,
+            [sale.id]
+        );
+
+        res.json({
+            invoice_no: sale.invoice_no,
+            status: sale.status,
+            payment_method: sale.payment_method,
+            wallet: sale.wallet,
+            total_amount: Number(sale.total_amount),
+            paid_amount: Number(sale.paid_amount),
+            change_amount: Number(sale.change_amount),
+            customer_name: sale.customer_name || null,
+            note: sale.note || null,
+            cashier_name: sale.cashier_name || 'Kasir',
+            created_at: sale.created_at,
+            paid_at: sale.paid_at,
+            store_name: sale.store_name || 'SAKU KASIR',
+            store_address: sale.store_address || '',
+            store_logo: sale.store_logo || '',
+            items: itemsRes.rows.map((item) => ({
+                product_name: item.product_name,
+                sku: item.sku,
+                unit: item.unit,
+                qty: Number(item.qty),
+                unit_price: Number(item.unit_price),
+                subtotal: Number(item.subtotal)
+            }))
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 

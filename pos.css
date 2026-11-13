@@ -817,13 +817,59 @@
     margin-bottom: 10px;
 }
 
+.pos-receipt-logo {
+    max-width: 56px;
+    max-height: 56px;
+    object-fit: contain;
+    margin: 0 auto 6px;
+    display: block;
+    border-radius: 8px;
+}
+
 .pos-receipt-brand strong {
     font-size: 16px;
+    display: block;
 }
 
 .pos-receipt-brand p {
     margin: 4px 0 0;
     font-size: 10px;
+}
+
+.pos-receipt-address {
+    font-size: 11px;
+    color: #4b5563;
+    white-space: pre-line;
+    margin-top: 3px;
+    line-height: 1.35;
+}
+
+.pos-receipt-qr-wrap {
+    text-align: center;
+    margin: 12px 0 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.pos-receipt-qr-canvas {
+    max-width: 120px;
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    background: #ffffff;
+    padding: 4px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+}
+
+.pos-receipt-qr-hint {
+    font-size: 10px;
+    color: #4b5563;
+    margin-top: 5px;
+    font-weight: 500;
 }
 
 .pos-receipt-divider {

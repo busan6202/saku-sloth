@@ -121,3 +121,53 @@ test('harga.html memiliki fitur edit produk, hapus produk, dan pantauan penjuala
     assert.match(posJs, /function notifySaleUpdated\(/);
     assert.match(serverCode, /liveSales = \{/);
 });
+
+test('owner harga.html dapat mengatur logo struk, nama & alamat toko, dan struk kasir memiliki QR struk digital', () => {
+    const hargaHtml = fs.readFileSync(path.join(__dirname, '..', 'harga.html'), 'utf8');
+    const hargaJs = fs.readFileSync(path.join(__dirname, '..', 'harga.js'), 'utf8');
+    const posJs = fs.readFileSync(path.join(__dirname, '..', 'pos.js'), 'utf8');
+    const serverCode = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+    const strukHtml = fs.readFileSync(path.join(__dirname, '..', 'struk.html'), 'utf8');
+
+    // UI Pengaturan Toko di harga.html
+    assert.match(hargaHtml, /id="menuStoreSettings"/);
+    assert.match(hargaHtml, /id="storeSettingsSheet"/);
+    assert.match(hargaHtml, /id="storeSettingsForm"/);
+    assert.match(hargaHtml, /id="storeLogoInput"/);
+    assert.match(hargaHtml, /id="storeLogoImg"/);
+    assert.match(hargaHtml, /id="btnRemoveLogo"/);
+    assert.match(hargaHtml, /id="storeName"/);
+    assert.match(hargaHtml, /id="storeAddress"/);
+    assert.match(hargaHtml, /id="btnSaveStoreSettings"/);
+
+    // Controller Pengaturan Toko di harga.js
+    assert.match(hargaJs, /async function openStoreSettingsSheet\(\)/);
+    assert.match(hargaJs, /function updateStoreLogoUi\(/);
+    assert.match(hargaJs, /function handleLogoFileChosen\(/);
+    assert.match(hargaJs, /async function saveStoreSettings\(/);
+    assert.match(hargaJs, /store_logo/);
+
+    // Backend server.js: skema, update settings, dan endpoint struk publik
+    assert.match(serverCode, /store_name/);
+    assert.match(serverCode, /store_address/);
+    assert.match(serverCode, /store_logo/);
+    assert.match(serverCode, /app\.get\('\/api\/pos\/public\/receipt\/:invoice'/);
+    assert.match(serverCode, /app\.get\('\/struk'/);
+    assert.match(serverCode, /'struk\.html'/);
+
+    // Kasir POS: merender logo, nama toko, alamat, serta QR code struk digital web app
+    assert.match(posJs, /function buildReceiptUrl\(/);
+    assert.match(posJs, /receiptQrCanvas/);
+    assert.match(posJs, /pos-receipt-logo/);
+    assert.match(posJs, /pos-receipt-address/);
+    assert.match(posJs, /QRCode\.toCanvas/);
+
+    // Halaman Struk Digital Pembeli (struk.html)
+    assert.match(strukHtml, /id="storeName"/);
+    assert.match(strukHtml, /id="storeAddress"/);
+    assert.match(strukHtml, /id="storeLogo"/);
+    assert.match(strukHtml, /id="receiptInvoice"/);
+    assert.match(strukHtml, /id="receiptItemsList"/);
+    assert.match(strukHtml, /id="receiptTotal"/);
+    assert.match(strukHtml, /id="btnPrint"/);
+});

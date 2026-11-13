@@ -1104,6 +1104,13 @@
 
     // ================= STRUK =================
 
+    function buildReceiptUrl(invoiceNo) {
+        const origin = window.location.origin;
+        const pathname = window.location.pathname.replace(/\/pos(\.html)?$/, '');
+        const cleanPath = pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+        return `${origin}${cleanPath}/struk.html?inv=${encodeURIComponent(invoiceNo)}`;
+    }
+
     function renderReceipt(sale, items) {
         const rows = (items || []).map((item) => `
             <div class="pos-receipt-item">
@@ -1116,9 +1123,16 @@
         `).join('');
 
         const isCash = sale.payment_method === 'CASH';
+        const storeName = state.settings?.store_name || 'SAKU KASIR';
+        const storeAddress = state.settings?.store_address || '';
+        const storeLogo = state.settings?.store_logo || '';
+        const receiptUrl = buildReceiptUrl(sale.invoice_no);
+
         els.receiptContent.innerHTML = `
             <div class="pos-receipt-brand">
-                <strong>SAKU KASIR</strong>
+                ${storeLogo ? `<img class="pos-receipt-logo" src="${escapeHtml(storeLogo)}" alt="Logo Toko">` : ''}
+                <strong>${escapeHtml(storeName)}</strong>
+                ${storeAddress ? `<p class="pos-receipt-address">${escapeHtml(storeAddress)}</p>` : ''}
                 <p>Nota Penjualan</p>
             </div>
             <div class="pos-receipt-row"><span>Invoice</span><strong>${escapeHtml(sale.invoice_no)}</strong></div>
@@ -1137,13 +1151,29 @@
                 <div class="pos-receipt-row"><span>Kembalian</span><span>${formatMoney(sale.change_amount)}</span></div>
             ` : ''}
             <div class="pos-receipt-divider"></div>
-            <p style="text-align:center;margin:0">Terima kasih sudah berbelanja 🙏</p>
+            <div class="pos-receipt-qr-wrap">
+                <canvas id="receiptQrCanvas" class="pos-receipt-qr-canvas"></canvas>
+                <p class="pos-receipt-qr-hint">Scan QR untuk melihat struk digital di web</p>
+            </div>
+            <p style="text-align:center;margin:6px 0 0;font-size:11px">Terima kasih sudah berbelanja 🙏</p>
         `;
+
+        const qrCanvas = document.getElementById('receiptQrCanvas');
+        if (qrCanvas && typeof window.QRCode !== 'undefined') {
+            window.QRCode.toCanvas(qrCanvas, receiptUrl, {
+                width: 120,
+                margin: 1,
+                color: { dark: '#000000', light: '#ffffff' }
+            }).catch(() => {});
+        }
     }
 
     function receiptText(sale, items) {
+        const storeName = state.settings?.store_name || 'SAKU KASIR';
+        const receiptUrl = buildReceiptUrl(sale.invoice_no);
         const lines = [
-            '*SAKU KASIR*',
+            `*${storeName}*`,
+            ...(state.settings?.store_address ? [state.settings.store_address] : []),
             `Invoice: ${sale.invoice_no}`,
             `Waktu: ${formatDateTime(sale.paid_at || sale.created_at)}`,
             ''
@@ -1155,7 +1185,8 @@
         if (sale.payment_method === 'CASH') {
             lines.push(`Diterima: ${formatMoney(sale.paid_amount)}`, `Kembalian: ${formatMoney(sale.change_amount)}`);
         }
-        lines.push('', 'Terima kasih sudah berbelanja 🙏');
+        lines.push('', `Lihat Struk Digital: ${receiptUrl}`);
+        lines.push('Terima kasih sudah berbelanja 🙏');
         return lines.join('\n');
     }
 

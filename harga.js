@@ -83,7 +83,12 @@
             recent: []
         },
         liveFeedExpanded: true,
-        knownSaleIds: new Set()
+        knownSaleIds: new Set(),
+        storeSettings: {
+            store_name: '',
+            store_address: '',
+            store_logo: ''
+        }
     };
 
     const els = {};
@@ -119,6 +124,10 @@
             'addSell', 'addSellUnitNote', 'addCost', 'addMarginCard', 'addMarginPct',
             'addMarginFill', 'addMargin', 'addStock', 'addStockLabel', 'addStockHint', 'addError', 'addSave',
             'saleDetailSheet', 'saleDetailTitle', 'saleDetailMeta', 'saleDetailBody',
+            'menuStoreSettings', 'storeSettingsSheet', 'storeSettingsForm', 'storeLogoThumb',
+            'storeSheetTitle', 'storeSheetMeta', 'storeLogoPreviewBox', 'storeLogoPlaceholder',
+            'storeLogoImg', 'storeLogoInput', 'btnRemoveLogo', 'storeName', 'storeAddress',
+            'storeSettingsError', 'btnSaveStoreSettings',
             'hargaBlocked', 'blockedMessage', 'btnBlockedPos', 'btnBlockedLogout',
             'hargaToast', 'toastText', 'toastAction'
         ].forEach((id) => { els[id] = $(id); });
@@ -1524,6 +1533,167 @@
         }
     }
 
+    // ================= PENGATURAN TOKO & STRUK =================
+
+    async function loadStoreSettings() {
+        try {
+            const res = await api('/api/pos/settings');
+            if (res) {
+                state.storeSettings = {
+                    store_name: res.store_name || '',
+                    store_address: res.store_address || '',
+                    store_logo: res.store_logo || ''
+                };
+                try {
+                    localStorage.setItem(`pos_store_${state.user?.id || 'default'}`, JSON.stringify(state.storeSettings));
+                } catch {}
+            }
+        } catch {
+            try {
+                const cached = JSON.parse(localStorage.getItem(`pos_store_${state.user?.id || 'default'}`));
+                if (cached) state.storeSettings = cached;
+            } catch {}
+        }
+    }
+
+    async function openStoreSettingsSheet() {
+        closeMenu();
+        if (els.editorSheet) els.editorSheet.hidden = true;
+        if (els.addProductSheet) els.addProductSheet.hidden = true;
+        if (els.saleDetailSheet) els.saleDetailSheet.hidden = true;
+
+        if (els.storeSettingsError) els.storeSettingsError.hidden = true;
+        if (els.btnSaveStoreSettings) els.btnSaveStoreSettings.disabled = false;
+
+        await loadStoreSettings();
+
+        const s = state.storeSettings || {};
+        if (els.storeName) els.storeName.value = s.store_name || '';
+        if (els.storeAddress) els.storeAddress.value = s.store_address || '';
+
+        updateStoreLogoUi(s.store_logo || '');
+
+        if (els.storeSettingsSheet) {
+            els.storeSettingsSheet.hidden = false;
+            document.body.style.overflow = 'hidden';
+            if (els.storeName) els.storeName.focus();
+        }
+    }
+
+    function closeStoreSettingsSheet() {
+        if (!els.storeSettingsSheet) return;
+        els.storeSettingsSheet.hidden = true;
+        document.body.style.overflow = '';
+    }
+
+    function updateStoreLogoUi(logoDataUrl) {
+        if (!els.storeLogoImg || !els.storeLogoPlaceholder) return;
+        if (logoDataUrl) {
+            els.storeLogoImg.src = logoDataUrl;
+            els.storeLogoImg.style.display = 'block';
+            els.storeLogoPlaceholder.style.display = 'none';
+            if (els.btnRemoveLogo) els.btnRemoveLogo.hidden = false;
+        } else {
+            els.storeLogoImg.src = '';
+            els.storeLogoImg.style.display = 'none';
+            els.storeLogoPlaceholder.style.display = 'block';
+            if (els.btnRemoveLogo) els.btnRemoveLogo.hidden = true;
+            if (els.storeLogoInput) els.storeLogoInput.value = '';
+        }
+    }
+
+    function handleLogoFileChosen(event) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            if (els.storeSettingsError) {
+                els.storeSettingsError.textContent = 'Harap pilih file gambar (PNG, JPG, WebP).';
+                els.storeSettingsError.hidden = false;
+            }
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const maxDim = 256;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxDim || h > maxDim) {
+                    if (w > h) {
+                        h = Math.round((h * maxDim) / w);
+                        w = maxDim;
+                    } else {
+                        w = Math.round((w * maxDim) / h);
+                        h = maxDim;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                const compressedUrl = canvas.toDataURL('image/webp', 0.85);
+
+                if (!state.storeSettings) state.storeSettings = {};
+                state.storeSettings.store_logo = compressedUrl;
+                updateStoreLogoUi(compressedUrl);
+                if (els.storeSettingsError) els.storeSettingsError.hidden = true;
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function handleRemoveLogo() {
+        if (!state.storeSettings) state.storeSettings = {};
+        state.storeSettings.store_logo = '';
+        updateStoreLogoUi('');
+    }
+
+    async function saveStoreSettings(event) {
+        if (event) event.preventDefault();
+        if (els.storeSettingsError) els.storeSettingsError.hidden = true;
+        if (els.btnSaveStoreSettings) els.btnSaveStoreSettings.disabled = true;
+
+        const storeName = (els.storeName?.value || '').trim();
+        const storeAddress = (els.storeAddress?.value || '').trim();
+        const storeLogo = state.storeSettings?.store_logo || '';
+
+        try {
+            const updated = await api('/api/pos/settings', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    store_name: storeName,
+                    store_address: storeAddress,
+                    store_logo: storeLogo
+                })
+            });
+
+            state.storeSettings = {
+                store_name: updated?.store_name ?? storeName,
+                store_address: updated?.store_address ?? storeAddress,
+                store_logo: updated?.store_logo ?? storeLogo
+            };
+
+            try {
+                localStorage.setItem(`pos_store_${state.user?.id || 'default'}`, JSON.stringify(state.storeSettings));
+            } catch {}
+
+            closeStoreSettingsSheet();
+            showToast('Pengaturan toko & struk berhasil disimpan!');
+        } catch (err) {
+            if (els.storeSettingsError) {
+                els.storeSettingsError.textContent = err.message || 'Gagal menyimpan pengaturan toko.';
+                els.storeSettingsError.hidden = false;
+            }
+        } finally {
+            if (els.btnSaveStoreSettings) els.btnSaveStoreSettings.disabled = false;
+        }
+    }
+
     // ================= MENU & PWA INSTALL =================
 
     function toggleMenu() {
@@ -1695,6 +1865,26 @@
             el.addEventListener('click', closeSaleDetailSheet);
         });
 
+        document.querySelectorAll('[data-close-store-sheet]').forEach((el) => {
+            el.addEventListener('click', closeStoreSettingsSheet);
+        });
+
+        if (els.menuStoreSettings) {
+            els.menuStoreSettings.addEventListener('click', openStoreSettingsSheet);
+        }
+
+        if (els.storeSettingsForm) {
+            els.storeSettingsForm.addEventListener('submit', saveStoreSettings);
+        }
+
+        if (els.storeLogoInput) {
+            els.storeLogoInput.addEventListener('change', handleLogoFileChosen);
+        }
+
+        if (els.btnRemoveLogo) {
+            els.btnRemoveLogo.addEventListener('click', handleRemoveLogo);
+        }
+
         if (els.addProductForm) {
             els.addProductForm.addEventListener('submit', saveNewProduct);
         }
@@ -1776,7 +1966,8 @@
 
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
-                if (els.saleDetailSheet && !els.saleDetailSheet.hidden) closeSaleDetailSheet();
+                if (els.storeSettingsSheet && !els.storeSettingsSheet.hidden) closeStoreSettingsSheet();
+                else if (els.saleDetailSheet && !els.saleDetailSheet.hidden) closeSaleDetailSheet();
                 else if (els.addProductSheet && !els.addProductSheet.hidden) closeAddProductSheet();
                 else if (!els.editorSheet.hidden) closeEditor();
                 else if (!els.menuPanel.hidden) closeMenu();

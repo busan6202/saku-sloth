@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Struk Belanja Digital | Saku Kasir</title>
+    <meta name="description" content="Bukti transaksi dan nota belanja digital resmi.">
+    <link rel="icon" href="favicon.ico">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f17;
+            --surface-card: #151b26;
+            --surface-soft: #1d2535;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-dashed: rgba(255, 255, 255, 0.16);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-green: #10b981;
+            --accent-green-light: rgba(16, 185, 129, 0.12);
+            --accent-blue: #38bdf8;
+            --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'Geist Mono', monospace;
+            --receipt-paper: #ffffff;
+            --receipt-ink: #111827;
+            --receipt-sub: #4b5563;
+            --receipt-rule: #e5e7eb;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg-color);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 24px 16px 40px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .receipt-container {
+            width: 100%;
+            max-width: 420px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Top Brand Header */
+        .receipt-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 8px;
+        }
+
+        .receipt-brand-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--accent-green);
+            background: var(--accent-green-light);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            padding: 6px 12px;
+            border-radius: 9999px;
+            letter-spacing: 0.02em;
+        }
+
+        .receipt-brand-badge::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--accent-green);
+        }
+
+        .receipt-time-now {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+        }
+
+        /* Paper Slip Card */
+        .receipt-paper {
+            background: var(--receipt-paper);
+            color: var(--receipt-ink);
+            border-radius: 20px;
+            padding: 28px 24px;
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Jagged bottom edge decoration */
+        .receipt-paper::after {
+            content: "";
+            position: absolute;
+            bottom: -8px;
+            left: 0;
+            right: 0;
+            height: 10px;
+            background: radial-gradient(circle, transparent, transparent 50%, var(--receipt-paper) 50%, var(--receipt-paper) 100%);
+            background-size: 16px 16px;
+            background-repeat: repeat-x;
+            display: none;
+        }
+
+        /* Store Header */
+        .receipt-header {
+            text-align: center;
+            padding-bottom: 16px;
+            border-bottom: 2px dashed var(--receipt-rule);
+        }
+
+        .receipt-logo {
+            width: 64px;
+            height: 64px;
+            object-fit: cover;
+            border-radius: 12px;
+            margin: 0 auto 10px;
+            display: block;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .receipt-store-name {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--receipt-ink);
+            line-height: 1.2;
+        }
+
+        .receipt-store-address {
+            font-size: 12px;
+            color: var(--receipt-sub);
+            margin-top: 5px;
+            line-height: 1.45;
+            white-space: pre-line;
+        }
+
+        .receipt-status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 12px;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        /* Meta details */
+        .receipt-meta {
+            padding: 14px 0;
+            border-bottom: 1px dashed var(--receipt-rule);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 12px;
+        }
+
+        .receipt-meta-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .receipt-meta-label {
+            color: var(--receipt-sub);
+        }
+
+        .receipt-meta-val {
+            font-weight: 600;
+            color: var(--receipt-ink);
+            font-family: var(--font-mono);
+        }
+
+        /* Items Section */
+        .receipt-items {
+            padding: 14px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            border-bottom: 2px dashed var(--receipt-rule);
+        }
+
+        .receipt-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 13px;
+        }
+
+        .receipt-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .receipt-item-name {
+            font-weight: 600;
+            color: var(--receipt-ink);
+            line-height: 1.3;
+            word-break: break-word;
+        }
+
+        .receipt-item-qty {
+            font-size: 11px;
+            color: var(--receipt-sub);
+            font-family: var(--font-mono);
+            margin-top: 2px;
+        }
+
+        .receipt-item-total {
+            font-weight: 700;
+            font-family: var(--font-mono);
+            color: var(--receipt-ink);
+            white-space: nowrap;
+        }
+
+        /* Totals Section */
+        .receipt-totals {
+            padding: 14px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border-bottom: 1px dashed var(--receipt-rule);
+            font-size: 13px;
+        }
+
+        .receipt-total-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .receipt-total-row.is-grand {
+            font-size: 17px;
+            font-weight: 800;
+            padding-top: 6px;
+            color: #047857;
+        }
+
+        .receipt-total-row.is-grand .receipt-meta-val {
+            font-size: 18px;
+            font-weight: 800;
+            color: #047857;
+        }
+
+        /* Footer */
+        .receipt-footer {
+            text-align: center;
+            padding-top: 18px;
+        }
+
+        .receipt-thankyou {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--receipt-ink);
+        }
+
+        .receipt-watermark {
+            font-size: 10px;
+            color: var(--receipt-sub);
+            margin-top: 4px;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        /* Action Buttons */
+        .receipt-actions {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .receipt-btn {
+            flex: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 16px;
+            border-radius: 14px;
+            font-family: var(--font-sans);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+        }
+
+        .receipt-btn-primary {
+            background: #2563eb;
+            color: #ffffff;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+        }
+
+        .receipt-btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .receipt-btn-secondary {
+            background: var(--surface-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .receipt-btn-secondary:active {
+            background: var(--surface-soft);
+        }
+
+        /* Loading & Error States */
+        .receipt-status-state {
+            text-align: center;
+            padding: 40px 20px;
+            background: var(--surface-card);
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .receipt-spinner {
+            width: 36px;
+            height: 36px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--accent-green);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 14px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Print Media Query */
+        @media print {
+            body {
+                background: #ffffff !important;
+                color: #000000 !important;
+                padding: 0 !important;
+            }
+            .receipt-topbar,
+            .receipt-actions,
+            .no-print {
+                display: none !important;
+            }
+            .receipt-container {
+                max-width: 100% !important;
+            }
+            .receipt-paper {
+                box-shadow: none !important;
+                border: none !important;
+                padding: 0 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="receipt-container">
+        <!-- Top bar -->
+        <header class="receipt-topbar no-print">
+            <span class="receipt-brand-badge">Nota Belanja Resmi</span>
+            <span class="receipt-time-now" id="clockNow"></span>
+        </header>
+
+        <!-- Loading State -->
+        <div class="receipt-status-state" id="loadingState">
+            <div class="receipt-spinner"></div>
+            <p style="font-size: 14px; font-weight: 500; color: var(--text-secondary);">Memuat data struk belanja...</p>
+        </div>
+
+        <!-- Error State -->
+        <div class="receipt-status-state" id="errorState" hidden>
+            <div style="font-size: 32px; margin-bottom: 8px;">🔍</div>
+            <h3 style="font-size: 16px; margin-bottom: 6px;">Struk Tidak Ditemukan</h3>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;" id="errorMessage">Nomor invoice tidak ditemukan atau tautan salah.</p>
+            <a href="pos.html" class="receipt-btn receipt-btn-secondary" style="display: inline-flex;">Buka Layar Kasir POS</a>
+        </div>
+
+        <!-- Receipt Paper -->
+        <main class="receipt-paper" id="receiptPaper" hidden>
+            <!-- Header Toko -->
+            <div class="receipt-header">
+                <img id="storeLogo" class="receipt-logo" src="" alt="Logo Toko" hidden>
+                <h1 class="receipt-store-name" id="storeName">SAKU KASIR</h1>
+                <p class="receipt-store-address" id="storeAddress"></p>
+                <div>
+                    <span class="receipt-status-pill" id="receiptStatusBadge">✓ LUNAS</span>
+                </div>
+            </div>
+
+            <!-- Meta Transaksi -->
+            <div class="receipt-meta">
+                <div class="receipt-meta-row">
+                    <span class="receipt-meta-label">No. Invoice</span>
+                    <span class="receipt-meta-val" id="receiptInvoice"></span>
+                </div>
+                <div class="receipt-meta-row">
+                    <span class="receipt-meta-label">Tanggal &amp; Waktu</span>
+                    <span class="receipt-meta-val" id="receiptDate"></span>
+                </div>
+                <div class="receipt-meta-row">
+                    <span class="receipt-meta-label">Kasir</span>
+                    <span class="receipt-meta-val" id="receiptCashier"></span>
+                </div>
+                <div class="receipt-meta-row" id="rowCustomer" hidden>
+                    <span class="receipt-meta-label">Pelanggan</span>
+                    <span class="receipt-meta-val" id="receiptCustomer"></span>
+                </div>
+            </div>
+
+            <!-- Daftar Item Belanja -->
+            <div class="receipt-items" id="receiptItemsList"></div>
+
+            <!-- Rincian Pembayaran -->
+            <div class="receipt-totals">
+                <div class="receipt-total-row is-grand">
+                    <span class="receipt-meta-label" style="font-size: 16px; font-weight: 700; color: var(--receipt-ink);">TOTAL</span>
+                    <span class="receipt-meta-val" id="receiptTotal"></span>
+                </div>
+                <div class="receipt-total-row">
+                    <span class="receipt-meta-label">Metode Pembayaran</span>
+                    <span class="receipt-meta-val" id="receiptMethod"></span>
+                </div>
+                <div class="receipt-total-row" id="rowPaid" hidden>
+                    <span class="receipt-meta-label">Uang Diterima</span>
+                    <span class="receipt-meta-val" id="receiptPaid"></span>
+                </div>
+                <div class="receipt-total-row" id="rowChange" hidden>
+                    <span class="receipt-meta-label">Kembalian</span>
+                    <span class="receipt-meta-val" id="receiptChange"></span>
+                </div>
+            </div>
+
+            <!-- Footer Toko -->
+            <div class="receipt-footer">
+                <p class="receipt-thankyou">Terima kasih telah berbelanja! 🙏</p>
+                <p class="receipt-watermark">Bukti Pembayaran Elektronik Resmi</p>
+            </div>
+        </main>
+
+        <!-- Actions Bottom -->
+        <footer class="receipt-actions no-print" id="receiptActions" hidden>
+            <button type="button" class="receipt-btn receipt-btn-secondary" id="btnShare">
+                <span>🔗</span>
+                <span>Bagikan Nota</span>
+            </button>
+            <button type="button" class="receipt-btn receipt-btn-primary" id="btnPrint">
+                <span>🖨️</span>
+                <span>Cetak / Simpan</span>
+            </button>
+        </footer>
+    </div>
+
+    <script>
+        (() => {
+            'use strict';
+
+            const rupiah = new Intl.NumberFormat('id-ID', {
+                style: 'currency',
+                currency: 'IDR',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            });
+
+            function formatMoney(amount) {
+                return rupiah.format(Number(amount) || 0);
+            }
+
+            function formatQty(qty) {
+                const val = Number(qty) || 0;
+                return val % 1 === 0 ? String(val) : val.toFixed(3).replace(/\.?0+$/, '');
+            }
+
+            function formatDateTime(iso) {
+                if (!iso) return '-';
+                try {
+                    const d = new Date(iso);
+                    return d.toLocaleDateString('id-ID', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric'
+                    }) + ' ' + d.toLocaleTimeString('id-ID', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                } catch {
+                    return iso;
+                }
+            }
+
+            function escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text == null ? '' : String(text);
+                return div.innerHTML;
+            }
+
+            // Extract invoice from ?inv=... or pathname /struk/:inv
+            function getInvoiceParam() {
+                const url = new URL(window.location.href);
+                const queryInv = url.searchParams.get('inv') || url.searchParams.get('invoice');
+                if (queryInv) return queryInv.trim();
+
+                const segments = window.location.pathname.split('/').filter(Boolean);
+                const last = segments[segments.length - 1];
+                if (last && last !== 'struk' && last !== 'struk.html') {
+                    return decodeURIComponent(last).trim();
+                }
+                return '';
+            }
+
+            async function fetchReceiptData(invoice) {
+                const apiBase = (window.location.origin.startsWith('http') && !window.location.origin.includes('github.io'))
+                    ? `${window.location.origin}/api`
+                    : 'https://saku-sloth.vercel.app/api';
+
+                const response = await fetch(`${apiBase}/pos/public/receipt/${encodeURIComponent(invoice)}`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                if (!response.ok) {
+                    const data = await response.json().catch(() => null);
+                    throw new Error(data?.error || `Struk dengan nomor invoice "${invoice}" tidak ditemukan.`);
+                }
+
+                return await response.json();
+            }
+
+            function renderReceipt(data) {
+                const elLogo = document.getElementById('storeLogo');
+                const elStoreName = document.getElementById('storeName');
+                const elStoreAddress = document.getElementById('storeAddress');
+                const elInvoice = document.getElementById('receiptInvoice');
+                const elDate = document.getElementById('receiptDate');
+                const elCashier = document.getElementById('receiptCashier');
+                const elCustomer = document.getElementById('receiptCustomer');
+                const rowCustomer = document.getElementById('rowCustomer');
+                const elItemsList = document.getElementById('receiptItemsList');
+                const elTotal = document.getElementById('receiptTotal');
+                const elMethod = document.getElementById('receiptMethod');
+                const elPaid = document.getElementById('receiptPaid');
+                const elChange = document.getElementById('receiptChange');
+                const rowPaid = document.getElementById('rowPaid');
+                const rowChange = document.getElementById('rowChange');
+                const elStatus = document.getElementById('receiptStatusBadge');
+
+                // Store info
+                elStoreName.textContent = data.store_name || 'SAKU KASIR';
+                if (data.store_logo) {
+                    elLogo.src = data.store_logo;
+                    elLogo.hidden = false;
+                } else {
+                    elLogo.hidden = true;
+                }
+
+                if (data.store_address) {
+                    elStoreAddress.textContent = data.store_address;
+                    elStoreAddress.hidden = false;
+                } else {
+                    elStoreAddress.hidden = true;
+                }
+
+                // Transaction meta
+                elInvoice.textContent = data.invoice_no;
+                elDate.textContent = formatDateTime(data.paid_at || data.created_at);
+                elCashier.textContent = data.cashier_name || 'Kasir';
+
+                if (data.customer_name) {
+                    elCustomer.textContent = data.customer_name;
+                    rowCustomer.hidden = false;
+                } else {
+                    rowCustomer.hidden = true;
+                }
+
+                // Items
+                elItemsList.innerHTML = (data.items || []).map((item) => `
+                    <div class="receipt-item">
+                        <div class="receipt-item-info">
+                            <div class="receipt-item-name">${escapeHtml(item.product_name)}</div>
+                            <div class="receipt-item-qty">${formatQty(item.qty)} ${escapeHtml(item.unit || 'PCS')} × ${formatMoney(item.unit_price)}</div>
+                        </div>
+                        <div class="receipt-item-total">${formatMoney(item.subtotal)}</div>
+                    </div>
+                `).join('');
+
+                // Totals & Payment
+                elTotal.textContent = formatMoney(data.total_amount);
+                const isCash = data.payment_method === 'CASH';
+                elMethod.textContent = isCash ? 'TUNAI' : 'QRIS';
+
+                if (isCash) {
+                    elPaid.textContent = formatMoney(data.paid_amount);
+                    elChange.textContent = formatMoney(data.change_amount);
+                    rowPaid.hidden = false;
+                    rowChange.hidden = false;
+                } else {
+                    rowPaid.hidden = true;
+                    rowChange.hidden = true;
+                }
+
+                if (data.status === 'PAID') {
+                    elStatus.textContent = '✓ LUNAS';
+                    elStatus.style.background = '#dcfce7';
+                    elStatus.style.color = '#15803d';
+                } else {
+                    elStatus.textContent = data.status || 'PENDING';
+                    elStatus.style.background = '#fef3c7';
+                    elStatus.style.color = '#b45309';
+                }
+
+                document.title = `Nota ${data.invoice_no} | ${data.store_name || 'Saku Kasir'}`;
+
+                document.getElementById('loadingState').hidden = true;
+                document.getElementById('errorState').hidden = true;
+                document.getElementById('receiptPaper').hidden = false;
+                document.getElementById('receiptActions').hidden = false;
+            }
+
+            async function init() {
+                const clockEl = document.getElementById('clockNow');
+                if (clockEl) {
+                    const now = new Date();
+                    clockEl.textContent = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+                }
+
+                const invoice = getInvoiceParam();
+                if (!invoice) {
+                    document.getElementById('loadingState').hidden = true;
+                    document.getElementById('errorMessage').textContent = 'Tidak ada nomor invoice yang dipilih. Pindai kode QR pada struk belanja Anda.';
+                    document.getElementById('errorState').hidden = false;
+                    return;
+                }
+
+                try {
+                    const receiptData = await fetchReceiptData(invoice);
+                    renderReceipt(receiptData);
+                } catch (err) {
+                    document.getElementById('loadingState').hidden = true;
+                    document.getElementById('errorMessage').textContent = err.message;
+                    document.getElementById('errorState').hidden = false;
+                }
+
+                // Bind actions
+                const btnPrint = document.getElementById('btnPrint');
+                if (btnPrint) {
+                    btnPrint.addEventListener('click', () => window.print());
+                }
+
+                const btnShare = document.getElementById('btnShare');
+                if (btnShare) {
+                    btnShare.addEventListener('click', async () => {
+                        const shareUrl = window.location.href;
+                        const shareTitle = document.title;
+                        if (navigator.share) {
+                            try {
+                                await navigator.share({
+                                    title: shareTitle,
+                                    text: `Struk belanja digital ${shareTitle}`,
+                                    url: shareUrl
+                                });
+                            } catch {}
+                        } else if (navigator.clipboard) {
+                            try {
+                                await navigator.clipboard.writeText(shareUrl);
+                                alert('Tautan struk belanja berhasil disalin ke clipboard!');
+                            } catch {
+                                prompt('Salin tautan struk belanja:', shareUrl);
+                            }
+                        } else {
+                            prompt('Salin tautan struk belanja:', shareUrl);
+                        }
+                    });
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+        })();
+    </script>
+</body>
+</html>
